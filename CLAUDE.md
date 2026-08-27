@@ -132,6 +132,22 @@ workflow_runs, workflows, workspaces.
 
 **Toutes les tables ont RLS activé.** Ne jamais créer de table sans RLS.
 
+**Attention aux contraintes CHECK redéfinies.** La migration
+`20260827104653_create_crm_core_tables.sql` remplace `leads_status_check` défini
+dans la migration initiale. Les statuts réellement acceptés sont :
+
+```
+new, to_call, calling, nrp, interested,
+documents_requested, documents_received, appointment_scheduled,
+lost, converted
+```
+
+Ne pas se fier à la définition de `CREATE TABLE leads` dans la première
+migration, qui liste un vocabulaire obsolète (`contacted`, `qualified`,
+`scheduled`). La source de vérité est `src/types/index.ts` (`LeadStatus`), aligné
+sur la contrainte réelle.
+
+
 Pour les nouvelles tables :
 1. Créer une migration avec `mcp__supabase__apply_migration`
 2. Activer RLS

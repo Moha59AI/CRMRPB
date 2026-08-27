@@ -45,7 +45,7 @@ Prospects reçus depuis Meta et autres sources.
 | vehicle_make | text | Marque |
 | vehicle_model | text | Modèle |
 | source | text | meta, webhook, manual, import |
-| status | text | new, contacted, qualified, scheduled, converted, lost |
+| status | text | new, to_call, calling, nrp, interested, documents_requested, documents_received, appointment_scheduled, lost, converted |
 | assigned_user_id | uuid → auth.users | |
 | meta_lead_id | text (UNIQUE) | ID Meta lead (idempotence) |
 | meta_page_id | text | |
