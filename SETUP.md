@@ -1,0 +1,131 @@
+# Installation — connecter le CRM à un nouveau projet Supabase
+
+Le projet Supabase d'origine (créé via Bolt.new) n'est plus accessible. Ce guide
+recrée une base identique à partir de zéro. Comptez une dizaine de minutes.
+
+---
+
+## 1. Créer le projet Supabase
+
+Sur [supabase.com](https://supabase.com) → **New project**.
+
+- **Name** : `relais-pare-brise-crm`
+- **Database Password** : générez-en un et **conservez-le dans votre gestionnaire
+  de mots de passe**. Il n'est pas récupérable ensuite.
+- **Region** : `West EU (Ireland)` ou `Central EU (Frankfurt)` — au plus près de la France.
+
+L'initialisation prend 2 à 3 minutes.
+
+---
+
+## 2. Créer les tables
+
+Dans le projet → **SQL Editor** → **New query**.
+
+Copiez l'intégralité de `setup-database.sql` (à la racine de ce dépôt, 1 983 lignes),
+collez-la, puis **Run**.
+
+Ce fichier est la concaténation des 5 migrations dans l'ordre. Il crée :
+
+- 28 tables
+- Row Level Security activée partout, avec 4 politiques par table
+- les index, contraintes et triggers `updated_at`
+- les fonctions `get_workspace_id()`, `upsert_lead_from_webhook()`, `seed_demo_leads()`
+
+Il est idempotent : en cas de doute, on peut le relancer sans rien casser.
+
+Vérification : **Table Editor** doit maintenant lister 28 tables.
+
+---
+
+## 3. ⚠️ Désactiver la confirmation d'e-mail
+
+**Cette étape n'est pas optionnelle.** Sans elle, la création de compte échoue en
+silence et le CRM s'ouvre entièrement vide, sans message d'erreur.
+
+**Authentication** → **Sign In / Providers** → **Email** → décochez
+**Confirm email** → **Save**.
+
+### Pourquoi
+
+À l'inscription, `src/features/auth/auth-context.tsx:94` enchaîne trois opérations :
+
+1. `supabase.auth.signUp()` crée le compte
+2. `getOrCreateWorkspace()` crée le workspace
+3. un `upsert` crée le profil, qui relie l'utilisateur au workspace
+
+Si « Confirm email » est actif, l'étape 1 renvoie un utilisateur **mais aucune
+session**. Les étapes 2 et 3 s'exécutent alors en tant qu'`anon` et la RLS les
+rejette. L'erreur part dans un `console.error` que personne ne lit
+(`auth-context.tsx:116`).
+
+Conséquence : le compte existe, mais sans profil. `get_workspace_id()` renvoie
+`NULL`, donc **toutes** les politiques RLS échouent. L'application se charge
+normalement et chaque écran est vide.
+
+Vous pourrez réactiver la confirmation d'e-mail une fois votre compte admin créé.
+
+---
+
+## 4. Renseigner les clés
+
+**Project Settings** → **API** :
+
+| Champ Supabase | Variable dans `.env` |
+|---|---|
+| Project URL | `VITE_SUPABASE_URL` |
+| Project API keys → `anon` `public` | `VITE_SUPABASE_ANON_KEY` |
+
+Le fichier `.env` existe déjà à la racine, avec les deux lignes vides à compléter :
+
+```
+VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
+> **Ne collez jamais la clé `service_role` dans `.env`.** Elle contourne toute la
+> RLS et ce fichier alimente le bundle envoyé au navigateur. La clé `anon` est
+> conçue pour être publique — c'est bien celle-là qu'il faut.
+
+`.env` est ignoré par git : il ne partira jamais dans un commit.
+
+---
+
+## 5. Lancer
+
+```
+npm run dev
+```
+
+Puis **Créer un compte** sur l'écran de connexion. Le premier inscrit devient
+automatiquement `admin` et crée le workspace « Relais Pare-Brise ».
+
+> L'ancien compte `admin@relaispb.fr` mentionné dans le README vivait dans le
+> projet Supabase perdu. Il n'existe pas dans la nouvelle base — créez le vôtre.
+
+---
+
+## 6. Données de démonstration (optionnel)
+
+Une fois connecté, la fonction `seed_demo_leads()` peuple la base de leads de test.
+Elle est appelée par `seedDemoLeads()` dans `src/services/demo-service.ts`.
+
+---
+
+## Edge Functions (plus tard)
+
+Les 7 fonctions de `supabase/functions/` ne sont **pas** déployées par
+`setup-database.sql`. Elles ne servent qu'aux intégrations Meta Lead Ads et aux
+webhooks entrants — le CRM fonctionne sans.
+
+Pour les déployer le moment venu, il faut la CLI Supabase (absente de ce poste) :
+
+```
+npm install -g supabase
+supabase login
+supabase link --project-ref <ref-du-projet>
+supabase functions deploy
+```
+
+Secrets à configurer côté Supabase avant de s'en servir :
+`INTEGRATION_ENCRYPTION_KEY` (32 octets hex) et `META_APP_SECRET`.
