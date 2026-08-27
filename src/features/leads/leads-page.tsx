@@ -792,6 +792,39 @@ function LeadDetailSheet({
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Build history timeline from tasks, communications, and notes
+  const historyItems = useMemo(() => {
+    const items: { date: string; icon: React.ReactNode; label: string; detail?: string }[] = [];
+    communications?.forEach((c) => {
+      items.push({
+        date: c.created_at,
+        icon: c.type.startsWith('call') ? <Phone className="h-3.5 w-3.5" /> :
+              c.type.startsWith('sms') ? <MessageSquare className="h-3.5 w-3.5" /> :
+              c.type.startsWith('email') ? <Mail className="h-3.5 w-3.5" /> :
+              <FileText className="h-3.5 w-3.5" />,
+        label: c.type.replace(/_/g, ' '),
+        detail: c.content ?? undefined,
+      });
+    });
+    tasks?.forEach((t) => {
+      items.push({
+        date: t.created_at,
+        icon: <PlusCircle className="h-3.5 w-3.5" />,
+        label: `Tâche: ${t.title}`,
+        detail: t.status === 'done' ? 'Terminée' : t.status === 'pending' ? 'En attente' : undefined,
+      });
+    });
+    notes?.forEach((n) => {
+      items.push({
+        date: n.created_at,
+        icon: <FileText className="h-3.5 w-3.5" />,
+        label: 'Note',
+        detail: n.content,
+      });
+    });
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [communications, tasks, notes]);
+
   if (!lead) return null;
 
   // Handlers
@@ -836,39 +869,6 @@ function LeadDetailSheet({
     if (!noteContent.trim()) return;
     createNoteMutation.mutate({ lead_id: lead.id, content: noteContent.trim() });
   };
-
-  // Build history timeline from tasks, communications, and notes
-  const historyItems = useMemo(() => {
-    const items: { date: string; icon: React.ReactNode; label: string; detail?: string }[] = [];
-    communications?.forEach((c) => {
-      items.push({
-        date: c.created_at,
-        icon: c.type.startsWith('call') ? <Phone className="h-3.5 w-3.5" /> :
-              c.type.startsWith('sms') ? <MessageSquare className="h-3.5 w-3.5" /> :
-              c.type.startsWith('email') ? <Mail className="h-3.5 w-3.5" /> :
-              <FileText className="h-3.5 w-3.5" />,
-        label: c.type.replace(/_/g, ' '),
-        detail: c.content ?? undefined,
-      });
-    });
-    tasks?.forEach((t) => {
-      items.push({
-        date: t.created_at,
-        icon: <PlusCircle className="h-3.5 w-3.5" />,
-        label: `Tâche: ${t.title}`,
-        detail: t.status === 'done' ? 'Terminée' : t.status === 'pending' ? 'En attente' : undefined,
-      });
-    });
-    notes?.forEach((n) => {
-      items.push({
-        date: n.created_at,
-        icon: <FileText className="h-3.5 w-3.5" />,
-        label: 'Note',
-        detail: n.content,
-      });
-    });
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [communications, tasks, notes]);
 
   const dateValue = lead.next_action_at ? lead.next_action_at.split('T')[0] : '';
 
