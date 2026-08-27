@@ -1,0 +1,244 @@
+import { supabase } from '@/lib/supabase';
+import { supabaseUrl } from '@/lib/supabase';
+import { META_LEAD_WEBHOOK_PATH } from '@/config/constants';
+import type { IntegrationConnection } from '@/types';
+
+export interface MetaSettings {
+  connection_name: string;
+  meta_app_id: string;
+  meta_app_secret_ref: string | null;
+  business_manager_id: string;
+  ad_account_id: string;
+  facebook_page_id: string;
+  page_access_token_ref: string | null;
+  meta_pixel_id: string;
+  conversions_api_token_ref: string | null;
+  graph_api_version: string;
+  website_url: string;
+  test_event_code: string;
+  webhook_verify_token: string;
+}
+
+const META_FIELDS: (keyof MetaSettings)[] = [
+  'connection_name',
+  'meta_app_id',
+  'business_manager_id',
+  'ad_account_id',
+  'facebook_page_id',
+  'meta_pixel_id',
+  'graph_api_version',
+  'website_url',
+  'test_event_code',
+  'webhook_verify_token',
+];
+
+const SECRET_FIELDS: (keyof MetaSettings)[] = [
+  'meta_app_secret_ref',
+  'page_access_token_ref',
+  'conversions_api_token_ref',
+];
+
+export function generateVerifyToken(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const segments = [8, 4, 4, 12];
+  return segments
+    .map((len) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join(''))
+    .join('-');
+}
+
+export function getMetaWebhookUrl(): string {
+  return `${supabaseUrl}/functions/v1/${META_LEAD_WEBHOOK_PATH}`;
+}
+
+export async function getMetaConnection(): Promise<IntegrationConnection | null> {
+  const { data, error } = await supabase
+    .from('integration_connections')
+    .select('*')
+    .eq('provider', 'meta')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching Meta connection:', error.message);
+    return null;
+  }
+
+  return data as IntegrationConnection | null;
+}
+
+export async function saveMetaSettings(settings: MetaSettings, secrets: Partial<Record<string, string>>): Promise<{ error: string | null }> {
+  const connection = await getMetaConnection();
+  const profile = await supabase.auth.getUser();
+  const userId = profile.data.user?.id;
+
+  // Get workspace_id from profile
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('workspace_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const workspaceId = profileData?.workspace_id;
+  if (!workspaceId) return { error: 'Unable to determine workspace' };
+
+  // Build the settings JSONB - only non-secret fields go in settings
+  const settingsJson: Record<string, string> = {};
+  META_FIELDS.forEach((field) => {
+    const value = settings[field];
+    if (value !== undefined && value !== '') {
+      settingsJson[field] = value as string;
+    }
+  });
+
+  // Add secret references (not the actual secrets)
+  SECRET_FIELDS.forEach((field) => {
+    if (settings[field]) {
+      settingsJson[field] = settings[field] as string;
+    }
+  });
+
+  // Store actual secrets via edge function (encrypted server-side)
+  const secretEntries = Object.entries(secrets).filter(([, v]) => v && v.trim() !== '');
+  if (secretEntries.length > 0) {
+    const cleanSecrets: Record<string, string> = {};
+    for (const [k, v] of secretEntries) {
+      if (v) cleanSecrets[k] = v;
+    }
+    await storeMetaSecrets(workspaceId, cleanSecrets);
+  }
+
+  const payload = {
+    workspace_id: workspaceId,
+    provider: 'meta' as const,
+    name: settings.connection_name || 'Meta Ads',
+    status: 'connected' as const,
+    settings: settingsJson,
+  };
+
+  if (connection) {
+    const { error } = await supabase
+      .from('integration_connections')
+      .update(payload)
+      .eq('id', connection.id);
+    return { error: error?.message ?? null };
+  } else {
+    const { error } = await supabase
+      .from('integration_connections')
+      .insert(payload);
+    return { error: error?.message ?? null };
+  }
+}
+
+async function storeMetaSecrets(workspaceId: string, secrets: Record<string, string>): Promise<void> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/meta-store-secrets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ workspace_id: workspaceId, secrets }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to store Meta secrets:', response.status);
+    }
+  } catch (err) {
+    console.error('Error storing Meta secrets:', err);
+  }
+}
+
+export async function testMetaConnection(): Promise<{ success: boolean; error: string | null }> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/meta-test-connection`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    return { success: false, error: data.error || `HTTP ${response.status}` };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  return { success: data.success ?? true, error: data.error ?? null };
+}
+
+export async function syncMetaForms(): Promise<{ success: boolean; error: string | null; forms?: unknown[] }> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/meta-sync-forms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    return { success: false, error: data.error || `HTTP ${response.status}` };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  return { success: true, error: null, forms: data.forms };
+}
+
+export async function subscribePageToLeads(): Promise<{ success: boolean; error: string | null }> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/meta-subscribe-leads`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    return { success: false, error: data.error || `HTTP ${response.status}` };
+  }
+
+  return { success: true, error: null };
+}
+
+export async function sendTestConversionEvent(): Promise<{ success: boolean; error: string | null }> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/meta-conversions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ action: 'test' }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    return { success: false, error: data.error || `HTTP ${response.status}` };
+  }
+
+  return { success: true, error: null };
+}
+
+export function parseSettingsFromConnection(connection: IntegrationConnection | null): MetaSettings {
+  const s = (connection?.settings ?? {}) as Record<string, string>;
+  return {
+    connection_name: s.connection_name ?? '',
+    meta_app_id: s.meta_app_id ?? '',
+    meta_app_secret_ref: s.meta_app_secret_ref ?? null,
+    business_manager_id: s.business_manager_id ?? '',
+    ad_account_id: s.ad_account_id ?? '',
+    facebook_page_id: s.facebook_page_id ?? '',
+    page_access_token_ref: s.page_access_token_ref ?? null,
+    meta_pixel_id: s.meta_pixel_id ?? '',
+    conversions_api_token_ref: s.conversions_api_token_ref ?? null,
+    graph_api_version: s.graph_api_version ?? 'v21.0',
+    website_url: s.website_url ?? '',
+    test_event_code: s.test_event_code ?? '',
+    webhook_verify_token: s.webhook_verify_token ?? '',
+  };
+}
+
+export function maskSecret(value: string | null): string {
+  if (!value) return '';
+  if (value.length <= 8) return '••••••••';
+  return value.slice(0, 4) + '••••••••' + value.slice(-4);
+}
