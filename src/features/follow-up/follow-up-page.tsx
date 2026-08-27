@@ -17,10 +17,6 @@ import {
 } from '@/services/crm-service';
 import type { Task, Lead, Profile } from '@/types';
 
-const taskTypeLabels: Record<string, string> = {
-  call: 'Appel', sms: 'SMS', email: 'Email', follow_up: 'Relance', document: 'Document', other: 'Autre',
-};
-
 const priorityConfig: Record<string, { label: string; className: string }> = {
   urgent: { label: 'Urgent', className: 'bg-red-50 text-red-600 border-red-200' },
   high: { label: 'Haute', className: 'bg-amber-50 text-amber-600 border-amber-200' },

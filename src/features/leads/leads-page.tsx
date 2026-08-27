@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List,
   Phone, MessageSquare, Mail, FileText, PlusCircle,
-  AlertTriangle, ExternalLink, Calendar, Star,
+  AlertTriangle, Calendar, Star,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -1226,7 +1226,7 @@ function LeadDetailSheet({
 // ============ NEW LEAD DIALOG ============
 
 function NewLeadDialog({
-  open, onOpenChange, profiles,
+  open, onOpenChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;

@@ -36,7 +36,7 @@ async function verifySignature(payload: string, signature: string, appSecret: st
 }
 
 function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/[\s.-]/g, '');
+  const cleaned = phone.replace(/[\s.-]/g, '');
   if (cleaned.startsWith('+33')) {
     return '0' + cleaned.slice(3);
   }

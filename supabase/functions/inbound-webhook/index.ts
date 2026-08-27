@@ -225,7 +225,7 @@ function getFirstValid(obj: Record<string, unknown>, keys: string[]): string | n
 }
 
 function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/[\s.-]/g, '');
+  const cleaned = phone.replace(/[\s.-]/g, '');
   if (cleaned.startsWith('+33')) {
     return '0' + cleaned.slice(3);
   }

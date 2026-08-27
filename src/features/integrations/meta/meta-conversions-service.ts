@@ -1,4 +1,4 @@
-import { supabase, supabaseUrl } from '@/lib/supabase';
+import { supabaseUrl } from '@/lib/supabase';
 
 export type ConversionEventType = 'Lead' | 'Contact' | 'Schedule' | 'CompleteRegistration' | 'Purchase';
 

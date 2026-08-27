@@ -21,8 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type {
-  WindscreenCase, CaseDocument, Task, Appointment, Communication,
-  Invoice, Quote, Gift, AfterSalesCase, Profile, Lead, Contact,
+  WindscreenCase, Task, Profile, Lead, Contact,
   Insurer, Note, Activity, DocumentType, CaseStatus,
 } from '@/types';
 import {
@@ -1041,7 +1040,7 @@ function CaseDetailSheet({
 // ============ SUIVI TAB ============
 
 function SuiviTab({
-  caseId: _caseId, tasks, isLoading, onCreate,
+  tasks, isLoading, onCreate,
 }: {
   caseId: string;
   tasks: Task[];

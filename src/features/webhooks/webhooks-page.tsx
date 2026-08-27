@@ -19,7 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { supabase, supabaseUrl } from '@/lib/supabase';
+import { supabaseUrl } from '@/lib/supabase';
 import {
   fetchWebhookEndpoints, createWebhookEndpoint, toggleWebhookEndpoint,
   deleteWebhookEndpoint, fetchWebhookEventsForEndpoint, reprocessWebhookEvent,

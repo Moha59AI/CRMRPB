@@ -86,8 +86,6 @@ Deno.serve(async (req: Request) => {
 
 async function sendConversionEvent(event: Record<string, unknown>, isTest: boolean): Promise<Response> {
   // Get the Meta connection for this workspace
-  const authHeader = (Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
-
   // Find a Meta connection
   const { data: connection, error } = await supabase
     .from('integration_connections')

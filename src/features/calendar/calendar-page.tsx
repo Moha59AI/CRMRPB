@@ -117,14 +117,6 @@ const STATUS_STYLES: Record<AppointmentStatus, string> = {
   no_show: 'bg-amber-50/80 border-amber-200/70 text-amber-900',
 };
 
-const STATUS_DOT: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-blue-400',
-  confirmed: 'bg-green-500',
-  completed: 'bg-gray-400',
-  cancelled: 'bg-red-400',
-  no_show: 'bg-amber-400',
-};
-
 const STATUS_PILL: Record<AppointmentStatus, string> = {
   scheduled: 'bg-blue-100/80 text-blue-800',
   confirmed: 'bg-green-100/80 text-green-800',

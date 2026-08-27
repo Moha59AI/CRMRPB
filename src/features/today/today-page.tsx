@@ -111,13 +111,6 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
   low: 3,
 };
 
-const PRIORITY_LABEL: Record<TaskPriority, string> = {
-  urgent: 'Urgent',
-  high: 'Haute',
-  normal: 'Normale',
-  low: 'Basse',
-};
-
 const TASK_TYPE_LABEL: Record<string, string> = {
   call: 'Appel',
   sms: 'SMS',

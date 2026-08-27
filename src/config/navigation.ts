@@ -1,6 +1,5 @@
 import {
   CalendarDays,
-  CalendarClock,
   FileText,
   Users,
   TrendingUp,

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Receipt, Plus, FileText, CreditCard, Gift as GiftIcon, AlertCircle, Euro,
-  Send, CheckCircle2, Loader2,
+  CheckCircle2, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -13,21 +13,20 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type {
-  Invoice, Quote, Payment, Gift, WindscreenCase, Contact,
+  Invoice, WindscreenCase, Contact,
   InvoiceStatus, QuoteStatus, GiftStatus,
 } from '@/types';
 import {
-  fetchInvoices, createInvoice, updateInvoice,
-  fetchQuotes, createQuote,
+  fetchInvoices, createInvoice,
+  fetchQuotes,
   fetchPayments,
-  fetchGifts, updateGift,
+  fetchGifts,
   fetchCases, fetchContacts,
 } from '@/services/crm-service';
 

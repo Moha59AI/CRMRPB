@@ -19,32 +19,45 @@ Le projet utilise une architecture par fonctionnalités (feature-based). Chaque 
 
 ## Ce qui est déjà fonctionnel
 
+Tous les modules sont développés et routés dans `src/App.tsx`.
+
 1. **Authentification** — Login, signup, forgot password, session persistante, routes protégées
 2. **Layout** — Sidebar verticale avec navigation, expand/collapse
-3. **Page Leads** — Liste avec recherche, filtres par source/formulaire, détail avec payload brut, détection de doublons
-4. **Intégrations** — Liste des intégrations disponibles
-5. **Meta Ads** — Page de configuration complète (15+ champs), secrets chiffrés via Vault, boutons test/sync/subscribe
-6. **Webhook Meta** — Edge Function GET (vérification) + POST (réception et traitement des leads)
-7. **Conversions API** — Edge Function + service TypeScript (non déclenché automatiquement)
-8. **Webhooks génériques** — Création d'endpoints, réception d'événements, retraitement
-9. **Base de données** — 8 tables avec RLS, index, contraintes, triggers
-10. **Design system** — Variables CSS centralisées, couleurs Relais Pare-Brise
+3. **Aujourd'hui** (`/today`) — Tableau de bord opérationnel
+4. **Leads** (`/leads`) — Tableau, pipeline Kanban, liste compacte, fiche détail, détection de doublons
+5. **Dossiers** (`/cases`) — Dossiers vitrage, checklist documents, suivi financier
+6. **Contacts** (`/contacts`) — Carnet avec consentements SMS/email
+7. **Agenda** (`/calendar`) — Vues jour/semaine/mois
+8. **Suivi** (`/follow-up`) — Tâches et relances par priorité et échéance
+9. **Scénarios** (`/workflows`) — Constructeur visuel React Flow
+10. **Campagnes** (`/campaigns`) — Campagnes SMS, modèles, conversions
+11. **Communications** (`/communications`) — SMS/appels/emails en mode démonstration
+12. **Facturation** (`/billing`) — Devis, factures, paiements, cadeaux
+13. **Réglages** (`/settings`, `/settings/users`) — Configuration et utilisateurs
+14. **Meta Ads** — Configuration complète (15+ champs), secrets chiffrés via Vault, test/sync/subscribe
+15. **Webhook Meta** — Edge Function GET (vérification) + POST (réception et traitement des leads)
+16. **Conversions API** — Edge Function + service TypeScript (non déclenché automatiquement)
+17. **Webhooks génériques** — Création d'endpoints, réception d'événements, retraitement
+18. **Base de données** — 28 tables avec RLS, index, contraintes, triggers
+19. **Design system** — Variables CSS centralisées, couleurs Relais Pare-Brise
 
-## Modules restant à développer
+## Code mort
 
-Chaque module a sa route et son placeholder dans `src/features/placeholders/placeholder-pages.tsx`.
+`src/features/placeholders/placeholder-pages.tsx` et `src/components/ModulePlaceholder.tsx`
+ne sont plus importés nulle part depuis que tous les modules sont développés.
+Supprimables.
 
-- `/today` — Tableau de bord du jour
-- `/cases` — Dossiers vitrage complets
-- `/contacts` — Carnet de contacts
-- `/calendar` — Agenda complet
-- `/follow-up` — Suivi des relances
-- `/workflows` — Scénarios d'automatisation
-- `/campaigns` — Campagnes publicitaires
-- `/communications` — SMS, appels, emails
-- `/billing` — Facturation complète
-- `/settings` — Paramètres généraux
-- `/settings/users` — Gestion des utilisateurs
+## Prérequis avant de lancer
+
+Le projet a besoin d'un fichier `.env` à la racine (voir `.env.example`) :
+
+```
+VITE_SUPABASE_URL=https://<projet>.supabase.co
+VITE_SUPABASE_ANON_KEY=<cle anon>
+```
+
+Sans ce fichier, `src/lib/supabase.ts` lève une erreur au chargement et
+l'application ne démarre pas du tout.
 
 ## Règles pour ajouter un module
 
@@ -111,7 +124,11 @@ const { register, handleSubmit } = useForm({ resolver: zodResolver(schema) });
 
 Voir `DATABASE.md` pour le schéma complet.
 
-Tables existantes : workspaces, profiles, leads, integration_connections, meta_forms, webhook_endpoints, webhook_events, audit_logs.
+Les 28 tables : activities, after_sales_cases, appointments, audit_logs, campaigns,
+case_documents, communications, contacts, gifts, insurers, integration_connections,
+invoices, leads, meta_forms, notes, notifications, payments, profiles, quotes,
+sms_templates, tasks, vehicles, webhook_endpoints, webhook_events, windscreen_cases,
+workflow_runs, workflows, workspaces.
 
 **Toutes les tables ont RLS activé.** Ne jamais créer de table sans RLS.
 
