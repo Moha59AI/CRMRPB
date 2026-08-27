@@ -22,12 +22,15 @@ Le serveur de développement démarre automatiquement. Les variables d'environne
 
 ## Compte administrateur de démonstration
 
-Un compte est pré-créé :
+> Le compte `admin@relaispb.fr` mentionné dans les versions précédentes de ce
+> README vivait dans le projet Supabase d'origine (Bolt.new), qui n'est plus
+> accessible. **Il n'existe pas dans la base actuelle.**
 
-- **Email** : `admin@relaispb.fr`
-- **Mot de passe** : `RelaisPB2026!`
+Voir `SETUP.md` pour créer un compte administrateur sur une base neuve.
 
-Des données de démonstration sont déjà en base : leads, dossiers, tâches, rendez-vous, communications, scénarios d'automatisation, factures, etc.
+La base ne contient aucune donnée de démonstration au départ. La fonction SQL
+`seed_demo_leads()` peuple la table des leads, via `seedDemoLeads()` dans
+`src/services/demo-service.ts`.
 
 ## Modules
 

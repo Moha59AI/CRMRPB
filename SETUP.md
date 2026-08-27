@@ -112,6 +112,56 @@ Elle est appelée par `seedDemoLeads()` dans `src/services/demo-service.ts`.
 
 ---
 
+## Si vous créez un utilisateur à la main en SQL
+
+À éviter si possible : préférez **Authentication → Users → Add user →
+Create new user**, en cochant **Auto Confirm User?**. Supabase génère alors une
+ligne complète et bien formée.
+
+Si vous passez malgré tout par un `INSERT` dans `auth.users`, deux pièges :
+
+1. **`auth.identities`** — sans une ligne correspondante, la connexion par mot
+   de passe ne fonctionne pas.
+2. **Les colonnes de jetons** (`confirmation_token`, `recovery_token`,
+   `email_change`…) restent à `NULL`. GoTrue est écrit en Go et les lit dans des
+   chaînes non-nullables : sur un `NULL` il ne renvoie pas une erreur
+   d'authentification, il **crashe avec un HTTP 500**.
+
+Correctif, tolérant aux différences de version de GoTrue :
+
+```sql
+do $$
+declare
+  col text;
+  cols text[] := array[
+    'confirmation_token', 'recovery_token', 'email_change',
+    'email_change_token_new', 'email_change_token_current',
+    'phone_change', 'phone_change_token', 'reauthentication_token'
+  ];
+begin
+  foreach col in array cols loop
+    if exists (
+      select 1 from information_schema.columns
+      where table_schema = 'auth' and table_name = 'users' and column_name = col
+    ) then
+      execute format(
+        'update auth.users set %I = coalesce(%I, '''') where %I is null',
+        col, col, col
+      );
+    end if;
+  end loop;
+end $$;
+```
+
+## Limite d'envoi d'e-mails
+
+Sur le plan gratuit, Supabase plafonne l'envoi à **2 e-mails par heure**. Chaque
+inscription avec « Confirm email » actif consomme ce quota ; au-delà, l'API
+répond **429** et aucun compte n'est créé.
+
+C'est une raison de plus de désactiver la confirmation d'e-mail, ou de créer les
+comptes depuis le dashboard avec **Auto Confirm User?**, qui n'envoie rien.
+
 ## Edge Functions (plus tard)
 
 Les 7 fonctions de `supabase/functions/` ne sont **pas** déployées par
