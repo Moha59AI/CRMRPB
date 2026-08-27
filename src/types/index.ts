@@ -1,0 +1,508 @@
+export type UserRole = 'admin' | 'manager' | 'advisor' | 'technician' | 'accountant';
+
+export type IntegrationProvider = 'meta' | 'google' | 'custom';
+export type IntegrationStatus = 'connected' | 'error' | 'not_configured';
+
+export type WebhookDirection = 'inbound' | 'outbound';
+export type WebhookProcessingStatus = 'pending' | 'processing' | 'processed' | 'error' | 'skipped';
+
+export type LeadSource = 'meta' | 'webhook' | 'manual' | 'import';
+export type LeadStatus =
+  | 'new' | 'to_call' | 'calling' | 'nrp' | 'interested'
+  | 'documents_requested' | 'documents_received' | 'appointment_scheduled'
+  | 'lost' | 'converted';
+
+export type CaseStatus =
+  | 'new' | 'qualification' | 'documents_pending' | 'insurance_declaration'
+  | 'glass_ordered' | 'appointment_scheduled' | 'intervention_done'
+  | 'invoice_sent' | 'payment_pending' | 'payment_received' | 'gift_given'
+  | 'sav' | 'completed';
+
+export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+export type AppointmentType = 'intervention' | 'call' | 'meeting' | 'other';
+
+export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TaskType = 'call' | 'sms' | 'email' | 'follow_up' | 'document' | 'other';
+
+export type CommunicationType =
+  | 'sms_outbound' | 'sms_inbound' | 'call_outbound' | 'call_inbound'
+  | 'call_missed' | 'voicemail' | 'email_outbound' | 'email_inbound' | 'note';
+
+export type CommunicationStatus =
+  | 'pending' | 'sent' | 'delivered' | 'failed' | 'received'
+  | 'answered' | 'missed' | 'cancelled';
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+export type GiftStatus = 'pending' | 'ordered' | 'given' | 'cancelled';
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled';
+export type AfterSalesStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type DocumentType =
+  | 'registration' | 'insurance_cert' | 'photo_before' | 'photo_windscreen'
+  | 'claim_declaration' | 'assignment_signed' | 'quote' | 'invoice'
+  | 'payment_proof' | 'gift_proof';
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Profile {
+  id: string;
+  workspace_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  role: UserRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Lead {
+  id: string;
+  workspace_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  vehicle_registration: string | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  insurance: string | null;
+  offer: string | null;
+  score: number;
+  source: LeadSource;
+  status: LeadStatus;
+  assigned_user_id: string | null;
+  campaign_name: string | null;
+  advisor_notes: string | null;
+  next_action_at: string | null;
+  duplicate_flagged: boolean;
+  meta_lead_id: string | null;
+  meta_page_id: string | null;
+  meta_form_id: string | null;
+  meta_ad_id: string | null;
+  meta_adset_id: string | null;
+  meta_campaign_id: string | null;
+  fbclid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
+  raw_payload: Record<string, unknown> | null;
+  received_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  workspace_id: string;
+  provider: IntegrationProvider;
+  name: string;
+  status: IntegrationStatus;
+  settings: Record<string, unknown> | null;
+  last_tested_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaForm {
+  id: string;
+  workspace_id: string;
+  connection_id: string;
+  meta_page_id: string | null;
+  meta_form_id: string | null;
+  form_name: string | null;
+  enabled: boolean;
+  field_mapping: Record<string, string> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookEndpoint {
+  id: string;
+  workspace_id: string;
+  name: string;
+  provider: string;
+  endpoint_key: string;
+  direction: WebhookDirection;
+  enabled: boolean;
+  signing_secret_reference: string | null;
+  configuration: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookEvent {
+  id: string;
+  workspace_id: string;
+  endpoint_id: string | null;
+  provider: string;
+  external_event_id: string | null;
+  event_type: string | null;
+  headers: Record<string, string> | null;
+  payload: Record<string, unknown> | null;
+  processing_status: WebhookProcessingStatus;
+  processing_attempts: number;
+  error_message: string | null;
+  received_at: string;
+  processed_at: string | null;
+}
+
+export interface AuditLog {
+  id: string;
+  workspace_id: string;
+  user_id: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Contact {
+  id: string;
+  workspace_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  lead_id: string | null;
+  notes: string | null;
+  sms_consent: boolean;
+  email_consent: boolean;
+  unsubscribed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Vehicle {
+  id: string;
+  workspace_id: string;
+  contact_id: string | null;
+  lead_id: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  registration: string | null;
+  vin: string | null;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Insurer {
+  id: string;
+  workspace_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WindscreenCase {
+  id: string;
+  workspace_id: string;
+  case_number: string;
+  lead_id: string | null;
+  contact_id: string | null;
+  vehicle_id: string | null;
+  insurer_id: string | null;
+  assigned_user_id: string | null;
+  technician_id: string | null;
+  status: CaseStatus;
+  intervention_address: string | null;
+  intervention_type: 'home' | 'workshop' | null;
+  appointment_date: string | null;
+  glass_type: string | null;
+  has_sensors: boolean;
+  has_adas_camera: boolean;
+  insurance_contract_number: string | null;
+  insurance_claim_number: string | null;
+  franchise_amount: number;
+  offer: string | null;
+  gift_type: string | null;
+  gift_amount: number;
+  estimated_margin: number;
+  internal_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseDocument {
+  id: string;
+  workspace_id: string;
+  case_id: string;
+  type: DocumentType;
+  label: string;
+  uploaded: boolean;
+  file_url: string | null;
+  uploaded_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Appointment {
+  id: string;
+  workspace_id: string;
+  case_id: string | null;
+  lead_id: string | null;
+  contact_id: string | null;
+  assigned_user_id: string | null;
+  title: string;
+  description: string | null;
+  start_time: string;
+  end_time: string;
+  address: string | null;
+  type: AppointmentType;
+  status: AppointmentStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Task {
+  id: string;
+  workspace_id: string;
+  lead_id: string | null;
+  case_id: string | null;
+  contact_id: string | null;
+  assigned_user_id: string | null;
+  title: string;
+  description: string | null;
+  type: TaskType;
+  priority: TaskPriority;
+  status: TaskStatus;
+  due_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Note {
+  id: string;
+  workspace_id: string;
+  lead_id: string | null;
+  case_id: string | null;
+  contact_id: string | null;
+  user_id: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Activity {
+  id: string;
+  workspace_id: string;
+  user_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  action: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Communication {
+  id: string;
+  workspace_id: string;
+  lead_id: string | null;
+  case_id: string | null;
+  contact_id: string | null;
+  user_id: string | null;
+  type: CommunicationType;
+  direction: 'inbound' | 'outbound';
+  status: CommunicationStatus;
+  content: string | null;
+  subject: string | null;
+  duration_seconds: number | null;
+  recording_url: string | null;
+  provider: string;
+  external_id: string | null;
+  delivered_at: string | null;
+  created_at: string;
+}
+
+export interface SmsTemplate {
+  id: string;
+  workspace_id: string;
+  name: string;
+  content: string;
+  category: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notification {
+  id: string;
+  workspace_id: string;
+  user_id: string | null;
+  title: string;
+  body: string | null;
+  type: string;
+  read: boolean;
+  link: string | null;
+  created_at: string;
+}
+
+export interface Workflow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  trigger_type: string;
+  trigger_config: Record<string, unknown>;
+  conditions: unknown[];
+  actions: unknown[];
+  flow_data: Record<string, unknown>;
+  enabled: boolean;
+  success_count: number;
+  failure_count: number;
+  last_run_at: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  workspace_id: string;
+  workflow_id: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'retry';
+  error_message: string | null;
+  execution_log: unknown[];
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface Campaign {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  channel: 'sms' | 'email';
+  template_id: string | null;
+  audience_filter: Record<string, unknown>;
+  scheduled_at: string | null;
+  sent_count: number;
+  delivered_count: number;
+  failed_count: number;
+  reply_count: number;
+  conversion_count: number;
+  status: CampaignStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Quote {
+  id: string;
+  workspace_id: string;
+  case_id: string | null;
+  contact_id: string | null;
+  quote_number: string;
+  amount_ht: number;
+  tva_rate: number;
+  amount_ttc: number;
+  franchise_amount: number;
+  status: QuoteStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  workspace_id: string;
+  case_id: string | null;
+  contact_id: string | null;
+  invoice_number: string;
+  amount_ht: number;
+  tva_rate: number;
+  amount_ttc: number;
+  franchise_amount: number;
+  insurance_amount: number;
+  gift_amount: number;
+  estimated_margin: number;
+  amount_paid: number;
+  remaining_amount: number;
+  issue_date: string;
+  due_date: string | null;
+  payment_date: string | null;
+  status: InvoiceStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Payment {
+  id: string;
+  workspace_id: string;
+  invoice_id: string | null;
+  case_id: string | null;
+  amount: number;
+  payment_method: string;
+  payment_date: string;
+  reference: string | null;
+  created_at: string;
+}
+
+export interface Gift {
+  id: string;
+  workspace_id: string;
+  case_id: string | null;
+  contact_id: string | null;
+  type: 'gift' | 'transfer';
+  description: string | null;
+  amount: number;
+  status: GiftStatus;
+  given_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AfterSalesCase {
+  id: string;
+  workspace_id: string;
+  case_id: string | null;
+  contact_id: string | null;
+  reason: string | null;
+  description: string | null;
+  status: AfterSalesStatus;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaFieldMapping {
+  [metaFieldName: string]: LeadFieldKey | 'ignore' | 'custom';
+}
+
+export type LeadFieldKey =
+  | 'first_name'
+  | 'last_name'
+  | 'full_name'
+  | 'phone'
+  | 'email'
+  | 'city'
+  | 'vehicle_registration'
+  | 'vehicle_make'
+  | 'vehicle_model'
+  | 'insurance'
+  | 'offer';

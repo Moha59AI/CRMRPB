@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Relais Pare-Brise Design System */
+    /* Text & surfaces */
+    --background: 0 0% 100%;
+    --foreground: 228 15% 16%; /* #202331 */
+    --card: 0 0% 100%;
+    --card-foreground: 228 15% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 15% 16%;
+
+    /* Brand: Relais Pare-Brise green #16A34A */
+    --primary: 142 71% 45%; /* #16A34A */
+    --primary-foreground: 0 0% 100%;
+
+    /* Neutral dark for active nav */
+    --secondary: 228 15% 16%; /* #202331 - dark nav */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 230 14% 96%; /* very light grey bg */
+    --muted-foreground: 228 10% 45%;
+
+    --accent: 142 71% 96%; /* light green tint */
+    --accent-foreground: 142 71% 35%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 226 17% 92%; /* #E7E9EE */
+    --input: 226 17% 92%;
+    --ring: 142 71% 45%;
+
+    --chart-1: 142 71% 45%;
+    --chart-2: 210 80% 50%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 0 72% 51%;
+
+    /* Radii: 14-18px per spec */
+    --radius: 14px;
+    --radius-lg: 16px;
+    --radius-xl: 18px;
+
+    /* Sidebar */
+    --sidebar-width: 64px;
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-border: 226 17% 92%;
+  }
+
+  .dark {
+    --background: 228 20% 8%;
+    --foreground: 0 0% 98%;
+    --card: 228 20% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 228 20% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 228 20% 16%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 228 20% 14%;
+    --muted-foreground: 228 10% 65%;
+    --accent: 142 30% 16%;
+    --accent-foreground: 142 60% 70%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 228 15% 18%;
+    --input: 228 15% 18%;
+    --ring: 142 71% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+    font-variation-settings: 'opsz' 32;
+  }
+  h1, h2, h3, h4 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-slide-in {
+    animation: slide-in 0.25s ease-out;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+}

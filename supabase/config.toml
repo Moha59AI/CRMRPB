@@ -1,0 +1,20 @@
+[functions.meta-lead-webhook]
+verify_jwt = false
+
+[functions.inbound-webhook]
+verify_jwt = false
+
+[functions.meta-conversions]
+verify_jwt = true
+
+[functions.meta-store-secrets]
+verify_jwt = true
+
+[functions.meta-test-connection]
+verify_jwt = true
+
+[functions.meta-sync-forms]
+verify_jwt = true
+
+[functions.meta-subscribe-leads]
+verify_jwt = true
