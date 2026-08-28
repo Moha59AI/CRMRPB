@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Relais Pare-Brise CRM -- installation complete de la base de donnees
 -- =====================================================================
--- Concatenation des 8 migrations, dans l'ordre chronologique.
+-- Concatenation des 9 migrations, dans l'ordre chronologique.
 -- A coller tel quel dans Supabase > SQL Editor > New query > Run.
 -- Idempotent : relancable sans risque.
 -- =====================================================================
@@ -2217,3 +2217,36 @@ revoke all on function public.vault_read_secret(text) from public, anon, authent
 grant execute on function public.vault_create_secret(text, text) to service_role;
 grant execute on function public.vault_update_secret(text, text) to service_role;
 grant execute on function public.vault_read_secret(text) to service_role;
+
+-- ---------------------------------------------------------------------
+-- 20260828160000_fix_webhook_events_unique_index.sql
+-- ---------------------------------------------------------------------
+
+/*
+# Index d'unicite non partiel sur webhook_events
+
+## Probleme resolu
+
+La migration 20260828100000 creait l'index d'idempotence en partiel :
+
+  create unique index ... on webhook_events (workspace_id, provider, external_event_id)
+    where external_event_id is not null;
+
+PostgreSQL ne peut pas inferer un index PARTIEL pour un ON CONFLICT : la
+clause doit correspondre a un index total, ou a un index partiel dont le
+predicat est implique par la requete -- ce que PostgREST ne produit pas.
+
+L'upsert de meta-lead-webhook echouait donc systematiquement (SQLSTATE 42P10),
+l'erreur etait avalee par un console.error, et la fonction repondait 200 sans
+avoir rien insere. Aucun leadgen_id n'etait mis en file, meme avec une
+signature parfaitement valide.
+
+Le predicat etait de toute facon inutile : PostgreSQL considere deja chaque
+NULL comme distinct dans un index unique, donc plusieurs lignes sans
+external_event_id restent autorisees.
+*/
+
+drop index if exists webhook_events_external_id_uniq;
+
+create unique index if not exists webhook_events_external_id_uniq
+  on webhook_events (workspace_id, provider, external_event_id);
