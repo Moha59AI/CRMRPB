@@ -103,7 +103,11 @@ export async function saveMetaSettings(settings: MetaSettings, secrets: Partial<
     for (const [k, v] of secretEntries) {
       if (v) cleanSecrets[k] = v;
     }
-    await storeMetaSecrets(workspaceId, cleanSecrets);
+    const { error: secretsError } = await storeMetaSecrets(workspaceId, cleanSecrets);
+    // Sans cette remontee, la page affichait une confirmation alors que les
+    // secrets n'avaient pas ete stockes : la connexion Meta paraissait
+    // configuree mais aucun lead ne pouvait etre verifie ni recupere.
+    if (secretsError) return { error: secretsError };
   }
 
   const payload = {
@@ -128,22 +132,39 @@ export async function saveMetaSettings(settings: MetaSettings, secrets: Partial<
   }
 }
 
-async function storeMetaSecrets(workspaceId: string, secrets: Record<string, string>): Promise<void> {
+// Les Edge Functions Meta appellent supabase.auth.getUser(token) : elles
+// attendent le jeton de session de l'utilisateur connecte, pas la cle anon.
+// Envoyer la cle anon produit un 401 systematique.
+async function bearerToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string);
+}
+
+async function storeMetaSecrets(
+  workspaceId: string,
+  secrets: Record<string, string>
+): Promise<{ error: string | null }> {
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/meta-store-secrets`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${await bearerToken()}`,
       },
       body: JSON.stringify({ workspace_id: workspaceId, secrets }),
     });
 
     if (!response.ok) {
-      console.error('Failed to store Meta secrets:', response.status);
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      return {
+        error: (data.error as string) || `Enregistrement des secrets: HTTP ${response.status}`,
+      };
     }
+
+    return { error: null };
   } catch (err) {
-    console.error('Error storing Meta secrets:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    return { error: `Enregistrement des secrets impossible : ${message}` };
   }
 }
 
@@ -162,7 +183,7 @@ async function callMetaFunction(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${await bearerToken()}`,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
