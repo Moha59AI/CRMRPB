@@ -67,7 +67,12 @@ Deno.serve(async (req: Request) => {
     for (const [keyName, value] of Object.entries(secrets)) {
       if (typeof value !== 'string' || !value) continue;
 
-      const secretName = `meta_${keyName}_${workspace_id}`;
+      // Le formulaire nomme son champ 'meta_app_secret'. Sans cette
+      // normalisation, le secret est ecrit sous 'meta_meta_app_secret_<ws>'
+      // alors que meta-lead-webhook et meta-test-connection le relisent sous
+      // 'meta_app_secret_<ws>' : il ne serait jamais retrouve.
+      const canonicalKey = keyName.replace(/^meta_/, '');
+      const secretName = `meta_${canonicalKey}_${workspace_id}`;
 
       // Try Supabase Vault (pgsodium)
       try {
