@@ -162,20 +162,48 @@ répond **429** et aucun compte n'est créé.
 C'est une raison de plus de désactiver la confirmation d'e-mail, ou de créer les
 comptes depuis le dashboard avec **Auto Confirm User?**, qui n'envoie rien.
 
-## Edge Functions (plus tard)
+## Edge Functions
 
-Les 7 fonctions de `supabase/functions/` ne sont **pas** déployées par
-`setup-database.sql`. Elles ne servent qu'aux intégrations Meta Lead Ads et aux
-webhooks entrants — le CRM fonctionne sans.
+Les 8 fonctions de `supabase/functions/` ne sont **pas** déployées par
+`setup-database.sql`. Elles servent aux intégrations Meta Lead Ads et aux
+webhooks entrants — le CRM fonctionne sans, mais aucun lead n'arrive
+automatiquement.
 
-Pour les déployer le moment venu, il faut la CLI Supabase (absente de ce poste) :
+Déploiement :
 
 ```
-npm install -g supabase
-supabase login
-supabase link --project-ref <ref-du-projet>
-supabase functions deploy
+npx supabase login
+npx supabase link --project-ref <ref-du-projet>
+npx supabase functions deploy
 ```
 
-Secrets à configurer côté Supabase avant de s'en servir :
+Secrets à configurer côté Supabase :
 `INTEGRATION_ENCRYPTION_KEY` (32 octets hex) et `META_APP_SECRET`.
+
+## Réception des leads Meta
+
+Meta n'envoie **jamais** les données du formulaire : le webhook ne reçoit qu'un
+`leadgen_id`. Les vraies données se récupèrent ensuite via l'API Graph. Et Meta
+impose une réponse en moins de 20 secondes, sous peine de rejouer l'événement —
+ce qui produit des doublons.
+
+Le traitement est donc coupé en deux :
+
+| Fonction | Rôle | Durée visée |
+|---|---|---|
+| `meta-lead-webhook` | Vérifie la signature, empile le `leadgen_id`, répond 200 | quelques ms |
+| `meta-process-queue` | Dépile, appelle l'API Graph, crée le lead | hors chemin critique |
+
+`webhook_events` sert de file d'attente. `processing_status` porte l'état,
+`processing_attempts` le compteur, `next_attempt_at` le backoff exponentiel
+(2, 4, 8, 16, 32, 64 minutes) déclenché sur quota dépassé ou token expiré.
+Au-delà de 6 tentatives, l'événement sort de la file (`next_attempt_at` à null).
+
+L'unicité `(workspace_id, provider, external_event_id)` est garantie par un
+index : c'est la base qui écarte les doublons, pas un `SELECT` préalable qui
+laisserait passer deux livraisons simultanées.
+
+Après le déploiement, exécuter `setup-cron.sql` pour planifier le dépilement
+toutes les minutes. Ce fichier contient aussi les requêtes de surveillance —
+notamment celle qui affiche les noms de champs réellement envoyés par Meta,
+à lire au premier lead pour régler le mapping sans deviner.
