@@ -147,75 +147,68 @@ async function storeMetaSecrets(workspaceId: string, secrets: Record<string, str
   }
 }
 
-export async function testMetaConnection(): Promise<{ success: boolean; error: string | null }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/meta-test-connection`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-  });
+type FunctionResult = {
+  success: boolean;
+  error: string | null;
+  data: Record<string, unknown>;
+};
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Request failed' }));
-    return { success: false, error: data.error || `HTTP ${response.status}` };
+async function callMetaFunction(
+  name: string,
+  body?: Record<string, unknown>
+): Promise<FunctionResult> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: (data.error as string) || `HTTP ${response.status}`,
+        data,
+      };
+    }
+
+    return {
+      success: (data.success as boolean) ?? true,
+      error: (data.error as string) ?? null,
+      data,
+    };
+  } catch (err) {
+    // Sans ce catch, une coupure reseau ou un blocage CORS rejetait la
+    // promesse : le handler appelant levait avant d'atteindre son toast,
+    // et l'utilisateur ne voyait strictement rien se passer.
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: `Appel impossible : ${message}`, data: {} };
   }
+}
 
-  const data = await response.json().catch(() => ({}));
-  return { success: data.success ?? true, error: data.error ?? null };
+export async function testMetaConnection(): Promise<{ success: boolean; error: string | null }> {
+  const { success, error } = await callMetaFunction('meta-test-connection');
+  return { success, error };
 }
 
 export async function syncMetaForms(): Promise<{ success: boolean; error: string | null; forms?: unknown[] }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/meta-sync-forms`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Request failed' }));
-    return { success: false, error: data.error || `HTTP ${response.status}` };
-  }
-
-  const data = await response.json().catch(() => ({}));
-  return { success: true, error: null, forms: data.forms };
+  const { success, error, data } = await callMetaFunction('meta-sync-forms');
+  return { success, error, forms: (data.forms as unknown[]) ?? [] };
 }
 
 export async function subscribePageToLeads(): Promise<{ success: boolean; error: string | null }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/meta-subscribe-leads`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Request failed' }));
-    return { success: false, error: data.error || `HTTP ${response.status}` };
-  }
-
-  return { success: true, error: null };
+  const { success, error } = await callMetaFunction('meta-subscribe-leads');
+  return { success, error };
 }
 
 export async function sendTestConversionEvent(): Promise<{ success: boolean; error: string | null }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/meta-conversions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({ action: 'test' }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Request failed' }));
-    return { success: false, error: data.error || `HTTP ${response.status}` };
-  }
-
-  return { success: true, error: null };
+  const { success, error } = await callMetaFunction('meta-conversions', { action: 'test' });
+  return { success, error };
 }
 
 export function parseSettingsFromConnection(connection: IntegrationConnection | null): MetaSettings {

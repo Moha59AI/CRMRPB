@@ -4,6 +4,7 @@ import { AuthProvider } from '@/features/auth/auth-context';
 import { QueryProvider } from '@/app/query-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProtectedRoute } from '@/features/auth/protected-route';
+import { Toaster } from '@/components/ui/sonner';
 import { AppLayout } from '@/layouts/app-layout';
 import { LoginPage } from '@/features/auth/login-page';
 import { SignupPage } from '@/features/auth/signup-page';
@@ -66,6 +67,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/today" replace />} />
             </Routes>
           </BrowserRouter>
+          <Toaster richColors position="top-right" />
         </QueryProvider>
       </AuthProvider>
     </ErrorBoundary>
