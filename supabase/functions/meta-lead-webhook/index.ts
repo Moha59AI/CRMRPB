@@ -11,18 +11,17 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-  }
-  return bytes;
-}
-
+// La cle HMAC est l'app secret pris tel quel, en octets UTF-8.
+//
+// L'implementation precedente decodait les 32 caracteres hexadecimaux en
+// 16 octets avant de signer. La signature ne pouvait donc jamais correspondre
+// a celle de Meta, dont la reference (hash_hmac en PHP) passe la chaine
+// directement comme cle. Consequence : verification toujours en echec,
+// reponse 200 malgre tout, et aucun lead enregistre.
 async function verifySignature(payload: string, signature: string, appSecret: string): Promise<boolean> {
   try {
     const key = await crypto.subtle.importKey(
-      'raw', hexToBytes(appSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      'raw', new TextEncoder().encode(appSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
     );
     const signed = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
     const expected = 'sha256=' + Array.from(new Uint8Array(signed))
