@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { CheckCircle2, Search, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { RelanceRow } from './components/relance-row';
+import { SessionRelance } from './components/session-relance';
 import {
   fetchRelances, compterRelances, reporterRelance, marquerRelanceTraitee,
   journaliserAction,
@@ -49,6 +50,8 @@ export function RelancesPage() {
   const [page, setPage] = useState(0);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enCours, setEnCours] = useState<string | null>(null);
+  const [session, setSession] = useState<Relance[] | null>(null);
+  const [preparationSession, setPreparationSession] = useState(false);
 
   // Anti-rebond : la recherche part en base, inutile d'interroger à chaque frappe.
   useEffect(() => {
@@ -164,6 +167,26 @@ export function RelancesPage() {
     else toast.success(`${cibles.length} relance(s) reportée(s) à demain`);
   };
 
+  // La session travaille sur une file large, triee par priorite, independante
+  // de la pagination de la liste : on ne veut pas s'arreter au bout de 50.
+  const demarrerSession = async () => {
+    setPreparationSession(true);
+    try {
+      const { relances: file } = await fetchRelances({
+        ...filtresRequete, sort: 'priorite', limit: 200, offset: 0,
+      });
+      if (file.length === 0) {
+        toast.info('Aucune relance à traiter dans ce filtre');
+        return;
+      }
+      setSession(file);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPreparationSession(false);
+    }
+  };
+
   const changerFiltre = (cle: CleFiltre) => {
     setFiltre(cle);
     setPage(0);
@@ -171,6 +194,16 @@ export function RelancesPage() {
   };
 
   const pageMax = Math.max(0, Math.ceil(total / PAR_PAGE) - 1);
+
+  if (session) {
+    return (
+      <SessionRelance
+        file={session}
+        onFermer={() => { setSession(null); rafraichir(); }}
+        onTermine={() => { setSession(null); rafraichir(); }}
+      />
+    );
+  }
 
   return (
     <>
@@ -239,6 +272,13 @@ export function RelancesPage() {
         </Select>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" className="h-8 rounded-full"
+            onClick={() => void demarrerSession()} disabled={preparationSession || total === 0}>
+            {preparationSession
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <Play className="mr-1.5 h-3.5 w-3.5" />}
+            Démarrer ma session
+          </Button>
           {isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           {total > 0 && (
             <span className="text-xs text-muted-foreground tabular">
