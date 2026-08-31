@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,6 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { LeadDetailSheet } from '@/features/leads/lead-detail-sheet';
+import { fetchLeadById } from '@/services/leads-service';
+import { fetchProfiles } from '@/services/profiles-service';
 import { RelanceRow } from './components/relance-row';
 import { SessionRelance } from './components/session-relance';
 import {
@@ -40,7 +42,6 @@ const FILTRES: { cle: CleFiltre; label: string; compteur: keyof CompteursRelance
 const URGENCES: CleFiltre[] = ['urgent', 'due', 'upcoming'];
 
 export function RelancesPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [filtre, setFiltre] = useState<CleFiltre>('toutes');
@@ -51,6 +52,9 @@ export function RelancesPage() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enCours, setEnCours] = useState<string | null>(null);
   const [session, setSession] = useState<Relance[] | null>(null);
+  // La fiche s'ouvre en panneau lateral : quitter la page ferait perdre le
+  // filtre, la pagination et la place dans la file.
+  const [ficheLeadId, setFicheLeadId] = useState<string | null>(null);
   const [preparationSession, setPreparationSession] = useState(false);
 
   // Anti-rebond : la recherche part en base, inutile d'interroger à chaque frappe.
@@ -81,6 +85,17 @@ export function RelancesPage() {
     queryKey: ['relances', filtresRequete],
     queryFn: () => fetchRelances(filtresRequete),
     placeholderData: keepPreviousData,
+  });
+
+  const { data: fiche } = useQuery({
+    queryKey: ['lead', ficheLeadId],
+    queryFn: () => fetchLeadById(ficheLeadId as string),
+    enabled: !!ficheLeadId,
+  });
+
+  const { data: profils } = useQuery({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
   });
 
   const relances = data?.relances ?? [];
@@ -142,9 +157,8 @@ export function RelancesPage() {
   };
 
   const ouvrir = (r: Relance) => {
-    if (r.leadId) navigate(`/leads?lead=${r.leadId}`);
-    else if (r.caseId) navigate(`/cases?case=${r.caseId}`);
-    else toast.info('Cette relance n’a pas de fiche associée');
+    if (r.leadId) setFicheLeadId(r.leadId);
+    else toast.info('Cette relance n’a pas de fiche client associée');
   };
 
   const basculerSelection = useCallback((id: string, valeur: boolean) => {
@@ -349,6 +363,19 @@ export function RelancesPage() {
           </>
         )}
       </div>
+
+      <LeadDetailSheet
+        lead={fiche ?? null}
+        profiles={profils ?? []}
+        open={!!ficheLeadId}
+        onOpenChange={(ouvert) => {
+          if (!ouvert) {
+            setFicheLeadId(null);
+            // Le statut ou la date d'action ont pu changer dans la fiche.
+            rafraichir();
+          }
+        }}
+      />
     </>
   );
 }
