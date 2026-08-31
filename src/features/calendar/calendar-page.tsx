@@ -70,6 +70,7 @@ import { fetchCases } from '@/services/cases-service';
 import { fetchLeads } from '@/services/leads-service';
 import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import type {
   Appointment,
   AppointmentStatus,
@@ -1117,6 +1118,7 @@ export function CalendarPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+  const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   // ---- Effective assigned user filter (advisor & technician are mutually exclusive) ----
@@ -1255,7 +1257,14 @@ export function CalendarPage() {
     updateMutation.mutate({ id: selectedAppt.id, updates: { status: 'cancelled' } });
   }
   function handleDelete() {
+    // La confirmation est portee par ConfirmerSuppression : un rendez-vous
+    // efface au clic ne se recupere pas.
+    setConfirmerSuppression(true);
+  }
+
+  function supprimerVraiment() {
     if (!selectedAppt) return;
+    setConfirmerSuppression(false);
     deleteMutation.mutate(selectedAppt.id);
   }
 
@@ -1454,6 +1463,22 @@ export function CalendarPage() {
         onDelete={handleDelete}
         updating={updateMutation.isPending}
         deleting={deleteMutation.isPending}
+      />
+
+      <ConfirmerSuppression
+        ouvert={confirmerSuppression}
+        onOuvertChange={setConfirmerSuppression}
+        nom={selectedAppt?.title ?? 'ce rendez-vous'}
+        consequence="Le rendez-vous sera retiré du planning. Le client n'en sera pas informé automatiquement."
+        enCours={deleteMutation.isPending}
+        onConfirmer={supprimerVraiment}
+        alternative={
+          <>
+            Si le client a annulé, préférez le passer en{' '}
+            <span className="font-medium text-foreground">Annulé</span> : l'historique
+            reste consultable et le créneau se libère.
+          </>
+        }
       />
 
       {/* Create dialog */}

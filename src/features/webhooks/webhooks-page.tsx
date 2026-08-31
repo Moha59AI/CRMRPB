@@ -19,6 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { supabaseUrl } from '@/lib/supabase';
 import {
   fetchWebhookEndpoints, createWebhookEndpoint, toggleWebhookEndpoint,
@@ -38,6 +39,7 @@ export function WebhooksPage() {
   const [newProvider, setNewProvider] = useState('custom');
   const [selectedEndpoint, setSelectedEndpoint] = useState<WebhookEndpoint | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [aSupprimer, setASupprimer] = useState<WebhookEndpoint | null>(null);
 
   const { data: endpoints, isLoading } = useQuery({
     queryKey: ['webhook-endpoints'],
@@ -177,7 +179,7 @@ export function WebhooksPage() {
                           variant="ghost"
                           size="icon"
                           className="rounded-lg text-destructive hover:bg-destructive/10"
-                          onClick={() => deleteMutation.mutate(endpoint.id)}
+                          onClick={() => setASupprimer(endpoint)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -268,6 +270,25 @@ export function WebhooksPage() {
 
       {/* Events dialog */}
       <WebhookEventsDialog endpoint={selectedEndpoint} onClose={() => setSelectedEndpoint(null)} />
+
+      <ConfirmerSuppression
+        ouvert={!!aSupprimer}
+        onOuvertChange={(o) => { if (!o) setASupprimer(null); }}
+        nom={aSupprimer?.name ?? 'ce webhook'}
+        consequence="L'URL cessera immédiatement de recevoir. Les événements déjà reçus sont conservés, mais les prochains seront perdus sans avertissement pour l'émetteur."
+        enCours={deleteMutation.isPending}
+        onConfirmer={() => {
+          if (aSupprimer) deleteMutation.mutate(aSupprimer.id);
+          setASupprimer(null);
+        }}
+        alternative={
+          <>
+            Pour interrompre temporairement, préférez{' '}
+            <span className="font-medium text-foreground">désactiver</span> l'endpoint :
+            l'URL reste réservée et se réactive en un clic.
+          </>
+        }
+      />
     </>
   );
 }

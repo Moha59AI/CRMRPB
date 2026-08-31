@@ -27,6 +27,7 @@ import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead }
 import { fetchProfiles } from '@/services/profiles-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { OUTILS_DEMO_ACTIFS } from '@/config/features';
 import type {
   Lead, Profile,
   LeadStatus, LeadSource,
@@ -143,15 +144,19 @@ export function LeadsPage() {
         description="Prospects reçus depuis Meta et autres sources"
         action={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full"
-              disabled={seeding}
-              onClick={() => seedMutation.mutate()}
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Données de démo
-            </Button>
+            {/* Outil de developpement : jamais visible en production, et la
+                fonction SQL est en plus reservee aux administrateurs. */}
+            {OUTILS_DEMO_ACTIFS && (
+              <Button
+                variant="outline"
+                className="rounded-full"
+                disabled={seeding}
+                onClick={() => seedMutation.mutate()}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Données de démo
+              </Button>
+            )}
             <Button
               className="rounded-full"
               onClick={() => setNewLeadOpen(true)}
