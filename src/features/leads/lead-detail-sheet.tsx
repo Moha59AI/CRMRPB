@@ -10,6 +10,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Phone, MessageSquare, Mail, FileText, PlusCircle, Calendar, Star,
+  Car, MapPin, Shield, AlertTriangle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,8 +40,12 @@ import type {
   LeadStatus,
 } from '@/types';
 import {
-  sourceLabels, statusSelectOptions, profileName, scoreColor, formatDate, formatDateTime, leadName,
+  sourceLabels, statusSelectOptions, profileName, scoreColor,
+  formatDate, formatDateTime, leadName, vehicleLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
+import { StatusBadge } from './status-badge';
+import { LeadPipeline } from './lead-pipeline';
+import { LeadQualification } from './lead-qualification';
 
 // ============ DETAIL SHEET ============
 
@@ -53,7 +58,7 @@ export function LeadDetailSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('infos');
+  const [activeTab, setActiveTab] = useState('qualification');
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [noteContent, setNoteContent] = useState('');
 
@@ -211,6 +216,19 @@ export function LeadDetailSheet({
     });
   };
 
+  // Le SMS part pre-rempli : au telephone, on n'ecrit pas un message a la main.
+  const handleDemanderDocuments = () => {
+    if (!lead.phone) return;
+    const prenom = lead.first_name?.trim() || '';
+    const message = `Bonjour ${prenom}, pour avancer sur votre dossier pare-brise il nous manque votre carte grise et votre attestation d'assurance. Merci de nous les envoyer. Relais Pare-Brise`;
+    window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
+    createCommMutation.mutate({
+      lead_id: lead.id, type: 'sms_outbound', direction: 'outbound',
+      status: 'sent', content: message,
+    });
+    handleFieldUpdate({ status: 'documents_requested' });
+  };
+
   const handleAddNote = () => {
     if (!noteContent.trim()) return;
     createNoteMutation.mutate({ lead_id: lead.id, content: noteContent.trim() });
@@ -224,12 +242,69 @@ export function LeadDetailSheet({
         {/* Header */}
         <div className="border-b border-border px-6 pt-6 pb-4">
           <SheetHeader className="space-y-1">
-            <SheetTitle className="text-xl">{leadName(lead)}</SheetTitle>
-            <SheetDescription>
-              Reçu le {formatDateTime(lead.received_at || lead.created_at)}
-              {lead.campaign_name && ` · ${lead.campaign_name}`}
+            <div className="flex items-start justify-between gap-3">
+              <SheetTitle className="text-xl">{leadName(lead)}</SheetTitle>
+              <StatusBadge status={lead.status} />
+            </div>
+            <SheetDescription className="sr-only">
+              Fiche du lead {leadName(lead)}
             </SheetDescription>
           </SheetHeader>
+
+          {/* Ce qu'il faut savoir avant de decrocher : le vitrage, le vehicule,
+              l'assureur. Sans ca il faut fouiller les onglets pendant l'appel. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+            {lead.phone && (
+              <a href={`tel:${lead.phone}`} className="font-medium text-primary tabular hover:underline">
+                {lead.phone}
+              </a>
+            )}
+            {lead.glass_type && (
+              <span className="font-medium text-foreground">
+                {LIBELLE_VITRAGE[lead.glass_type]}
+              </span>
+            )}
+            {lead.has_adas_camera && lead.glass_type === 'pare_brise' && (
+              <span className="flex items-center gap-1 rounded-full bg-due-soft px-2 py-0.5 text-xs font-medium text-due">
+                <AlertTriangle className="h-3 w-3" />
+                Calibrage
+              </span>
+            )}
+            {(lead.vehicle_make || lead.vehicle_model) && (
+              <span className="flex items-center gap-1">
+                <Car className="h-3.5 w-3.5" />
+                {vehicleLabel(lead)}
+              </span>
+            )}
+            {lead.vehicle_registration && (
+              <span className="font-medium text-foreground tabular">{lead.vehicle_registration}</span>
+            )}
+            {lead.city && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" />
+                {lead.city}
+              </span>
+            )}
+            {lead.insurance && (
+              <span className="flex items-center gap-1">
+                <Shield className="h-3.5 w-3.5" />
+                {lead.insurance}
+              </span>
+            )}
+          </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            Reçu le {formatDateTime(lead.received_at || lead.created_at)}
+            {lead.campaign_name && ` · ${lead.campaign_name}`}
+          </p>
+
+          <div className="mt-4">
+            <LeadPipeline
+              statut={lead.status}
+              onChangerStatut={(statut: LeadStatus) => handleFieldUpdate({ status: statut })}
+              desactive={updateMutation.isPending}
+            />
+          </div>
 
           {/* Quick actions */}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -244,6 +319,10 @@ export function LeadDetailSheet({
             <Button size="sm" variant="outline" className="rounded-full" onClick={handleQuickEmail} disabled={!lead.email}>
               <Mail className="mr-1.5 h-3.5 w-3.5" />
               Email
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-full" onClick={handleDemanderDocuments} disabled={!lead.phone}>
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              Demander documents
             </Button>
             <Button size="sm" variant="outline" className="rounded-full" onClick={() => createCaseMutation.mutate()} disabled={createCaseMutation.isPending}>
               <FileText className="mr-1.5 h-3.5 w-3.5" />
@@ -260,6 +339,7 @@ export function LeadDetailSheet({
         <div className="px-6 py-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full justify-start">
+              <TabsTrigger value="qualification">Qualification</TabsTrigger>
               <TabsTrigger value="infos">Infos</TabsTrigger>
               <TabsTrigger value="suivi">Suivi</TabsTrigger>
               <TabsTrigger value="communications">Communications</TabsTrigger>
@@ -268,6 +348,14 @@ export function LeadDetailSheet({
             </TabsList>
 
             {/* ===== INFOS TAB ===== */}
+            <TabsContent value="qualification" className="mt-4">
+              <LeadQualification
+                lead={lead}
+                onUpdate={handleFieldUpdate}
+                desactive={updateMutation.isPending}
+              />
+            </TabsContent>
+
             <TabsContent value="infos" className="space-y-5 mt-4">
               {/* Contact info */}
               <Section title="Contact">

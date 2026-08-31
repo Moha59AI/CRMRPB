@@ -23,6 +23,7 @@ const RACCOURCIS = [
   { touche: 'S', libelle: 'SMS' },
   { touche: 'R', libelle: 'Reporter' },
   { touche: 'T', libelle: 'Traité' },
+  { touche: 'F', libelle: 'Fiche' },
   { touche: '→', libelle: 'Passer' },
   { touche: 'Échap', libelle: 'Quitter' },
 ];
@@ -31,9 +32,10 @@ interface SessionRelanceProps {
   file: Relance[];
   onFermer: () => void;
   onTermine: () => void;
+  onOuvrirFiche: (leadId: string) => void;
 }
 
-export function SessionRelance({ file, onFermer, onTermine }: SessionRelanceProps) {
+export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: SessionRelanceProps) {
   const [index, setIndex] = useState(0);
   const [traitees, setTraitees] = useState(0);
   const [occupe, setOccupe] = useState(false);
@@ -109,13 +111,16 @@ export function SessionRelance({ file, onFermer, onTermine }: SessionRelanceProp
         case 's': e.preventDefault(); envoyerSms(); break;
         case 'r': e.preventDefault(); void reporter(); break;
         case 't': e.preventDefault(); void traiter(); break;
+        case 'f':
+          if (relance?.leadId) { e.preventDefault(); onOuvrirFiche(relance.leadId); }
+          break;
         case 'arrowright': e.preventDefault(); suivant(); break;
         default: break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [appeler, envoyerSms, reporter, traiter, suivant, onFermer]);
+  }, [appeler, envoyerSms, reporter, traiter, suivant, onFermer, onOuvrirFiche, relance]);
 
   const progression = file.length > 0 ? Math.round((index / file.length) * 100) : 0;
 
@@ -240,13 +245,12 @@ export function SessionRelance({ file, onFermer, onTermine }: SessionRelanceProp
                 Passer
               </Button>
               {relance.leadId && (
-                // Nouvel onglet : consulter la fiche ne doit pas interrompre
-                // l'enchainement en cours.
-                <Button size="lg" variant="ghost" className="rounded-full" asChild>
-                  <a href={`/leads?lead=${relance.leadId}`} target="_blank" rel="noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Fiche
-                  </a>
+                // Panneau lateral : la session reste montee derriere, on
+                // reprend l'enchainement a la fermeture.
+                <Button size="lg" variant="ghost" className="rounded-full"
+                  onClick={() => onOuvrirFiche(relance.leadId as string)}>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Fiche
                 </Button>
               )}
             </div>

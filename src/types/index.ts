@@ -6,6 +6,9 @@ export type IntegrationStatus = 'connected' | 'error' | 'not_configured';
 export type WebhookDirection = 'inbound' | 'outbound';
 export type WebhookProcessingStatus = 'pending' | 'processing' | 'processed' | 'error' | 'skipped';
 
+export type GlassType =
+  | 'pare_brise' | 'lunette_arriere' | 'glace_laterale' | 'impact' | 'autre';
+
 export type LeadSource = 'meta' | 'webhook' | 'manual' | 'import';
 export type LeadStatus =
   | 'new' | 'to_call' | 'calling' | 'nrp' | 'interested'
@@ -76,6 +79,12 @@ export interface Lead {
   vehicle_model: string | null;
   insurance: string | null;
   offer: string | null;
+  /** Vitrage concerne, renseigne a la qualification. */
+  glass_type: GlassType | null;
+  /** Camera ADAS : impose un calibrage apres pose. */
+  has_adas_camera: boolean | null;
+  /** Reste a charge annonce au client. null = pas encore su, 0 = pris en charge. */
+  franchise_amount: number | null;
   score: number;
   source: LeadSource;
   status: LeadStatus;

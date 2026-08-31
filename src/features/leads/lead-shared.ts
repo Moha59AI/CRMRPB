@@ -6,7 +6,7 @@
 
 import type {
   Lead, Profile,
-  LeadStatus, LeadSource,
+  LeadStatus, LeadSource, GlassType,
 } from '@/types';
 
 // ============ CONSTANTS ============
@@ -98,3 +98,12 @@ export function vehicleLabel(lead: Lead): string {
 }
 
 // ============ STATUS BADGE ============
+
+/** Libelles des types de vitrage, utilises dans la fiche et la qualification. */
+export const LIBELLE_VITRAGE: Record<GlassType, string> = {
+  pare_brise: 'Pare-brise',
+  lunette_arriere: 'Lunette arrière',
+  glace_laterale: 'Glace latérale',
+  impact: 'Impact / réparation',
+  autre: 'Autre',
+};

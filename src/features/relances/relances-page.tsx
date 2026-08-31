@@ -209,13 +209,34 @@ export function RelancesPage() {
 
   const pageMax = Math.max(0, Math.ceil(total / PAR_PAGE) - 1);
 
+  // La fiche reste montee a cote de la session : elle s'ouvre par-dessus sans
+  // interrompre l'enchainement.
+  const panneauFiche = (
+    <LeadDetailSheet
+      lead={fiche ?? null}
+      profiles={profils ?? []}
+      open={!!ficheLeadId}
+      onOpenChange={(ouvert) => {
+        if (!ouvert) {
+          setFicheLeadId(null);
+          // Le statut ou la date d'action ont pu changer dans la fiche.
+          rafraichir();
+        }
+      }}
+    />
+  );
+
   if (session) {
     return (
-      <SessionRelance
-        file={session}
-        onFermer={() => { setSession(null); rafraichir(); }}
-        onTermine={() => { setSession(null); rafraichir(); }}
-      />
+      <>
+        <SessionRelance
+          file={session}
+          onFermer={() => { setSession(null); rafraichir(); }}
+          onTermine={() => { setSession(null); rafraichir(); }}
+          onOuvrirFiche={setFicheLeadId}
+        />
+        {panneauFiche}
+      </>
     );
   }
 
@@ -364,18 +385,7 @@ export function RelancesPage() {
         )}
       </div>
 
-      <LeadDetailSheet
-        lead={fiche ?? null}
-        profiles={profils ?? []}
-        open={!!ficheLeadId}
-        onOpenChange={(ouvert) => {
-          if (!ouvert) {
-            setFicheLeadId(null);
-            // Le statut ou la date d'action ont pu changer dans la fiche.
-            rafraichir();
-          }
-        }}
-      />
+      {panneauFiche}
     </>
   );
 }
