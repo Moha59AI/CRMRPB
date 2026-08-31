@@ -26,17 +26,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-import {
-  fetchLeads,
-  fetchTasks,
-  fetchAppointments,
-  fetchActivities,
-  fetchInvoices,
-  fetchGifts,
-  fetchAfterSalesCases,
-  fetchCases,
-  updateTask,
-} from '@/services/crm-service';
+import { fetchActivities } from '@/services/activity-service';
+import { fetchGifts, fetchInvoices } from '@/services/billing-service';
+import { fetchAfterSalesCases, fetchCases } from '@/services/cases-service';
+import { fetchLeads } from '@/services/leads-service';
+import { fetchAppointments, fetchTasks, updateTask } from '@/services/planning-service';
 import type {
   Lead,
   Task,

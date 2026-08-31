@@ -24,11 +24,9 @@ import type {
   Communication, SmsTemplate, Lead, Contact,
   CommunicationType, CommunicationStatus,
 } from '@/types';
-import {
-  fetchCommunications, createCommunication,
-  fetchSmsTemplates, createSmsTemplate,
-  fetchLeads, fetchContacts,
-} from '@/services/crm-service';
+import { createCommunication, createSmsTemplate, fetchCommunications, fetchSmsTemplates } from '@/services/activity-service';
+import { fetchContacts } from '@/services/contacts-service';
+import { fetchLeads } from '@/services/leads-service';
 
 // ============ LABELS ============
 

@@ -31,12 +31,11 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
-  fetchLeads, updateLead, createLead, checkDuplicateLead,
-  fetchProfiles, fetchTasks, fetchCommunications, fetchNotes,
-  createCommunication, createTask, createNote, createCase,
-  seedDemoLeads,
-} from '@/services/crm-service';
+import { createCommunication, createNote, fetchCommunications, fetchNotes } from '@/services/activity-service';
+import { createCase } from '@/services/cases-service';
+import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
+import { createTask, fetchTasks } from '@/services/planning-service';
+import { fetchProfiles } from '@/services/profiles-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type {

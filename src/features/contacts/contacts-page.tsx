@@ -25,11 +25,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  fetchContacts, createContact, updateContact,
-  fetchVehiclesForContact, fetchCommunications, createCommunication,
-  createNote, fetchNotes,
-} from '@/services/crm-service';
+import { createCommunication, createNote, fetchCommunications, fetchNotes } from '@/services/activity-service';
+import { createContact, fetchContacts, fetchVehiclesForContact, updateContact } from '@/services/contacts-service';
 import { toast } from 'sonner';
 import type { Contact, Vehicle, Communication, Note } from '@/types';
 

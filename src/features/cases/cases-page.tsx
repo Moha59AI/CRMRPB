@@ -24,14 +24,13 @@ import type {
   WindscreenCase, Task, Profile, Lead, Contact,
   Insurer, Note, Activity, DocumentType, CaseStatus,
 } from '@/types';
-import {
-  fetchCases, fetchCaseById, createCase, updateCase,
-  fetchCaseDocuments, toggleCaseDocument, createCaseDocument,
-  fetchTasks, createTask, fetchAppointments, fetchCommunications,
-  fetchInvoices, fetchQuotes, fetchGifts, fetchAfterSalesCases,
-  fetchProfiles, fetchLeads, fetchContacts, createNote, fetchNotes,
-  fetchInsurers, fetchActivities,
-} from '@/services/crm-service';
+import { createNote, fetchActivities, fetchCommunications, fetchNotes } from '@/services/activity-service';
+import { fetchGifts, fetchInvoices, fetchQuotes } from '@/services/billing-service';
+import { createCase, createCaseDocument, fetchAfterSalesCases, fetchCaseById, fetchCaseDocuments, fetchCases, toggleCaseDocument, updateCase } from '@/services/cases-service';
+import { fetchContacts, fetchInsurers } from '@/services/contacts-service';
+import { fetchLeads } from '@/services/leads-service';
+import { createTask, fetchAppointments, fetchTasks } from '@/services/planning-service';
+import { fetchProfiles } from '@/services/profiles-service';
 
 // ============ CONSTANTS ============
 

@@ -21,10 +21,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import type { Campaign, CampaignStatus, SmsTemplate, Contact } from '@/types';
-import {
-  fetchCampaigns, createCampaign, updateCampaign,
-  fetchSmsTemplates, fetchContacts,
-} from '@/services/crm-service';
+import { fetchSmsTemplates } from '@/services/activity-service';
+import { createCampaign, fetchCampaigns, updateCampaign } from '@/services/automation-service';
+import { fetchContacts } from '@/services/contacts-service';
 
 // ============ CONSTANTS ============
 

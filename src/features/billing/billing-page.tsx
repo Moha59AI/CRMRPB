@@ -22,13 +22,9 @@ import type {
   Invoice, WindscreenCase, Contact,
   InvoiceStatus, QuoteStatus, GiftStatus,
 } from '@/types';
-import {
-  fetchInvoices, createInvoice,
-  fetchQuotes,
-  fetchPayments,
-  fetchGifts,
-  fetchCases, fetchContacts,
-} from '@/services/crm-service';
+import { createInvoice, fetchGifts, fetchInvoices, fetchPayments, fetchQuotes } from '@/services/billing-service';
+import { fetchCases } from '@/services/cases-service';
+import { fetchContacts } from '@/services/contacts-service';
 
 // ============ CONSTANTS ============
 

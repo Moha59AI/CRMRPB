@@ -36,9 +36,7 @@ import {
   type OnConnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import {
-  fetchWorkflows, createWorkflow, updateWorkflow, deleteWorkflow,
-} from '@/services/crm-service';
+import { createWorkflow, deleteWorkflow, fetchWorkflows, updateWorkflow } from '@/services/automation-service';
 import type { Workflow } from '@/types';
 
 // ---------------------------------------------------------------------------

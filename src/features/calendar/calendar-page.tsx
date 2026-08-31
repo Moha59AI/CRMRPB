@@ -66,15 +66,10 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
-import {
-  fetchAppointments,
-  createAppointment,
-  updateAppointment,
-  deleteAppointment,
-  fetchProfiles,
-  fetchLeads,
-  fetchCases,
-} from '@/services/crm-service';
+import { fetchCases } from '@/services/cases-service';
+import { fetchLeads } from '@/services/leads-service';
+import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from '@/services/planning-service';
+import { fetchProfiles } from '@/services/profiles-service';
 import type {
   Appointment,
   AppointmentStatus,

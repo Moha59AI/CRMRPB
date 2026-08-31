@@ -12,9 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import {
-  fetchTasks, updateTask, fetchLeads, fetchProfiles,
-} from '@/services/crm-service';
+import { fetchLeads } from '@/services/leads-service';
+import { fetchTasks, updateTask } from '@/services/planning-service';
+import { fetchProfiles } from '@/services/profiles-service';
 import type { Task, Lead, Profile } from '@/types';
 
 const priorityConfig: Record<string, { label: string; className: string }> = {

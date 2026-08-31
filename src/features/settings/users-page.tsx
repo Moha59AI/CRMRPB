@@ -8,7 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchProfiles } from '@/services/crm-service';
+import { fetchProfiles } from '@/services/profiles-service';
 import { roleLabels, roleDescriptions } from '@/config/roles';
 import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
