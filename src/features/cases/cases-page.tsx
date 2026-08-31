@@ -16,9 +16,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { FicheOverlay } from '@/features/fiche/fiche-overlay';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type {
   WindscreenCase, Task, Profile, Lead, Contact,
@@ -450,8 +450,6 @@ function CaseDetailSheet({
   const queryClient = useQueryClient();
   const [tab, setTab] = useState('resume');
 
-  const open = !!caseId;
-
   const { data: caseData, isLoading: caseLoading } = useQuery({
     queryKey: ['case', caseId],
     queryFn: () => fetchCaseById(caseId),
@@ -634,17 +632,43 @@ function CaseDetailSheet({
     { value: 'historique', label: 'Historique', icon: AlertCircle },
   ];
 
+  const entete = (
+    <>
+      <h1 className="truncate text-xl font-semibold sm:text-2xl">
+        {caseLoading ? <Skeleton className="h-7 w-48 rounded-lg" /> : (caseData?.case_number ?? 'Dossier')}
+      </h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {caseData ? `${clientName} — créé le ${formatDate(caseData.created_at)}` : 'Détails du dossier'}
+      </p>
+      {caseData && (
+        <div className="mt-3 flex items-center gap-3">
+          <Label className="whitespace-nowrap text-xs text-muted-foreground">Statut</Label>
+          <Select
+            value={caseData.status}
+            onValueChange={(v) => statusMutation.mutate({ id: caseData.id, status: v as CaseStatus })}
+            disabled={statusMutation.isPending}
+          >
+            <SelectTrigger className="w-[220px] rounded-lg"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {caseStatusOrder.map((st) => (
+                <SelectItem key={st} value={st}>{caseStatusLabels[st]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <StatusBadge status={caseData.status} />
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <Sheet open={open} onOpenChange={(o) => { if (!o) { onClose(); setTab('resume'); } }}>
-      <SheetContent side="right" className="w-[700px] sm:max-w-[700px] overflow-y-auto scrollbar-thin">
-        <SheetHeader className="pr-10">
-          <SheetTitle className="text-lg">
-            {caseLoading ? <Skeleton className="h-6 w-40" /> : (caseData?.case_number ?? 'Dossier')}
-          </SheetTitle>
-          <SheetDescription>
-            {caseData ? `${clientName} — créé le ${formatDate(caseData.created_at)}` : 'Détails du dossier'}
-          </SheetDescription>
-        </SheetHeader>
+    <FicheOverlay
+      entete={entete}
+      onglets={caseTabs.map((t) => ({ cle: t.value, label: t.label }))}
+      ongletActif={tab}
+      onChangerOnglet={(v) => setTab(v)}
+      onFermer={() => { onClose(); setTab('resume'); }}
+    >
 
         {!caseData && !caseLoading && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -654,37 +678,9 @@ function CaseDetailSheet({
         )}
 
         {caseData && (
-          <div className="mt-4 space-y-4">
-            {/* Quick status change */}
-            <div className="flex items-center gap-3">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">Statut</Label>
-              <Select
-                value={caseData.status}
-                onValueChange={(v) => statusMutation.mutate({ id: caseData.id, status: v as CaseStatus })}
-                disabled={statusMutation.isPending}
-              >
-                <SelectTrigger className="w-[220px] rounded-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {caseStatusOrder.map((s) => (
-                    <SelectItem key={s} value={s}>{caseStatusLabels[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <StatusBadge status={caseData.status} />
-            </div>
-
-            {/* Tabs */}
+          <div className="space-y-4">
+            {/* La barre d'onglets est desormais portee par la coque partagee. */}
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="flex h-auto flex-wrap gap-1 rounded-xl bg-muted/50 p-1">
-                {caseTabs.map((t) => (
-                  <TabsTrigger key={t.value} value={t.value} className="rounded-lg text-xs gap-1.5">
-                    <t.icon className="h-3.5 w-3.5" />
-                    {t.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
 
               {/* === RÉSUMÉ === */}
               <TabsContent value="resume" className="space-y-4 mt-4">
@@ -1031,8 +1027,7 @@ function CaseDetailSheet({
             </Tabs>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+    </FicheOverlay>
   );
 }
 
