@@ -61,3 +61,23 @@ export async function createInsurer(name: string): Promise<{ error: string | nul
 }
 
 // ============ WINDSCREEN_CASES ============
+
+/**
+ * Nombre d'interventions par client, depuis la vue v_clients.
+ *
+ * Un client est une personne, un lead une intervention : c'est cette colonne
+ * qui rend le modele lisible dans la liste.
+ */
+export async function fetchCompteursInterventions(): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from('v_clients')
+    .select('id, nb_interventions');
+
+  if (error) throw new Error(error.message);
+
+  const compteurs = new Map<string, number>();
+  for (const l of (data ?? []) as { id: string; nb_interventions: number }[]) {
+    compteurs.set(l.id, Number(l.nb_interventions));
+  }
+  return compteurs;
+}

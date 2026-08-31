@@ -26,7 +26,10 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { createCommunication, createNote, fetchCommunications, fetchNotes } from '@/services/activity-service';
-import { createContact, fetchContacts, fetchVehiclesForContact, updateContact } from '@/services/contacts-service';
+import {
+  createContact, fetchContacts, fetchVehiclesForContact, updateContact,
+  fetchCompteursInterventions,
+} from '@/services/contacts-service';
 import { toast } from 'sonner';
 import type { Contact, Vehicle, Communication, Note } from '@/types';
 
@@ -75,11 +78,18 @@ export function ContactsPage() {
     queryFn: () => fetchContacts({ search }),
   });
 
+  // Un client est une personne, un lead une intervention : ce compteur rend le
+  // modele lisible sans ouvrir chaque fiche.
+  const { data: compteurs } = useQuery({
+    queryKey: ['compteurs-interventions'],
+    queryFn: fetchCompteursInterventions,
+  });
+
   return (
     <>
       <PageHeader
-        title="Contacts"
-        description="Carnet de contacts"
+        title="Clients"
+        description="Les personnes et leur historique d'interventions"
         action={
           <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -147,6 +157,7 @@ export function ContactsPage() {
                 <TableHead className="text-xs">Téléphone</TableHead>
                 <TableHead className="text-xs">Email</TableHead>
                 <TableHead className="text-xs">Ville</TableHead>
+                <TableHead className="text-xs">Interventions</TableHead>
                 <TableHead className="text-xs">Consentement SMS</TableHead>
                 <TableHead className="text-xs">Date de création</TableHead>
               </TableRow>
@@ -156,6 +167,7 @@ export function ContactsPage() {
                 <ContactRow
                   key={contact.id}
                   contact={contact}
+                  interventions={compteurs?.get(contact.id) ?? 0}
                   onOpen={() => setSelectedContactId(contact.id)}
                 />
               ))}
@@ -177,7 +189,9 @@ export function ContactsPage() {
 }
 
 // ============ CONTACT ROW ============
-function ContactRow({ contact, onOpen }: { contact: Contact; onOpen: () => void }) {
+function ContactRow({ contact, interventions, onOpen }: {
+  contact: Contact; interventions: number; onOpen: () => void;
+}) {
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onOpen}>
       <TableCell className="text-sm font-medium text-foreground">
@@ -186,6 +200,15 @@ function ContactRow({ contact, onOpen }: { contact: Contact; onOpen: () => void 
       <TableCell className="text-sm text-muted-foreground">{contact.phone || '—'}</TableCell>
       <TableCell className="text-sm text-muted-foreground">{contact.email || '—'}</TableCell>
       <TableCell className="text-sm text-muted-foreground">{contact.city || '—'}</TableCell>
+      <TableCell className="text-sm tabular">
+        {interventions > 0 ? (
+          <span className={interventions > 1 ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+            {interventions}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/50">—</span>
+        )}
+      </TableCell>
       <TableCell>
         <Badge
           variant={contact.sms_consent ? 'secondary' : 'outline'}

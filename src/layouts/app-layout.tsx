@@ -1,7 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { LogOut, ChevronLeft, ChevronRight, Car } from 'lucide-react';
-import { navItems } from '@/config/navigation';
+import { navSections } from '@/config/navigation';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -53,34 +53,51 @@ export function AppLayout() {
         {/* Navigation */}
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto scrollbar-thin p-2">
           <TooltipProvider delayDuration={200}>
-            {navItems.map((item) => {
-              const active = isActive(item.path);
-              const Icon = item.icon;
-              return (
-                <Tooltip key={item.path}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => navigate(item.path)}
-                      className={cn(
-                        'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
-                        expanded ? 'w-full' : 'w-full justify-center',
-                        active
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      )}
-                    >
-                      <Icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.75} />
-                      {expanded && <span className="truncate animate-fade-in">{item.label}</span>}
-                    </button>
-                  </TooltipTrigger>
-                  {!expanded && (
-                    <TooltipContent side="right" sideOffset={8}>
-                      <p>{item.label}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              );
-            })}
+            {navSections.map((section, i) => (
+              <div key={section.titre} className={cn(i > 0 && 'mt-4')}>
+                {/* Le titre de section disparait en mode reduit : il ne reste
+                    que les icones, et un intitule tronque n'aiderait personne. */}
+                {expanded ? (
+                  <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                    {section.titre}
+                  </p>
+                ) : (
+                  i > 0 && <div className="mx-3 mb-2 border-t border-border" />
+                )}
+
+                <div className="flex flex-col gap-1">
+                  {section.items.map((item) => {
+                    const active = isActive(item.path);
+                    const Icon = item.icon;
+                    return (
+                      <Tooltip key={item.path}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => navigate(item.path)}
+                            className={cn(
+                              'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                              expanded ? 'w-full' : 'w-full justify-center',
+                              active
+                                ? 'bg-secondary text-secondary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            )}
+                          >
+                            <Icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.75} />
+                            {expanded && <span className="truncate animate-fade-in">{item.label}</span>}
+                          </button>
+                        </TooltipTrigger>
+                        {!expanded && (
+                          <TooltipContent side="right" sideOffset={8}>
+                            <p>{item.label}</p>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </TooltipProvider>
         </nav>
 
