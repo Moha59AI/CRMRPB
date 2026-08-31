@@ -40,19 +40,19 @@ const invoiceStatusLabels: Record<InvoiceStatus, string> = {
 function invoiceStatusColor(status: InvoiceStatus): string {
   switch (status) {
     case 'draft':
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
     case 'sent':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return 'bg-upcoming-soft text-upcoming border-upcoming/25';
     case 'paid':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-done-soft text-done border-done/25';
     case 'partial':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
+      return 'bg-due-soft text-due border-due/25';
     case 'overdue':
-      return 'bg-red-50 text-red-700 border-red-200';
+      return 'bg-urgent-soft text-urgent border-urgent/25';
     case 'cancelled':
-      return 'bg-gray-50 text-gray-500 border-gray-200 line-through';
+      return 'bg-muted/50 text-muted-foreground border-border line-through';
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
   }
 }
 
@@ -67,17 +67,17 @@ const quoteStatusLabels: Record<QuoteStatus, string> = {
 function quoteStatusColor(status: QuoteStatus): string {
   switch (status) {
     case 'draft':
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
     case 'sent':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return 'bg-upcoming-soft text-upcoming border-upcoming/25';
     case 'accepted':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-done-soft text-done border-done/25';
     case 'rejected':
-      return 'bg-red-50 text-red-700 border-red-200';
+      return 'bg-urgent-soft text-urgent border-urgent/25';
     case 'expired':
-      return 'bg-gray-50 text-gray-500 border-gray-200';
+      return 'bg-muted/50 text-muted-foreground border-border';
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
   }
 }
 
@@ -91,15 +91,15 @@ const giftStatusLabels: Record<GiftStatus, string> = {
 function giftStatusColor(status: GiftStatus): string {
   switch (status) {
     case 'pending':
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
     case 'ordered':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return 'bg-upcoming-soft text-upcoming border-upcoming/25';
     case 'given':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-done-soft text-done border-done/25';
     case 'cancelled':
-      return 'bg-red-50 text-red-700 border-red-200';
+      return 'bg-urgent-soft text-urgent border-urgent/25';
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
   }
 }
 
@@ -235,7 +235,7 @@ export function BillingPage() {
 
             {/* ===== FACTURES ===== */}
             <TabsContent value="invoices" className="mt-4">
-              <div className="rounded-xl border border-border bg-white">
+              <div className="rounded-xl border border-border bg-card">
                 {invoicesLoading && <TableSkeleton rows={6} cols={11} />}
                 {invoicesError && (
                   <ErrorState message={(invoicesErr as Error)?.message} onRetry={refetchInvoices} />
@@ -300,7 +300,7 @@ export function BillingPage() {
 
             {/* ===== DEVIS ===== */}
             <TabsContent value="quotes" className="mt-4">
-              <div className="rounded-xl border border-border bg-white">
+              <div className="rounded-xl border border-border bg-card">
                 {quotesLoading && <TableSkeleton rows={6} cols={6} />}
                 {quotesError && (
                   <ErrorState message={(quotesErr as Error)?.message} onRetry={refetchQuotes} />
@@ -349,7 +349,7 @@ export function BillingPage() {
 
             {/* ===== PAIEMENTS ===== */}
             <TabsContent value="payments" className="mt-4">
-              <div className="rounded-xl border border-border bg-white">
+              <div className="rounded-xl border border-border bg-card">
                 {paymentsLoading && <TableSkeleton rows={6} cols={5} />}
                 {paymentsError && (
                   <ErrorState message={(paymentsErr as Error)?.message} onRetry={refetchPayments} />
@@ -396,7 +396,7 @@ export function BillingPage() {
 
             {/* ===== CADEAUX ===== */}
             <TabsContent value="gifts" className="mt-4">
-              <div className="rounded-xl border border-border bg-white">
+              <div className="rounded-xl border border-border bg-card">
                 {giftsLoading && <TableSkeleton rows={6} cols={6} />}
                 {giftsError && (
                   <ErrorState message={(giftsErr as Error)?.message} onRetry={refetchGifts} />
@@ -447,19 +447,19 @@ export function BillingPage() {
 
             {/* ===== FACTURES EN RETARD ===== */}
             <TabsContent value="overdue" className="mt-4">
-              <div className="rounded-xl border border-border bg-white">
+              <div className="rounded-xl border border-border bg-card">
                 {!invoicesLoading && overdueInvoices.length === 0 && (
                   <EmptyState
-                    icon={<CheckCircle2 className="h-7 w-7 text-emerald-600" strokeWidth={1.5} />}
+                    icon={<CheckCircle2 className="h-7 w-7 text-done" strokeWidth={1.5} />}
                     title="Aucune facture en retard"
                     description="Toutes vos factures sont à jour. Félicitations !"
                   />
                 )}
                 {!invoicesLoading && overdueInvoices.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 border-b border-border bg-red-50/50 px-4 py-3">
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <p className="text-sm text-red-700">
+                    <div className="flex items-center gap-2 border-b border-border bg-urgent-soft/50 px-4 py-3">
+                      <AlertCircle className="h-4 w-4 text-urgent" />
+                      <p className="text-sm text-urgent">
                         {overdueInvoices.length} facture{overdueInvoices.length > 1 ? 's' : ''} en retard de paiement
                       </p>
                     </div>
@@ -482,10 +482,10 @@ export function BillingPage() {
                             <TableCell className="text-sm text-muted-foreground">{caseNumberFor(inv.case_id)}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{contactNameFor(inv.contact_id)}</TableCell>
                             <TableCell className="text-right tabular-nums text-sm font-medium">{formatEuro(inv.amount_ttc)}</TableCell>
-                            <TableCell className="text-right tabular-nums text-sm text-red-700">{formatEuro(inv.remaining_amount)}</TableCell>
-                            <TableCell className="text-sm text-red-700">{formatDate(inv.due_date)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-sm text-urgent">{formatEuro(inv.remaining_amount)}</TableCell>
+                            <TableCell className="text-sm text-urgent">{formatDate(inv.due_date)}</TableCell>
                             <TableCell>
-                              <Badge variant="outline" className="rounded-full text-[10px] bg-red-50 text-red-700 border-red-200">
+                              <Badge variant="outline" className="rounded-full text-[10px] bg-urgent-soft text-urgent border-urgent/25">
                                 {invoiceStatusLabels[inv.status]}
                               </Badge>
                             </TableCell>

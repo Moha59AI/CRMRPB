@@ -157,9 +157,9 @@ function relativeTime(iso: string | null): string {
 // ---------------------------------------------------------------------------
 
 const KIND_STYLES: Record<NodeKind, { ring: string; iconBg: string; handle: string }> = {
-  trigger: { ring: 'ring-emerald-200', iconBg: 'bg-emerald-50 text-emerald-600', handle: '!bg-emerald-500' },
-  condition: { ring: 'ring-amber-200', iconBg: 'bg-amber-50 text-amber-600', handle: '!bg-amber-500' },
-  action: { ring: 'ring-blue-200', iconBg: 'bg-blue-50 text-blue-600', handle: '!bg-blue-500' },
+  trigger: { ring: 'ring-emerald-200', iconBg: 'bg-done-soft text-done', handle: '!bg-done' },
+  condition: { ring: 'ring-amber-200', iconBg: 'bg-due-soft text-due', handle: '!bg-due' },
+  action: { ring: 'ring-blue-200', iconBg: 'bg-upcoming-soft text-upcoming', handle: '!bg-upcoming' },
 };
 
 function FlowNode({ data, selected }: NodeProps) {
@@ -168,7 +168,7 @@ function FlowNode({ data, selected }: NodeProps) {
   const styles = KIND_STYLES[nodeData.kind];
   return (
     <div
-      className={`min-w-[200px] max-w-[240px] rounded-xl border border-border bg-white px-3 py-2.5 shadow-sm transition-shadow ${
+      className={`min-w-[200px] max-w-[240px] rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm transition-shadow ${
         selected ? 'ring-2 ring-offset-1 ' + styles.ring : ''
       }`}
     >
@@ -394,7 +394,7 @@ function WorkflowsList({
         </span>
       </div>
 
-      <div className="rounded-xl border border-border bg-white">
+      <div className="rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -454,7 +454,7 @@ function WorkflowRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-done-soft text-done">
             <TriggerIcon className="h-4 w-4" strokeWidth={1.8} />
           </div>
           <span className="text-sm text-foreground">
@@ -474,7 +474,7 @@ function WorkflowRow({
         </div>
       </TableCell>
       <TableCell className="text-right">
-        <span className="text-sm font-medium text-emerald-600">{wf.success_count ?? 0}</span>
+        <span className="text-sm font-medium text-done">{wf.success_count ?? 0}</span>
       </TableCell>
       <TableCell className="text-right">
         <span className="text-sm font-medium text-destructive">{wf.failure_count ?? 0}</span>
@@ -732,7 +732,7 @@ function WorkflowBuilder({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* Top bar */}
-      <div className="flex items-center gap-3 border-b border-border bg-white px-4 py-3">
+      <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3">
         <Button variant="ghost" size="icon" className="rounded-lg" onClick={onClose}>
           <ChevronLeft className="h-5 w-5" />
         </Button>
@@ -771,7 +771,7 @@ function WorkflowBuilder({
       {/* Body: 3 panels */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel - catalog */}
-        <div className="flex w-72 shrink-0 flex-col border-r border-border bg-white">
+        <div className="flex w-72 shrink-0 flex-col border-r border-border bg-card">
           <div className="border-b border-border p-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -825,9 +825,9 @@ function WorkflowBuilder({
             proOptions={{ hideAttribution: true }}
           >
             <Background color="#e2e8f0" gap={20} />
-            <Controls className="!rounded-lg !border !border-border !bg-white !shadow-sm" />
+            <Controls className="!rounded-lg !border !border-border !bg-card !shadow-sm" />
             <MiniMap
-              className="!rounded-lg !border !border-border !bg-white"
+              className="!rounded-lg !border !border-border !bg-card"
               maskColor="rgba(0,0,0,0.05)"
               nodeColor={(n) => {
                 const kind = (n.data as unknown as NodeData)?.kind;
@@ -850,7 +850,7 @@ function WorkflowBuilder({
         </div>
 
         {/* Right panel - properties */}
-        <div className="flex w-80 shrink-0 flex-col border-l border-border bg-white">
+        <div className="flex w-80 shrink-0 flex-col border-l border-border bg-card">
           {selectedNode ? (
             <NodeProperties
               node={selectedNode}
@@ -880,9 +880,9 @@ function WorkflowBuilder({
 // ---------------------------------------------------------------------------
 
 const ACCENT_CLASSES: Record<string, { icon: string; hover: string }> = {
-  emerald: { icon: 'bg-emerald-50 text-emerald-600', hover: 'hover:border-emerald-300 hover:bg-emerald-50/50' },
-  amber: { icon: 'bg-amber-50 text-amber-600', hover: 'hover:border-amber-300 hover:bg-amber-50/50' },
-  blue: { icon: 'bg-blue-50 text-blue-600', hover: 'hover:border-blue-300 hover:bg-blue-50/50' },
+  emerald: { icon: 'bg-done-soft text-done', hover: 'hover:border-done/25 hover:bg-done-soft/50' },
+  amber: { icon: 'bg-due-soft text-due', hover: 'hover:border-due/25 hover:bg-due-soft/50' },
+  blue: { icon: 'bg-upcoming-soft text-upcoming', hover: 'hover:border-upcoming/25 hover:bg-upcoming-soft/50' },
 };
 
 function CatalogSection({

@@ -109,19 +109,19 @@ const STATUS_LABELS: Record<AppointmentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-blue-50/80 border-blue-200/70 text-blue-900',
-  confirmed: 'bg-green-50/80 border-green-200/70 text-green-900',
-  completed: 'bg-gray-100/80 border-gray-200/70 text-gray-600',
-  cancelled: 'bg-red-50/70 border-red-200/70 text-red-800 line-through opacity-60',
-  no_show: 'bg-amber-50/80 border-amber-200/70 text-amber-900',
+  scheduled: 'bg-upcoming-soft/80 border-upcoming/25/70 text-upcoming',
+  confirmed: 'bg-done-soft/80 border-done/25/70 text-done',
+  completed: 'bg-muted/80 border-border/70 text-muted-foreground',
+  cancelled: 'bg-urgent-soft/70 border-urgent/25/70 text-urgent line-through opacity-60',
+  no_show: 'bg-due-soft/80 border-due/25/70 text-due',
 };
 
 const STATUS_PILL: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-blue-100/80 text-blue-800',
-  confirmed: 'bg-green-100/80 text-green-800',
-  completed: 'bg-gray-100/80 text-gray-600',
-  cancelled: 'bg-red-100/80 text-red-800 line-through',
-  no_show: 'bg-amber-100/80 text-amber-800',
+  scheduled: 'bg-upcoming-soft/80 text-upcoming',
+  confirmed: 'bg-done-soft/80 text-done',
+  completed: 'bg-muted/80 text-muted-foreground',
+  cancelled: 'bg-urgent-soft/80 text-urgent line-through',
+  no_show: 'bg-due-soft/80 text-due',
 };
 
 const TYPE_ICONS: Record<AppointmentType, typeof Car> = {
@@ -262,8 +262,8 @@ function NowIndicator() {
       className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
       style={{ top: `${top}px` }}
     >
-      <div className="-ml-1 h-2 w-2 rounded-full bg-red-500" />
-      <div className="h-px flex-1 bg-red-500" />
+      <div className="-ml-1 h-2 w-2 rounded-full bg-urgent" />
+      <div className="h-px flex-1 bg-urgent" />
     </div>
   );
 }
@@ -663,11 +663,11 @@ function AppointmentDetailSheet({
               variant="outline"
               className={cn(
                 'border-transparent',
-                appointment.status === 'scheduled' && 'bg-blue-100 text-blue-800',
-                appointment.status === 'confirmed' && 'bg-green-100 text-green-800',
-                appointment.status === 'completed' && 'bg-gray-100 text-gray-600',
-                appointment.status === 'cancelled' && 'bg-red-100 text-red-800',
-                appointment.status === 'no_show' && 'bg-amber-100 text-amber-800'
+                appointment.status === 'scheduled' && 'bg-upcoming-soft text-upcoming',
+                appointment.status === 'confirmed' && 'bg-done-soft text-done',
+                appointment.status === 'completed' && 'bg-muted text-muted-foreground',
+                appointment.status === 'cancelled' && 'bg-urgent-soft text-urgent',
+                appointment.status === 'no_show' && 'bg-due-soft text-due'
               )}
             >
               {STATUS_LABELS[appointment.status]}
@@ -761,7 +761,7 @@ function AppointmentDetailSheet({
               disabled={updating}
               className="gap-1.5"
             >
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <CheckCircle2 className="h-4 w-4 text-done" />
               Confirmer
             </Button>
           )}
@@ -785,7 +785,7 @@ function AppointmentDetailSheet({
               disabled={updating}
               className="gap-1.5"
             >
-              <XCircle className="h-4 w-4 text-red-500" />
+              <XCircle className="h-4 w-4 text-urgent" />
               Annuler
             </Button>
           )}

@@ -38,17 +38,17 @@ const campaignStatusLabels: Record<CampaignStatus, string> = {
 function campaignStatusColor(status: CampaignStatus): string {
   switch (status) {
     case 'draft':
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
     case 'scheduled':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
+      return 'bg-upcoming-soft text-upcoming border-upcoming/25';
     case 'sending':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
+      return 'bg-due-soft text-due border-due/25';
     case 'sent':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-done-soft text-done border-done/25';
     case 'cancelled':
-      return 'bg-red-50 text-red-700 border-red-200';
+      return 'bg-urgent-soft text-urgent border-urgent/25';
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return 'bg-muted/50 text-foreground border-border';
   }
 }
 
@@ -444,9 +444,9 @@ function CampaignDetailSheet({
           </div>
 
           {/* Unsubscribed note */}
-          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <p className="text-xs text-amber-800">
+          <div className="flex items-start gap-2 rounded-xl border border-due/25 bg-due-soft p-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-due" />
+            <p className="text-xs text-due">
               Les contacts désabonnés sont automatiquement exclus de l'envoi. Aucun message ne leur sera envoyé.
             </p>
           </div>
@@ -470,28 +470,28 @@ function CampaignDetailSheet({
                 label="Livrés"
                 value={delivered}
                 rate={deliveryRate}
-                colorClass="bg-emerald-500"
+                colorClass="bg-done"
               />
               <StatBar
                 icon={<AlertCircle className="h-3.5 w-3.5" />}
                 label="Échecs"
                 value={failed}
                 rate={failureRate}
-                colorClass="bg-red-500"
+                colorClass="bg-urgent"
               />
               <StatBar
                 icon={<MessageSquare className="h-3.5 w-3.5" />}
                 label="Réponses"
                 value={replies}
                 rate={replyRate}
-                colorClass="bg-blue-500"
+                colorClass="bg-upcoming"
               />
               <StatBar
                 icon={<TrendingUp className="h-3.5 w-3.5" />}
                 label="Conversions"
                 value={conversions}
                 rate={conversionRate}
-                colorClass="bg-amber-500"
+                colorClass="bg-due"
               />
             </div>
           )}
@@ -786,9 +786,9 @@ function CreateCampaignDialog({
             value={scheduledValue}
           />
 
-          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <p className="text-xs text-amber-800">
+          <div className="flex items-start gap-2 rounded-xl border border-due/25 bg-due-soft p-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-due" />
+            <p className="text-xs text-due">
               Les contacts désabonnés ({contacts.filter((c) => c.unsubscribed).length}) seront exclus automatiquement.
             </p>
           </div>

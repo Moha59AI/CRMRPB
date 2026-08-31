@@ -62,11 +62,11 @@ function getStatusColor(status: string): string {
   const mid = ['documents_pending', 'insurance_declaration', 'glass_ordered', 'appointment_scheduled', 'payment_pending'];
   const late = ['intervention_done', 'invoice_sent', 'payment_received', 'gift_given', 'completed'];
   const problem = ['sav'];
-  if (early.includes(status)) return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (mid.includes(status)) return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (late.includes(status)) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (problem.includes(status)) return 'bg-red-50 text-red-700 border-red-200';
-  return 'bg-gray-50 text-gray-700 border-gray-200';
+  if (early.includes(status)) return 'bg-upcoming-soft text-upcoming border-upcoming/25';
+  if (mid.includes(status)) return 'bg-due-soft text-due border-due/25';
+  if (late.includes(status)) return 'bg-done-soft text-done border-done/25';
+  if (problem.includes(status)) return 'bg-urgent-soft text-urgent border-urgent/25';
+  return 'bg-muted/50 text-foreground border-border';
 }
 
 const defaultDocuments: { type: DocumentType; label: string }[] = [
@@ -813,7 +813,7 @@ function CaseDetailSheet({
                             </p>
                           </div>
                           {doc.uploaded ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <CheckCircle2 className="h-4 w-4 text-done" />
                           ) : (
                             <Circle className="h-4 w-4 text-muted-foreground" />
                           )}
@@ -1118,7 +1118,7 @@ function SuiviTab({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {t.status === 'done' ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-done" />
                   ) : (
                     <Circle className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -1128,7 +1128,7 @@ function SuiviTab({
                 </div>
                 <div className="flex items-center gap-2">
                   {t.priority === 'urgent' && (
-                    <Badge variant="outline" className="rounded-full text-[10px] border-red-200 bg-red-50 text-red-700">
+                    <Badge variant="outline" className="rounded-full text-[10px] border-urgent/25 bg-urgent-soft text-urgent">
                       Urgent
                     </Badge>
                   )}
@@ -1399,7 +1399,7 @@ function CreateCaseDialog({
                   />
                 </div>
                 {showResults && clientResults.length > 0 && (
-                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-md">
+                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-md">
                     {clientResults.map((r) => (
                       <button
                         key={`${r.type}-${r.id}`}
@@ -1421,7 +1421,7 @@ function CreateCaseDialog({
                   </div>
                 )}
                 {showResults && clientResults.length === 0 && clientSearch && (
-                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-white p-3 text-center text-xs text-muted-foreground shadow-md">
+                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-card p-3 text-center text-xs text-muted-foreground shadow-md">
                     Aucun résultat
                   </div>
                 )}

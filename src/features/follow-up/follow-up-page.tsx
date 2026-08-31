@@ -18,8 +18,8 @@ import { fetchProfiles } from '@/services/profiles-service';
 import type { Task, Lead, Profile } from '@/types';
 
 const priorityConfig: Record<string, { label: string; className: string }> = {
-  urgent: { label: 'Urgent', className: 'bg-red-50 text-red-600 border-red-200' },
-  high: { label: 'Haute', className: 'bg-amber-50 text-amber-600 border-amber-200' },
+  urgent: { label: 'Urgent', className: 'bg-urgent-soft text-urgent border-urgent/25' },
+  high: { label: 'Haute', className: 'bg-due-soft text-due border-due/25' },
   normal: { label: 'Normale', className: 'bg-muted text-muted-foreground border-border' },
   low: { label: 'Basse', className: 'bg-muted/50 text-muted-foreground border-border' },
 };
@@ -147,7 +147,7 @@ export function FollowUpPage() {
             {overdueTasks.length > 0 && (
               <TaskSection
                 title="En retard"
-                icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
+                icon={<AlertTriangle className="h-4 w-4 text-urgent" />}
                 tasks={overdueTasks}
                 leadMap={leadMap}
                 profileMap={profileMap}
@@ -222,7 +222,7 @@ function TaskSection({
               key={task.id}
               className={cn(
                 'flex items-center gap-3 rounded-xl border p-3 transition hover:shadow-sm',
-                isOverdue && 'border-red-200 bg-red-50/30'
+                isOverdue && 'border-urgent/25 bg-urgent-soft/30'
               )}
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/50">
@@ -244,7 +244,7 @@ function TaskSection({
                     </span>
                   )}
                   {task.due_at && (
-                    <span className={cn('flex items-center gap-1', isOverdue && 'text-red-500')}>
+                    <span className={cn('flex items-center gap-1', isOverdue && 'text-urgent')}>
                       <Clock className="h-3 w-3" />
                       {new Date(task.due_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </span>

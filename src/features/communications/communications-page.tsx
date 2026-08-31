@@ -89,19 +89,19 @@ function typeIcon(type: CommunicationType): { Icon: typeof Phone; className: str
   switch (type) {
     case 'sms_outbound':
     case 'sms_inbound':
-      return { Icon: MessageSquare, className: 'bg-blue-50 text-blue-600' };
+      return { Icon: MessageSquare, className: 'bg-upcoming-soft text-upcoming' };
     case 'call_outbound':
     case 'call_inbound':
-      return { Icon: Phone, className: 'bg-emerald-50 text-emerald-600' };
+      return { Icon: Phone, className: 'bg-done-soft text-done' };
     case 'call_missed':
-      return { Icon: PhoneMissed, className: 'bg-red-50 text-red-600' };
+      return { Icon: PhoneMissed, className: 'bg-urgent-soft text-urgent' };
     case 'voicemail':
-      return { Icon: Voicemail, className: 'bg-amber-50 text-amber-600' };
+      return { Icon: Voicemail, className: 'bg-due-soft text-due' };
     case 'email_outbound':
     case 'email_inbound':
-      return { Icon: Mail, className: 'bg-indigo-50 text-indigo-600' };
+      return { Icon: Mail, className: 'bg-upcoming-soft text-upcoming' };
     case 'note':
-      return { Icon: StickyNote, className: 'bg-yellow-50 text-yellow-700' };
+      return { Icon: StickyNote, className: 'bg-due-soft text-due' };
     default:
       return { Icon: MessageSquare, className: 'bg-muted text-muted-foreground' };
   }
@@ -111,10 +111,10 @@ function statusBadgeClass(status: CommunicationStatus): string {
   const green = ['delivered', 'answered', 'received'];
   const red = ['failed', 'missed'];
   const amber = ['pending'];
-  if (green.includes(status)) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (red.includes(status)) return 'bg-red-50 text-red-700 border-red-200';
-  if (amber.includes(status)) return 'bg-amber-50 text-amber-700 border-amber-200';
-  return 'bg-gray-50 text-gray-700 border-gray-200';
+  if (green.includes(status)) return 'bg-done-soft text-done border-done/25';
+  if (red.includes(status)) return 'bg-urgent-soft text-urgent border-urgent/25';
+  if (amber.includes(status)) return 'bg-due-soft text-due border-due/25';
+  return 'bg-muted/50 text-foreground border-border';
 }
 
 function formatDuration(seconds: number | null): string {
@@ -213,7 +213,7 @@ export function CommunicationsPage() {
           <div className="flex items-center gap-2">
             <Badge
               variant="outline"
-              className="rounded-full border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-medium"
+              className="rounded-full border-due/25 bg-due-soft text-due text-[10px] font-medium"
             >
               <AlertCircle className="mr-1 h-3 w-3" />
               Mode démonstration
@@ -285,12 +285,12 @@ export function CommunicationsPage() {
             })}
           </nav>
 
-          <div className="mx-3 mb-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+          <div className="mx-3 mb-3 rounded-lg border border-due/25 bg-due-soft/60 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-due">
               <AlertCircle className="h-3.5 w-3.5" />
               Mode démonstration
             </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-amber-700">
+            <p className="mt-1.5 text-[11px] leading-relaxed text-due">
               Les SMS, appels et emails sont enregistrés en base mais ne sont pas
               réellement envoyés. Configurez les clés API (Twilio, Ringover…) pour
               activer l'envoi réel.
@@ -398,7 +398,7 @@ function CommunicationRow({ comm, name }: { comm: Communication; name: string | 
   const DirIcon = isOutbound ? ArrowUpRight : ArrowDownLeft;
 
   return (
-    <div className="rounded-lg border border-border bg-white p-4 transition hover:shadow-sm">
+    <div className="rounded-lg border border-border bg-card p-4 transition hover:shadow-sm">
       <div className="flex items-start gap-3">
         {/* Type icon */}
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
@@ -802,7 +802,7 @@ function SmsDialog({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-sm">Message</Label>
-              <span className={`text-[11px] ${remaining < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+              <span className={`text-[11px] ${remaining < 0 ? 'text-urgent' : 'text-muted-foreground'}`}>
                 {message.length}/160
               </span>
             </div>

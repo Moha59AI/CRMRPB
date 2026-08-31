@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { LogOut, ChevronLeft, ChevronRight, Car } from 'lucide-react';
 import { navSections } from '@/config/navigation';
 import { cheminAutorise } from '@/config/permissions';
+import { SelecteurTheme } from '@/components/SelecteurTheme';
+import { useTitrePage } from '@/hooks/use-titre-page';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -14,6 +16,7 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  useTitrePage();
 
   // Les entrees inaccessibles disparaissent au lieu d'etre affichees puis
   // refusees : proposer une porte fermee est une mauvaise facon de securiser.
@@ -112,8 +115,11 @@ export function AppLayout() {
           </TooltipProvider>
         </nav>
 
-        {/* Bottom: expand toggle + user + signout */}
+        {/* Bottom: theme + expand toggle + user + signout */}
         <div className="border-t border-border p-2">
+          <div className="mb-1">
+            <SelecteurTheme reduit={!expanded} />
+          </div>
           <button
             onClick={() => setExpanded(!expanded)}
             className="mb-1 flex w-full items-center justify-center rounded-lg py-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"

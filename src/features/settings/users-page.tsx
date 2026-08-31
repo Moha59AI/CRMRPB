@@ -15,10 +15,10 @@ import { toast } from 'sonner';
 import type { UserRole } from '@/types';
 
 const roleBadgeClass: Record<UserRole, string> = {
-  admin: 'border-transparent bg-emerald-50 text-emerald-700 hover:bg-emerald-50',
-  manager: 'border-transparent bg-blue-50 text-blue-700 hover:bg-blue-50',
+  admin: 'border-transparent bg-done-soft text-done hover:bg-done-soft',
+  manager: 'border-transparent bg-upcoming-soft text-upcoming hover:bg-upcoming-soft',
   advisor: 'border-transparent bg-muted text-muted-foreground hover:bg-muted',
-  technician: 'border-transparent bg-orange-50 text-orange-700 hover:bg-orange-50',
+  technician: 'border-transparent bg-due-soft text-due hover:bg-due-soft',
   accountant: 'border-transparent bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-50',
 };
 

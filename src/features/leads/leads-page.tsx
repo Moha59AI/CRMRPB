@@ -513,7 +513,7 @@ function KanbanCard({
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={cn(
-        'cursor-grab rounded-lg border border-border bg-white p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing',
+        'cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing',
         isDragging && 'opacity-40',
       )}
     >
@@ -683,10 +683,10 @@ function NewLeadDialog({
               <Input
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className={cn('rounded-lg', dupFields.has('phone') && 'border-amber-400')}
+                className={cn('rounded-lg', dupFields.has('phone') && 'border-due/40')}
               />
               {dupFields.has('phone') && (
-                <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                <p className="text-[10px] text-due flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" /> Doublon possible
                 </p>
               )}
@@ -696,10 +696,10 @@ function NewLeadDialog({
               <Input
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={cn('rounded-lg', dupFields.has('email') && 'border-amber-400')}
+                className={cn('rounded-lg', dupFields.has('email') && 'border-due/40')}
               />
               {dupFields.has('email') && (
-                <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                <p className="text-[10px] text-due flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" /> Doublon possible
                 </p>
               )}
@@ -742,10 +742,10 @@ function NewLeadDialog({
                 <Input
                   value={form.vehicle_registration}
                   onChange={(e) => setForm({ ...form, vehicle_registration: e.target.value })}
-                  className={cn('rounded-lg', dupFields.has('vehicle_registration') && 'border-amber-400')}
+                  className={cn('rounded-lg', dupFields.has('vehicle_registration') && 'border-due/40')}
                 />
                 {dupFields.has('vehicle_registration') && (
-                  <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                  <p className="text-[10px] text-due flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" /> Doublon
                   </p>
                 )}
@@ -848,8 +848,8 @@ function LoadingState({ view }: { view: ViewMode }) {
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-red-50">
-        <AlertTriangle className="h-6 w-6 text-red-600" />
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-urgent-soft">
+        <AlertTriangle className="h-6 w-6 text-urgent" />
       </div>
       <p className="text-sm text-muted-foreground">{message || 'Erreur de chargement'}</p>
       <Button variant="outline" className="mt-4 rounded-full" onClick={onRetry}>
