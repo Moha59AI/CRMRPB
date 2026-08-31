@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List,
   Phone, MessageSquare, Mail, FileText, PlusCircle,
@@ -33,7 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { createCommunication, createNote, fetchCommunications, fetchNotes } from '@/services/activity-service';
 import { createCase } from '@/services/cases-service';
-import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
+import { checkDuplicateLead, createLead, fetchLeadById, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { createTask, fetchTasks } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { toast } from 'sonner';
@@ -170,6 +171,24 @@ export function LeadsPage() {
   // Selected lead for detail sheet
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
+  // Ouverture directe depuis une autre page (les relances notamment) via
+  // /leads?lead=<id>. Sans cela le lien menait a la liste sans rien ouvrir.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const leadParam = searchParams.get('lead');
+
+  useEffect(() => {
+    if (leadParam) setSelectedLeadId(leadParam);
+  }, [leadParam]);
+
+  const fermerFiche = useCallback(() => {
+    setSelectedLeadId(null);
+    if (leadParam) {
+      const suite = new URLSearchParams(searchParams);
+      suite.delete('lead');
+      setSearchParams(suite, { replace: true });
+    }
+  }, [leadParam, searchParams, setSearchParams]);
+
   // New lead dialog
   const [newLeadOpen, setNewLeadOpen] = useState(false);
 
@@ -198,10 +217,21 @@ export function LeadsPage() {
     return m;
   }, [profiles]);
 
-  const selectedLead = useMemo(
+  const leadDansListe = useMemo(
     () => leads?.find((l) => l.id === selectedLeadId) ?? null,
     [leads, selectedLeadId],
   );
+
+  // Un lead ouvert depuis les relances n'appartient pas forcement au filtre
+  // courant : on le charge alors individuellement plutot que d'afficher une
+  // fiche vide.
+  const { data: leadCharge } = useQuery({
+    queryKey: ['lead', selectedLeadId],
+    queryFn: () => fetchLeadById(selectedLeadId as string),
+    enabled: !!selectedLeadId && !leadDansListe,
+  });
+
+  const selectedLead = leadDansListe ?? leadCharge ?? null;
 
   // Mutations
   const updateStatusMutation = useMutation({
@@ -381,7 +411,7 @@ export function LeadsPage() {
         lead={selectedLead}
         profiles={profiles ?? []}
         open={!!selectedLeadId}
-        onOpenChange={(open) => { if (!open) setSelectedLeadId(null); }}
+        onOpenChange={(open) => { if (!open) fermerFiche(); }}
       />
 
       {/* New Lead Dialog */}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Phone, MessageSquare, Clock, Check, SkipForward, X, Car, MapPin,
-  History, CheckCircle2, Loader2,
+  History, CheckCircle2, Loader2, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -239,6 +239,16 @@ export function SessionRelance({ file, onFermer, onTermine }: SessionRelanceProp
                 <SkipForward className="mr-2 h-4 w-4" />
                 Passer
               </Button>
+              {relance.leadId && (
+                // Nouvel onglet : consulter la fiche ne doit pas interrompre
+                // l'enchainement en cours.
+                <Button size="lg" variant="ghost" className="rounded-full" asChild>
+                  <a href={`/leads?lead=${relance.leadId}`} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Fiche
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
         </div>
