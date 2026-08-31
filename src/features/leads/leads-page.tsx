@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
 } from 'lucide-react';
@@ -23,7 +23,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { checkDuplicateLead, createLead, fetchLeadById, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
+import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,6 @@ import {
   statusLabels, sourceLabels, statusStyles, kanbanColumnOrder, statusSelectOptions, sourceSelectOptions, profileName, scoreColor, formatDate, leadName, vehicleLabel,
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
-import { LeadDetailSheet } from './lead-detail-sheet';
 
 // ============ MAIN PAGE ============
 
@@ -61,26 +60,14 @@ export function LeadsPage() {
   // View mode
   const [view, setView] = useState<ViewMode>('table');
 
-  // Selected lead for detail sheet
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Ouverture directe depuis une autre page (les relances notamment) via
-  // /leads?lead=<id>. Sans cela le lien menait a la liste sans rien ouvrir.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const leadParam = searchParams.get('lead');
-
-  useEffect(() => {
-    if (leadParam) setSelectedLeadId(leadParam);
-  }, [leadParam]);
-
-  const fermerFiche = useCallback(() => {
-    setSelectedLeadId(null);
-    if (leadParam) {
-      const suite = new URLSearchParams(searchParams);
-      suite.delete('lead');
-      setSearchParams(suite, { replace: true });
-    }
-  }, [leadParam, searchParams, setSearchParams]);
+  // Une intervention s'ouvre en surface superposee : la liste reste montee
+  // derriere, avec ses filtres et son defilement.
+  const ouvrirIntervention = (leadId: string) => {
+    navigate(`/interventions/${leadId}`, { state: { background: location } });
+  };
 
   // New lead dialog
   const [newLeadOpen, setNewLeadOpen] = useState(false);
@@ -109,22 +96,6 @@ export function LeadsPage() {
     profiles?.forEach((p) => m.set(p.id, p));
     return m;
   }, [profiles]);
-
-  const leadDansListe = useMemo(
-    () => leads?.find((l) => l.id === selectedLeadId) ?? null,
-    [leads, selectedLeadId],
-  );
-
-  // Un lead ouvert depuis les relances n'appartient pas forcement au filtre
-  // courant : on le charge alors individuellement plutot que d'afficher une
-  // fiche vide.
-  const { data: leadCharge } = useQuery({
-    queryKey: ['lead', selectedLeadId],
-    queryFn: () => fetchLeadById(selectedLeadId as string),
-    enabled: !!selectedLeadId && !leadDansListe,
-  });
-
-  const selectedLead = leadDansListe ?? leadCharge ?? null;
 
   // Mutations
   const updateStatusMutation = useMutation({
@@ -278,7 +249,7 @@ export function LeadsPage() {
               <LeadsTable
                 leads={leads}
                 advisorMap={advisorMap}
-                onRowClick={(lead) => setSelectedLeadId(lead.id)}
+                onRowClick={(lead) => ouvrirIntervention(lead.id)}
                 onStatusChange={handleStatusChange}
               />
             )}
@@ -286,26 +257,18 @@ export function LeadsPage() {
               <KanbanBoard
                 leads={leads}
                 onStatusChange={handleStatusChange}
-                onCardClick={(lead) => setSelectedLeadId(lead.id)}
+                onCardClick={(lead) => ouvrirIntervention(lead.id)}
               />
             )}
             {view === 'compact' && (
               <CompactList
                 leads={leads}
-                onRowClick={(lead) => setSelectedLeadId(lead.id)}
+                onRowClick={(lead) => ouvrirIntervention(lead.id)}
               />
             )}
           </>
         )}
       </div>
-
-      {/* Detail Sheet */}
-      <LeadDetailSheet
-        lead={selectedLead}
-        profiles={profiles ?? []}
-        open={!!selectedLeadId}
-        onOpenChange={(open) => { if (!open) fermerFiche(); }}
-      />
 
       {/* New Lead Dialog */}
       <NewLeadDialog

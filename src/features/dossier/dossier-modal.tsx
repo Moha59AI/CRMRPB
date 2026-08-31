@@ -62,7 +62,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   // On remplace l'entrée d'historique : enchaîner vingt dossiers ne doit pas
   // obliger à appuyer vingt fois sur Retour pour revenir à la liste.
   const allerVers = useCallback((id: string) => {
-    navigate(`/dossiers/${id}`, { state: etat, replace: true });
+    navigate(`/interventions/${id}`, { state: etat, replace: true });
     setOnglet('apercu');
   }, [navigate, etat]);
 

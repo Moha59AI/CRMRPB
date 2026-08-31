@@ -148,7 +148,7 @@ export function RelancesPage() {
   // `background` fait que cette page reste montee derriere la fiche.
   const ouvrirDossier = useCallback((leadId: string) => {
     const liste = relances.map((r) => r.leadId).filter((id): id is string => !!id);
-    navigate(`/dossiers/${leadId}`, {
+    navigate(`/interventions/${leadId}`, {
       state: { background: location, liste, mode: 'relance' },
     });
   }, [relances, navigate, location]);

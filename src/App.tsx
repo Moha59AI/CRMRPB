@@ -66,7 +66,7 @@ function AppRoutes() {
             <Route path="/leads" element={<LeadsPage />} />
             <Route path="/relances" element={<RelancesPage />} />
           {/* Ouverte directement par son URL : plein ecran, dans le layout. */}
-          <Route path="/dossiers/:leadId" element={<DossierModal pleinePage />} />
+          <Route path="/interventions/:leadId" element={<DossierModal pleinePage />} />
                 <Route path="/clients/:contactId" element={<ClientModal pleinePage />} />
           <Route path="/cases" element={<CasesPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
@@ -89,7 +89,7 @@ function AppRoutes() {
 
       {background && (
         <Routes>
-          <Route path="/dossiers/:leadId" element={<DossierModal />} />
+          <Route path="/interventions/:leadId" element={<DossierModal />} />
           <Route path="/clients/:contactId" element={<ClientModal />} />
         </Routes>
       )}

@@ -1,7 +1,6 @@
 import {
   BellRing,
   CalendarDays,
-  FileText,
   Users,
   TrendingUp,
   Workflow,
@@ -33,9 +32,13 @@ export interface NavSection {
  * « Clients » et non « Contacts », qui laissait croire à un simple carnet
  * d'adresses sans lien avec les affaires.
  *
- * « Suivi » (`/follow-up`) ne figure plus ici : Relances fait le même travail
- * en agrégeant leads, tâches et rendez-vous au lieu des seules tâches. La
- * route reste accessible le temps de vérifier que rien n'y manque.
+ * Deux notions seulement : un **client** est une personne, un **lead** est une
+ * intervention. Un client peut en avoir plusieurs. « Dossiers » a donc
+ * disparu du menu — un dossier n'est rien d'autre qu'une intervention, et
+ * deux mots pour la même chose obligeaient a choisir a chaque fois.
+ *
+ * « Suivi » et « Dossiers » restent accessibles par leur route le temps de
+ * verifier que rien ne s'y perd.
  */
 export const navSections: NavSection[] = [
   {
@@ -69,12 +72,6 @@ export const navSections: NavSection[] = [
         path: '/contacts',
         icon: Users,
         description: 'Les personnes et leur historique',
-      },
-      {
-        label: 'Dossiers',
-        path: '/cases',
-        icon: FileText,
-        description: 'Dossiers de vitrage',
       },
     ],
   },

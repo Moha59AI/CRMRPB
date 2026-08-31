@@ -63,7 +63,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   // Depuis un client, on ouvre une intervention : la fiche dossier se
   // superpose a celle-ci, et Echap ramene ici.
   const ouvrirIntervention = (leadId: string) => {
-    navigate(`/dossiers/${leadId}`, { state: { background: location } });
+    navigate(`/interventions/${leadId}`, { state: { background: location } });
   };
 
   const nom = client
