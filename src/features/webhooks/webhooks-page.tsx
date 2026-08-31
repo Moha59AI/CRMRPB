@@ -23,7 +23,7 @@ import { supabaseUrl } from '@/lib/supabase';
 import {
   fetchWebhookEndpoints, createWebhookEndpoint, toggleWebhookEndpoint,
   deleteWebhookEndpoint, fetchWebhookEventsForEndpoint, reprocessWebhookEvent,
-} from '@/services/leads-service';
+} from '@/services/webhooks-service';
 import type { WebhookEndpoint, WebhookEvent } from '@/types';
 import { INBOUND_WEBHOOK_PATH } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
