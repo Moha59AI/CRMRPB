@@ -38,6 +38,22 @@
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
+    /*
+     * Échelle d'urgence des relances.
+     *
+     * Quatre états, et quatre seulement : c'est ce qui permet de lire une file
+     * de relances sans lire le texte. Chaque état a une teinte pleine pour les
+     * points et les bordures, et une teinte douce pour les fonds de badge.
+     */
+    --urgent: 0 72% 51%; /* en retard */
+    --urgent-soft: 0 86% 97%;
+    --due: 38 92% 50%; /* à faire aujourd'hui */
+    --due-soft: 38 92% 95%;
+    --upcoming: 210 80% 50%; /* à venir */
+    --upcoming-soft: 210 90% 96%;
+    --done: 142 71% 45%; /* traité */
+    --done-soft: 142 60% 96%;
+
     --border: 226 17% 92%; /* #E7E9EE */
     --input: 226 17% 92%;
     --ring: 142 71% 45%;
@@ -57,6 +73,12 @@
     --sidebar-width: 64px;
     --sidebar-bg: 0 0% 100%;
     --sidebar-border: 226 17% 92%;
+
+    /* Mouvement : discret, et surtout constant d'un écran à l'autre */
+    --motion-fast: 120ms;
+    --motion-base: 200ms;
+    --motion-slow: 320ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .dark {
@@ -76,9 +98,37 @@
     --accent-foreground: 142 60% 70%;
     --destructive: 0 62% 45%;
     --destructive-foreground: 0 0% 98%;
+
+    /*
+     * Ces jetons manquaient au bloc sombre : ils héritaient donc des valeurs
+     * claires, illisibles sur fond foncé.
+     */
+    --warning: 38 90% 55%;
+    --warning-foreground: 228 20% 8%;
+    --success: 142 65% 48%;
+    --success-foreground: 228 20% 8%;
+
+    --urgent: 0 70% 58%;
+    --urgent-soft: 0 45% 16%;
+    --due: 38 85% 55%;
+    --due-soft: 38 45% 15%;
+    --upcoming: 210 75% 60%;
+    --upcoming-soft: 210 45% 16%;
+    --done: 142 60% 50%;
+    --done-soft: 142 35% 14%;
+
     --border: 228 15% 18%;
     --input: 228 15% 18%;
     --ring: 142 71% 45%;
+
+    --chart-1: 142 65% 50%;
+    --chart-2: 210 75% 60%;
+    --chart-3: 38 85% 58%;
+    --chart-4: 280 60% 68%;
+    --chart-5: 0 70% 58%;
+
+    --sidebar-bg: 228 20% 10%;
+    --sidebar-border: 228 15% 18%;
   }
 }
 
@@ -100,6 +150,12 @@
     line-height: 1.2;
     letter-spacing: -0.02em;
   }
+
+  /* Chiffres alignés : indispensable dès qu'on empile des montants,
+     des compteurs ou des heures dans une colonne. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 @layer utilities {
@@ -119,17 +175,40 @@
     text-wrap: balance;
   }
   .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
+    animation: fade-in var(--motion-slow) var(--ease-out);
   }
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-slide-in {
-    animation: slide-in 0.25s ease-out;
+    animation: slide-in var(--motion-base) var(--ease-out);
   }
   @keyframes slide-in {
     from { opacity: 0; transform: translateX(-8px); }
     to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Une relance traitée s'efface au lieu de disparaître d'un coup :
+     l'utilisateur voit ce qu'il vient de faire. */
+  .animate-check-out {
+    animation: check-out var(--motion-slow) var(--ease-out) forwards;
+  }
+  @keyframes check-out {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(12px); }
+  }
+}
+
+/* Respecter le réglage système : certaines personnes sont gênées par le
+   mouvement, et l'animation ne doit jamais empêcher de travailler. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

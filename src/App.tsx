@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { QueryProvider } from '@/app/query-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ThemeProvider } from 'next-themes';
 import { ProtectedRoute } from '@/features/auth/protected-route';
 import { Toaster } from '@/components/ui/sonner';
 import { AppLayout } from '@/layouts/app-layout';
@@ -29,47 +30,52 @@ import { WebhooksPage } from '@/features/webhooks/webhooks-page';
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <QueryProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignupPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      {/* attribute="class" pilote la classe .dark attendue par tailwind.config.js.
+          Sans ce provider, next-themes etait installe mais aucun basculement
+          n'etait possible : le bloc .dark du CSS ne s'appliquait jamais. */}
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <AuthProvider>
+          <QueryProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-              {/* Protected routes */}
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <AppLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/today" element={<TodayPage />} />
-                <Route path="/leads" element={<LeadsPage />} />
-                <Route path="/cases" element={<CasesPage />} />
-                <Route path="/contacts" element={<ContactsPage />} />
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/follow-up" element={<FollowUpPage />} />
-                <Route path="/workflows" element={<WorkflowsPage />} />
-                <Route path="/campaigns" element={<CampaignsPage />} />
-                <Route path="/communications" element={<CommunicationsPage />} />
-                <Route path="/billing" element={<BillingPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/settings/integrations" element={<IntegrationsListPage />} />
-                <Route path="/settings/integrations/meta" element={<MetaSettingsPage />} />
-                <Route path="/settings/webhooks" element={<WebhooksPage />} />
-                <Route path="/settings/users" element={<UsersPage />} />
-              </Route>
+                {/* Protected routes */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <AppLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/today" element={<TodayPage />} />
+                  <Route path="/leads" element={<LeadsPage />} />
+                  <Route path="/cases" element={<CasesPage />} />
+                  <Route path="/contacts" element={<ContactsPage />} />
+                  <Route path="/calendar" element={<CalendarPage />} />
+                  <Route path="/follow-up" element={<FollowUpPage />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                  <Route path="/campaigns" element={<CampaignsPage />} />
+                  <Route path="/communications" element={<CommunicationsPage />} />
+                  <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/settings/integrations" element={<IntegrationsListPage />} />
+                  <Route path="/settings/integrations/meta" element={<MetaSettingsPage />} />
+                  <Route path="/settings/webhooks" element={<WebhooksPage />} />
+                  <Route path="/settings/users" element={<UsersPage />} />
+                </Route>
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/today" replace />} />
-            </Routes>
-          </BrowserRouter>
-          <Toaster richColors position="top-right" />
-        </QueryProvider>
-      </AuthProvider>
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/today" replace />} />
+              </Routes>
+            </BrowserRouter>
+            <Toaster richColors position="top-right" />
+          </QueryProvider>
+          </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

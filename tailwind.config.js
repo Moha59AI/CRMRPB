@@ -57,6 +57,24 @@ export default {
           DEFAULT: 'hsl(var(--success))',
           foreground: 'hsl(var(--success-foreground))',
         },
+        // Échelle d'urgence des relances : `soft` sert de fond de badge,
+        // la teinte pleine sert aux points, bordures et textes.
+        urgent: {
+          DEFAULT: 'hsl(var(--urgent))',
+          soft: 'hsl(var(--urgent-soft))',
+        },
+        due: {
+          DEFAULT: 'hsl(var(--due))',
+          soft: 'hsl(var(--due-soft))',
+        },
+        upcoming: {
+          DEFAULT: 'hsl(var(--upcoming))',
+          soft: 'hsl(var(--upcoming-soft))',
+        },
+        done: {
+          DEFAULT: 'hsl(var(--done))',
+          soft: 'hsl(var(--done-soft))',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
