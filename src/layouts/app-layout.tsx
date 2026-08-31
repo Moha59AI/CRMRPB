@@ -1,8 +1,9 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { LogOut, ChevronLeft, ChevronRight, Car } from 'lucide-react';
 import { navSections } from '@/config/navigation';
+import { cheminAutorise } from '@/config/permissions';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -13,6 +14,15 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+
+  // Les entrees inaccessibles disparaissent au lieu d'etre affichees puis
+  // refusees : proposer une porte fermee est une mauvaise facon de securiser.
+  const sectionsVisibles = useMemo(
+    () => navSections
+      .map((s) => ({ ...s, items: s.items.filter((i) => cheminAutorise(i.path, profile?.role ?? null)) }))
+      .filter((s) => s.items.length > 0),
+    [profile?.role]
+  );
   const [expanded, setExpanded] = useState(false);
 
   const initials = [
@@ -54,7 +64,7 @@ export function AppLayout() {
         {/* Navigation */}
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto scrollbar-thin p-2">
           <TooltipProvider delayDuration={200}>
-            {navSections.map((section, i) => (
+            {sectionsVisibles.map((section, i) => (
               <div key={section.titre} className={cn(i > 0 && 'mt-4')}>
                 {/* Le titre de section disparait en mode reduit : il ne reste
                     que les icones, et un intitule tronque n'aiderait personne. */}
