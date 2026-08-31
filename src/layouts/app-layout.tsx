@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useState } from 'react';
 import { LogOut, ChevronLeft, ChevronRight, Car } from 'lucide-react';
 import { navSections } from '@/config/navigation';
@@ -140,7 +141,16 @@ export function AppLayout() {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        <Outlet />
+        {/* Une limite par module : un ecran qui plante ne doit pas emporter la
+            navigation ni le reste du CRM. La cle de reinitialisation est le
+            chemin courant, pour repartir d'un etat sain en changeant de page. */}
+        <ErrorBoundary
+          resetKey={location.pathname}
+          titre="Cet écran n'a pas pu s'afficher"
+          message="Le reste du CRM reste utilisable. Réessayez, ou passez à un autre écran."
+        >
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

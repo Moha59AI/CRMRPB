@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Profile, UserRole } from '@/types';
+import type { Profile } from '@/types';
 
 interface AuthContextValue {
   session: Session | null;
@@ -9,7 +9,6 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
@@ -91,37 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { first_name: firstName, last_name: lastName },
-      },
-    });
-
-    if (error) return { error: error.message };
-
-    // If signup returns a session (email confirmation off), create profile
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: data.user.id,
-          workspace_id: (await getOrCreateWorkspace()).id,
-          first_name: firstName,
-          last_name: lastName,
-          role: 'admin' as UserRole,
-        });
-
-      if (profileError) {
-        console.error('Profile creation error:', profileError.message);
-      }
-    }
-
-    return { error: null };
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -142,35 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, loading, signIn, signUp, signOut, resetPassword, refreshProfile }}
+      value={{ session, user, profile, loading, signIn, signOut, resetPassword, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
 
-async function getOrCreateWorkspace() {
-  const { data: existing } = await supabase
-    .from('workspaces')
-    .select('*')
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) return existing;
-
-  const { data: created, error } = await supabase
-    .from('workspaces')
-    .insert({ name: 'Relais Pare-Brise', slug: 'relais-pare-brise' })
-    .select('*')
-    .maybeSingle();
-
-  if (error || !created) {
-    console.error('Workspace creation error:', error?.message);
-    return { id: '', name: '', slug: '', created_at: '', updated_at: '' };
-  }
-
-  return created;
-}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {

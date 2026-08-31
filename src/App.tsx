@@ -8,7 +8,6 @@ import { ProtectedRoute } from '@/features/auth/protected-route';
 import { Toaster } from '@/components/ui/sonner';
 import { AppLayout } from '@/layouts/app-layout';
 import { LoginPage } from '@/features/auth/login-page';
-import { SignupPage } from '@/features/auth/signup-page';
 import { ForgotPasswordPage } from '@/features/auth/forgot-password-page';
 import { UpdatePasswordPage } from '@/features/auth/update-password-page';
 
@@ -52,11 +51,14 @@ function AppRoutes() {
         <Routes location={background ?? location}>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          {/* Inscription publique fermee : tout nouvel inscrit devenait
+              administrateur de l'espace et etait rattache au premier workspace
+              trouve. Les acces se creent desormais par invitation. */}
+          <Route path="/signup" element={<Navigate to="/login" replace />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                {/* Cible du lien de reinitialisation : publique, puisque la
-                    session de recuperation n'est ouverte qu'a l'arrivee. */}
-                <Route path="/update-password" element={<UpdatePasswordPage />} />
+          {/* Cible du lien de reinitialisation : publique, puisque la session
+              de recuperation n'est ouverte qu'a l'arrivee. */}
+          <Route path="/update-password" element={<UpdatePasswordPage />} />
 
           {/* Protected routes */}
           <Route
@@ -103,7 +105,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary pleinEcran>
       {/* attribute="class" pilote la classe .dark attendue par tailwind.config.js.
           Sans ce provider, next-themes etait installe mais aucun basculement
           n'etait possible : le bloc .dark du CSS ne s'appliquait jamais. */}

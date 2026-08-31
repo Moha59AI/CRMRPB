@@ -101,14 +101,10 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Pas encore de compte ?{' '}
-            <Link to="/signup" className="font-medium text-primary transition hover:opacity-80">
-              Créer un compte
-            </Link>
-          </p>
-        </div>
+        {/* Les acces se creent par invitation : aucun lien d'inscription. */}
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          L’accès au CRM se fait sur invitation. Contactez votre administrateur.
+        </p>
       </div>
     </div>
   );

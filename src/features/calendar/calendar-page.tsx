@@ -85,6 +85,9 @@ import type {
 
 type View = 'day' | 'week' | 'month';
 
+/** Valeur sentinelle : Radix refuse une SelectItem de valeur vide. */
+const SANS_CONSEILLER = '__aucun__';
+
 const SLOT_HEIGHT = 60; // px per hour
 const DAY_START_HOUR = 8;
 const DAY_END_HOUR = 18;
@@ -978,12 +981,19 @@ function CreateAppointmentDialog({
                 control={form.control}
                 name="assigned_user_id"
                 render={({ field }) => (
-                  <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                  // Radix reserve la chaine vide pour effacer la selection : une
+                  // SelectItem de valeur '' fait lever le composant et emporte
+                  // toute l'application. On passe donc par une valeur sentinelle,
+                  // retraduite en null a la soumission.
+                  <Select
+                    value={field.value || SANS_CONSEILLER}
+                    onValueChange={(v) => field.onChange(v === SANS_CONSEILLER ? '' : v)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Non assigné" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Non assigné</SelectItem>
+                      <SelectItem value={SANS_CONSEILLER}>Non assigné</SelectItem>
                       {profiles.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {profileName(p)}
