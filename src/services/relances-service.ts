@@ -1,16 +1,21 @@
-// Moteur de relances
+// Moteur de relances — accès client
 //
-// Le CRM sait déjà où en est chaque lead, mais rien ne dit *quand* le
-// reprendre. Ce service comble ce vide : il applique un délai à chaque
-// situation, en déduit une échéance, et agrège dans une file unique ce qui
-// vivait jusqu'ici dans cinq écrans séparés.
+// Le calcul (agrégation des sept sources, score de priorité, filtres, tri,
+// pagination) vit dans PostgreSQL : voir la migration
+// `20260830120000_relances_engine.sql`. Ce fichier ne fait qu'appeler les
+// fonctions et typer leurs résultats.
+//
+// Rien ici ne doit recalculer une urgence ou un score : à mille relances, ce
+// travail ne peut pas se faire dans le navigateur.
 
 import { supabase } from '@/lib/supabase';
-import { getWorkspaceId } from '@/services/workspace';
-import type { Lead, LeadStatus, Task, Appointment } from '@/types';
 
 export type UrgencyLevel = 'urgent' | 'due' | 'upcoming';
-export type RelanceKind = 'rappel' | 'documents' | 'rdv' | 'tache';
+export type PriorityLevel = 'urgent' | 'haute' | 'normale' | 'faible';
+export type RelanceKind =
+  | 'rappel' | 'documents' | 'assurance' | 'rdv' | 'impaye' | 'sav' | 'tache';
+
+export type RelanceSort = 'priorite' | 'plus_ancien' | 'plus_recent';
 
 export interface Relance {
   id: string;
@@ -18,222 +23,173 @@ export interface Relance {
   urgency: UrgencyLevel;
   dueAt: string;
   daysLate: number;
-  title: string;
-  reason: string;
+  score: number;
+  priority: PriorityLevel;
+  titre: string;
+  motif: string;
   phone: string | null;
+  city: string | null;
+  insurance: string | null;
+  vehicule: string | null;
+  immatriculation: string | null;
+  assignedUserId: string | null;
   leadId: string | null;
   taskId: string | null;
   appointmentId: string | null;
+  caseId: string | null;
+  invoiceId: string | null;
+  savId: string | null;
+  attemptCount: number;
+  lastActionAt: string | null;
+  lastActionType: string | null;
 }
 
-/**
- * Délai avant reprise, par statut de lead, en jours.
- *
- * Ces valeurs sont le cœur métier du module : elles traduisent « au bout de
- * combien de temps un lead dans cet état devient un oubli ». Un NRP se
- * rappelle vite, des documents demandés laissent le client respirer deux
- * jours.
- *
- * `next_action_at`, quand il est renseigné sur le lead, prime toujours sur
- * cette table : une décision humaine explicite l'emporte sur la règle.
- */
-const DELAI_PAR_STATUT: Partial<Record<LeadStatus, number>> = {
-  new: 0,
-  to_call: 0,
-  calling: 0,
-  nrp: 1,
-  interested: 1,
-  documents_requested: 2,
-  documents_received: 0,
-};
-
-const LIBELLE_RELANCE: Partial<Record<LeadStatus, string>> = {
-  new: 'Nouveau lead, jamais appelé',
-  to_call: 'À appeler',
-  calling: 'Appel en cours, à reprendre',
-  nrp: 'N’a pas répondu',
-  interested: 'Intéressé, à relancer',
-  documents_requested: 'Documents demandés, sans réponse',
-  documents_received: 'Documents reçus, à traiter',
-};
-
-function debutDeJournee(d: Date): Date {
-  const copie = new Date(d);
-  copie.setHours(0, 0, 0, 0);
-  return copie;
+export interface CompteursRelances {
+  total: number;
+  urgent: number;
+  due: number;
+  upcoming: number;
+  rappel: number;
+  documents: number;
+  assurance: number;
+  rdv: number;
+  impaye: number;
+  sav: number;
+  tache: number;
 }
 
-function ecartEnJours(echeance: Date, reference: Date): number {
-  const ms = debutDeJournee(reference).getTime() - debutDeJournee(echeance).getTime();
-  return Math.round(ms / 86_400_000);
+export interface FiltresRelances {
+  search?: string;
+  kinds?: RelanceKind[];
+  urgencies?: UrgencyLevel[];
+  priorities?: PriorityLevel[];
+  assignedUserId?: string | null;
+  city?: string | null;
+  sort?: RelanceSort;
+  horizonDays?: number;
+  limit?: number;
+  offset?: number;
 }
 
-function niveauUrgence(echeance: Date, maintenant: Date): UrgencyLevel {
-  const retard = ecartEnJours(echeance, maintenant);
-  if (retard > 0) return 'urgent';
-  if (retard === 0) return 'due';
-  return 'upcoming';
+export interface PageRelances {
+  relances: Relance[];
+  total: number;
 }
 
-function nomLead(lead: Lead): string {
-  const nom = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim();
-  return nom || lead.phone || 'Lead sans nom';
+/** Forme brute renvoyée par `fetch_relances`, en snake_case. */
+interface LigneBrute {
+  id: string;
+  kind: RelanceKind;
+  urgency: UrgencyLevel;
+  due_at: string;
+  days_late: number;
+  score: number;
+  priority_level: PriorityLevel;
+  titre: string | null;
+  motif: string | null;
+  phone: string | null;
+  city: string | null;
+  insurance: string | null;
+  vehicule: string | null;
+  immatriculation: string | null;
+  assigned_user_id: string | null;
+  lead_id: string | null;
+  task_id: string | null;
+  appointment_id: string | null;
+  case_id: string | null;
+  invoice_id: string | null;
+  sav_id: string | null;
+  attempt_count: number;
+  last_action_at: string | null;
+  last_action_type: string | null;
+  total_count: number;
 }
 
-function ajouterJours(iso: string, jours: number): Date {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + jours);
-  return d;
+function versRelance(l: LigneBrute): Relance {
+  return {
+    id: l.id,
+    kind: l.kind,
+    urgency: l.urgency,
+    dueAt: l.due_at,
+    daysLate: l.days_late,
+    score: l.score,
+    priority: l.priority_level,
+    titre: l.titre?.trim() || l.phone || 'Sans nom',
+    motif: l.motif ?? 'À reprendre',
+    phone: l.phone,
+    city: l.city,
+    insurance: l.insurance,
+    vehicule: l.vehicule,
+    immatriculation: l.immatriculation,
+    assignedUserId: l.assigned_user_id,
+    leadId: l.lead_id,
+    taskId: l.task_id,
+    appointmentId: l.appointment_id,
+    caseId: l.case_id,
+    invoiceId: l.invoice_id,
+    savId: l.sav_id,
+    attemptCount: l.attempt_count,
+    lastActionAt: l.last_action_at,
+    lastActionType: l.last_action_type,
+  };
 }
 
-/**
- * Échéance d'un lead : sa date d'action explicite si elle existe, sinon le
- * délai du statut appliqué à la dernière modification.
- */
-function echeanceLead(lead: Lead): Date | null {
-  if (lead.next_action_at) return new Date(lead.next_action_at);
-
-  const delai = DELAI_PAR_STATUT[lead.status];
-  if (delai === undefined) return null;
-
-  return ajouterJours(lead.updated_at ?? lead.created_at, delai);
-}
-
-export interface OptionsRelances {
-  /** Nombre de jours à venir inclus dans la file. Au-delà, ce n'est pas encore du travail. */
-  horizonJours?: number;
-}
-
-export async function fetchRelances(options: OptionsRelances = {}): Promise<Relance[]> {
-  const { horizonJours = 7 } = options;
-  const workspaceId = await getWorkspaceId();
-  const maintenant = new Date();
-  const limite = debutDeJournee(maintenant);
-  limite.setDate(limite.getDate() + horizonJours);
-
-  const statutsSuivis = Object.keys(DELAI_PAR_STATUT) as LeadStatus[];
-
-  const [leadsRes, tachesRes, rdvRes] = await Promise.all([
-    supabase
-      .from('leads')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .in('status', statutsSuivis)
-      .order('updated_at', { ascending: true }),
-    supabase
-      .from('tasks')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .in('status', ['pending', 'in_progress'])
-      .not('due_at', 'is', null)
-      .order('due_at', { ascending: true }),
-    supabase
-      .from('appointments')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'scheduled')
-      .gte('start_time', maintenant.toISOString())
-      .order('start_time', { ascending: true }),
-  ]);
-
-  if (leadsRes.error) throw new Error(leadsRes.error.message);
-  if (tachesRes.error) throw new Error(tachesRes.error.message);
-  if (rdvRes.error) throw new Error(rdvRes.error.message);
-
-  const relances: Relance[] = [];
-
-  for (const lead of (leadsRes.data ?? []) as Lead[]) {
-    const echeance = echeanceLead(lead);
-    if (!echeance || echeance > limite) continue;
-
-    const documents = lead.status === 'documents_requested';
-    relances.push({
-      id: `lead:${lead.id}`,
-      kind: documents ? 'documents' : 'rappel',
-      urgency: niveauUrgence(echeance, maintenant),
-      dueAt: echeance.toISOString(),
-      daysLate: Math.max(0, ecartEnJours(echeance, maintenant)),
-      title: nomLead(lead),
-      reason: LIBELLE_RELANCE[lead.status] ?? 'À reprendre',
-      phone: lead.phone,
-      leadId: lead.id,
-      taskId: null,
-      appointmentId: null,
-    });
-  }
-
-  for (const tache of (tachesRes.data ?? []) as Task[]) {
-    const echeance = new Date(tache.due_at as string);
-    if (echeance > limite) continue;
-
-    relances.push({
-      id: `task:${tache.id}`,
-      kind: 'tache',
-      urgency: niveauUrgence(echeance, maintenant),
-      dueAt: echeance.toISOString(),
-      daysLate: Math.max(0, ecartEnJours(echeance, maintenant)),
-      title: tache.title,
-      reason: tache.description ?? 'Tâche à traiter',
-      phone: null,
-      leadId: tache.lead_id,
-      taskId: tache.id,
-      appointmentId: null,
-    });
-  }
-
-  // Un rendez-vous se confirme la veille : au-delà, il est trop tôt pour
-  // appeler, et le jour même il est trop tard pour réorganiser la tournée.
-  for (const rdv of (rdvRes.data ?? []) as Appointment[]) {
-    const echeance = ajouterJours(rdv.start_time, -1);
-    if (echeance > limite) continue;
-
-    relances.push({
-      id: `rdv:${rdv.id}`,
-      kind: 'rdv',
-      urgency: niveauUrgence(echeance, maintenant),
-      dueAt: echeance.toISOString(),
-      daysLate: Math.max(0, ecartEnJours(echeance, maintenant)),
-      title: rdv.title,
-      reason: 'Rendez-vous à confirmer',
-      phone: null,
-      leadId: rdv.lead_id,
-      taskId: null,
-      appointmentId: rdv.id,
-    });
-  }
-
-  const ordre: Record<UrgencyLevel, number> = { urgent: 0, due: 1, upcoming: 2 };
-  return relances.sort((a, b) => {
-    if (ordre[a.urgency] !== ordre[b.urgency]) return ordre[a.urgency] - ordre[b.urgency];
-    return a.dueAt.localeCompare(b.dueAt);
+export async function fetchRelances(filtres: FiltresRelances = {}): Promise<PageRelances> {
+  const { data, error } = await supabase.rpc('fetch_relances', {
+    p_search: filtres.search?.trim() || null,
+    p_kinds: filtres.kinds?.length ? filtres.kinds : null,
+    p_urgencies: filtres.urgencies?.length ? filtres.urgencies : null,
+    p_priorities: filtres.priorities?.length ? filtres.priorities : null,
+    p_assigned: filtres.assignedUserId ?? null,
+    p_city: filtres.city ?? null,
+    p_sort: filtres.sort ?? 'priorite',
+    p_horizon_days: filtres.horizonDays ?? 7,
+    p_limit: filtres.limit ?? 50,
+    p_offset: filtres.offset ?? 0,
   });
+
+  if (error) throw new Error(error.message);
+
+  const lignes = (data ?? []) as LigneBrute[];
+  return {
+    relances: lignes.map(versRelance),
+    // total_count est calculé en fenêtre côté SQL : pas de seconde requête.
+    total: lignes.length > 0 ? Number(lignes[0].total_count) : 0,
+  };
 }
 
-/** Repousse une relance de N jours en fixant explicitement `next_action_at`. */
-export async function reporterRelance(relance: Relance, jours: number): Promise<void> {
-  const cible = debutDeJournee(new Date());
+export async function compterRelances(horizonDays = 7): Promise<CompteursRelances> {
+  const { data, error } = await supabase.rpc('compter_relances', {
+    p_horizon_days: horizonDays,
+  });
+
+  if (error) throw new Error(error.message);
+  return data as CompteursRelances;
+}
+
+/** Repousse une relance de N jours. `next_action_at` prime ensuite sur la règle de statut. */
+export async function reporterRelance(relance: Relance, jours = 1): Promise<void> {
+  const cible = new Date();
   cible.setDate(cible.getDate() + jours);
   cible.setHours(9, 0, 0, 0);
+  const iso = cible.toISOString();
 
   if (relance.taskId) {
-    const { error } = await supabase
-      .from('tasks')
-      .update({ due_at: cible.toISOString() })
-      .eq('id', relance.taskId);
+    const { error } = await supabase.from('tasks').update({ due_at: iso }).eq('id', relance.taskId);
     if (error) throw new Error(error.message);
     return;
   }
 
   if (relance.leadId) {
     const { error } = await supabase
-      .from('leads')
-      .update({ next_action_at: cible.toISOString() })
-      .eq('id', relance.leadId);
+      .from('leads').update({ next_action_at: iso }).eq('id', relance.leadId);
     if (error) throw new Error(error.message);
+    return;
   }
+
+  throw new Error('Cette relance ne peut pas être reportée depuis la liste');
 }
 
-/** Sort la relance de la file sans changer le statut métier du lead. */
 export async function marquerRelanceTraitee(relance: Relance): Promise<void> {
   if (relance.taskId) {
     const { error } = await supabase
@@ -246,30 +202,39 @@ export async function marquerRelanceTraitee(relance: Relance): Promise<void> {
 
   if (relance.appointmentId) {
     const { error } = await supabase
-      .from('appointments')
-      .update({ status: 'confirmed' })
-      .eq('id', relance.appointmentId);
+      .from('appointments').update({ status: 'confirmed' }).eq('id', relance.appointmentId);
     if (error) throw new Error(error.message);
     return;
   }
 
   if (relance.leadId) {
-    // Sans échéance explicite, la règle de statut reprendrait la main dès le
+    // Sans échéance explicite, la règle de statut reprendrait la main au
     // prochain chargement : on repousse donc au lendemain.
     await reporterRelance(relance, 1);
+    return;
   }
+
+  throw new Error('Cette relance se traite depuis son dossier');
 }
 
-export interface CompteursRelances {
-  urgent: number;
-  due: number;
-  upcoming: number;
-  total: number;
-}
+/**
+ * Journalise une action sortante. Le trigger sur `communications` met à jour
+ * `attempt_count` et `last_contacted_at` du lead.
+ */
+export async function journaliserAction(
+  relance: Relance,
+  type: 'call_outbound' | 'sms_outbound' | 'email_outbound',
+  contenu: string
+): Promise<void> {
+  if (!relance.leadId) return;
 
-export function compterRelances(relances: Relance[]): CompteursRelances {
-  return relances.reduce<CompteursRelances>(
-    (acc, r) => ({ ...acc, [r.urgency]: acc[r.urgency] + 1, total: acc.total + 1 }),
-    { urgent: 0, due: 0, upcoming: 0, total: 0 }
-  );
+  const { error } = await supabase.from('communications').insert({
+    lead_id: relance.leadId,
+    type,
+    direction: 'outbound',
+    status: type === 'call_outbound' ? 'answered' : 'sent',
+    content: contenu,
+  });
+
+  if (error) throw new Error(error.message);
 }

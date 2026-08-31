@@ -268,7 +268,9 @@ select
   co.phone, co.city, null, null, null,
   null::uuid, null::uuid, null::uuid, null::uuid, i.case_id, i.id, null::uuid,
   0, null::timestamptz, null::text,
-  public.calc_priorite_relance(false, greatest(0, current_date - coalesce(i.due_date, current_date)),
+  -- due_date est un timestamptz : sans le cast en date, la soustraction rend
+  -- un interval et greatest() ne peut plus le comparer a 0.
+  public.calc_priorite_relance(false, greatest(0, current_date - coalesce(i.due_date::date, current_date)),
                                false, false, false,
                                least(60, coalesce(i.remaining_amount, 0)::integer / 20), 0, false)
 from invoices i
