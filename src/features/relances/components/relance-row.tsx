@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import {
   Phone, MessageSquare, Clock, Check, FileText, CalendarClock,
-  ListTodo, Shield, Euro, Wrench, ExternalLink, Car, MapPin,
+  ListTodo, Sparkles, ExternalLink, Car, MapPin,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,12 +9,10 @@ import { cn } from '@/lib/utils';
 import type { Relance, RelanceKind, UrgencyLevel, PriorityLevel } from '@/services/relances-service';
 
 const ICONE: Record<RelanceKind, typeof Phone> = {
+  nouveau: Sparkles,
   rappel: Phone,
   documents: FileText,
-  assurance: Shield,
   rdv: CalendarClock,
-  impaye: Euro,
-  sav: Wrench,
   tache: ListTodo,
 };
 
@@ -45,21 +43,30 @@ const PRIORITE_LIBELLE: Record<PriorityLevel, string> = {
 };
 
 /**
- * Actions proposées selon le type de relance. Un impayé ne se traite pas comme
- * un nouveau lead : proposer les quatre mêmes boutons partout obligerait à
- * réfléchir à chaque ligne.
+ * Actions proposées selon l'étape du lead. Un dossier qui attend des documents
+ * ne se traite pas comme un lead jamais appelé : proposer les mêmes boutons
+ * partout obligerait à réfléchir à chaque ligne.
  */
 const ACTIONS_PAR_TYPE: Record<RelanceKind, ('appeler' | 'sms' | 'documents')[]> = {
+  nouveau: ['appeler', 'sms'],
   rappel: ['appeler', 'sms'],
   documents: ['documents', 'appeler'],
-  assurance: ['appeler'],
   rdv: ['appeler', 'sms'],
-  impaye: ['appeler', 'sms'],
-  sav: ['appeler'],
   tache: [],
 };
 
 function libelleDelai(r: Relance): string {
+  // Sur un lead jamais appele, la journee est une unite trop grossiere :
+  // tout se joue dans le premier quart d'heure.
+  if (r.waitingMinutes !== null) {
+    const m = r.waitingMinutes;
+    if (m < 1) return "a l'instant";
+    if (m < 60) return `il y a ${m} min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `il y a ${h} h`;
+    const j = Math.floor(h / 24);
+    return j === 1 ? 'il y a 1 jour' : `il y a ${j} jours`;
+  }
   if (r.urgency === 'urgent') {
     return r.daysLate === 1 ? '1 j de retard' : `${r.daysLate} j de retard`;
   }
@@ -176,7 +183,11 @@ export const RelanceRow = memo(function RelanceRow({
         {derniere && <p className="truncate text-xs text-muted-foreground">{derniere}</p>}
       </div>
 
-      <span className={cn('shrink-0 text-xs font-medium tabular', DELAI_STYLE[relance.urgency])}>
+      <span className={cn('shrink-0 text-xs font-medium tabular',
+        relance.waitingMinutes !== null
+          ? relance.waitingMinutes > 120 ? 'text-urgent'
+            : relance.waitingMinutes > 30 ? 'text-due' : 'text-done'
+          : DELAI_STYLE[relance.urgency])}>
         {libelleDelai(relance)}
       </span>
 

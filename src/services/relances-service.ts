@@ -12,8 +12,7 @@ import { supabase } from '@/lib/supabase';
 
 export type UrgencyLevel = 'urgent' | 'due' | 'upcoming';
 export type PriorityLevel = 'urgent' | 'haute' | 'normale' | 'faible';
-export type RelanceKind =
-  | 'rappel' | 'documents' | 'assurance' | 'rdv' | 'impaye' | 'sav' | 'tache';
+export type RelanceKind = 'nouveau' | 'rappel' | 'documents' | 'rdv' | 'tache';
 
 export type RelanceSort = 'priorite' | 'plus_ancien' | 'plus_recent';
 
@@ -23,6 +22,8 @@ export interface Relance {
   urgency: UrgencyLevel;
   dueAt: string;
   daysLate: number;
+  /** Minutes d'attente depuis l'arrivee. Non nul uniquement sur un lead jamais appele. */
+  waitingMinutes: number | null;
   score: number;
   priority: PriorityLevel;
   titre: string;
@@ -49,12 +50,10 @@ export interface CompteursRelances {
   urgent: number;
   due: number;
   upcoming: number;
+  nouveau: number;
   rappel: number;
   documents: number;
-  assurance: number;
   rdv: number;
-  impaye: number;
-  sav: number;
   tache: number;
 }
 
@@ -83,6 +82,7 @@ interface LigneBrute {
   urgency: UrgencyLevel;
   due_at: string;
   days_late: number;
+  waiting_minutes: number | null;
   score: number;
   priority_level: PriorityLevel;
   titre: string | null;
@@ -112,6 +112,7 @@ function versRelance(l: LigneBrute): Relance {
     urgency: l.urgency,
     dueAt: l.due_at,
     daysLate: l.days_late,
+    waitingMinutes: l.waiting_minutes,
     score: l.score,
     priority: l.priority_level,
     titre: l.titre?.trim() || l.phone || 'Sans nom',

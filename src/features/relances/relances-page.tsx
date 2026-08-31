@@ -28,12 +28,12 @@ const FILTRES: { cle: CleFiltre; label: string; compteur: keyof CompteursRelance
   { cle: 'urgent', label: 'En retard', compteur: 'urgent' },
   { cle: 'due', label: "Aujourd'hui", compteur: 'due' },
   { cle: 'upcoming', label: 'À venir', compteur: 'upcoming' },
-  { cle: 'rappel', label: 'Nouveaux leads', compteur: 'rappel' },
+  // Les filtres suivants suivent le parcours du lead, pas le type d'objet :
+  // c'est ainsi qu'on travaille une file d'appels.
+  { cle: 'nouveau', label: 'Jamais appelés', compteur: 'nouveau' },
+  { cle: 'rappel', label: 'À rappeler', compteur: 'rappel' },
   { cle: 'documents', label: 'Documents', compteur: 'documents' },
-  { cle: 'assurance', label: 'Assurances', compteur: 'assurance' },
-  { cle: 'rdv', label: 'RDV', compteur: 'rdv' },
-  { cle: 'impaye', label: 'Impayés', compteur: 'impaye' },
-  { cle: 'sav', label: 'SAV', compteur: 'sav' },
+  { cle: 'rdv', label: 'RDV à confirmer', compteur: 'rdv' },
 ];
 
 const URGENCES: CleFiltre[] = ['urgent', 'due', 'upcoming'];
