@@ -131,3 +131,38 @@ export async function fetchInterventionsDuContact(
   if (error) throw new Error(error.message);
   return (data ?? []) as Lead[];
 }
+
+export type TypeDoublon = 'aucun' | 'doublon' | 'client_fidele';
+
+export interface AnalyseDoublon {
+  type: TypeDoublon;
+  nb_autres?: number;
+  lead_id?: string;
+  statut?: string;
+  jours?: number;
+}
+
+/**
+ * Distingue un vrai doublon d'un client qui revient.
+ *
+ * Depuis que le modele est contact 1 -- N leads, deux leads sur le meme numero
+ * sont souvent legitimes. Le calcul se fait en base : il exige la
+ * normalisation du telephone, sans laquelle le format international et le
+ * format national ne se rencontrent jamais.
+ */
+export async function analyserDoublon(params: {
+  phone?: string | null;
+  email?: string | null;
+  excludeLeadId?: string | null;
+}): Promise<AnalyseDoublon> {
+  const workspaceId = await getWorkspaceId();
+  const { data, error } = await supabase.rpc('analyser_doublon', {
+    p_workspace_id: workspaceId,
+    p_phone: params.phone ?? null,
+    p_email: params.email ?? null,
+    p_exclude_lead_id: params.excludeLeadId ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+  return data as AnalyseDoublon;
+}

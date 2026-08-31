@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Car, Shield, Briefcase, UserCog, Send, History,
+  User, Car, Shield, Briefcase, UserCog, Send, History, Copy, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,9 @@ import {
 } from '@/features/leads/lead-shared';
 import { fetchCommunications, fetchNotes, createNote } from '@/services/activity-service';
 import { fetchTasks } from '@/services/planning-service';
-import { fetchInterventionsDuContact } from '@/services/leads-service';
+import { fetchInterventionsDuContact, analyserDoublon } from '@/services/leads-service';
 import type { Lead, Profile } from '@/types';
+import type { AnalyseDoublon } from '@/services/leads-service';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
 
@@ -77,6 +78,14 @@ export function DossierContenu({
     enabled: !!lead.contact_id,
   });
 
+  const { data: doublon } = useQuery({
+    queryKey: ['doublon', lead.id, lead.phone, lead.email],
+    queryFn: () => analyserDoublon({
+      phone: lead.phone, email: lead.email, excludeLeadId: lead.id,
+    }),
+    enabled: !!(lead.phone || lead.email),
+  });
+
   const ajouterNote = useMutation({
     mutationFn: () => createNote({ lead_id: lead.id, content: nouvelleNote.trim() }),
     onSuccess: () => {
@@ -133,6 +142,8 @@ export function DossierContenu({
     <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
       {/* Colonne principale */}
       <div className="min-w-0 space-y-6">
+        {doublon && doublon.type !== 'aucun' && <BandeauDoublon analyse={doublon} />}
+
         <ProchaineAction lead={lead} />
 
         <Bloc titre="Qualification">
@@ -223,6 +234,30 @@ export function DossierContenu({
         <FicheInfo icone={UserCog} titre="Conseiller" lignes={[
           ['Assigné à', conseiller ? profileName(conseiller) : null],
         ]} />
+      </div>
+    </div>
+  );
+}
+
+function BandeauDoublon({ analyse }: { analyse: AnalyseDoublon }) {
+  const doublon = analyse.type === 'doublon';
+  const Icone = doublon ? Copy : Award;
+
+  return (
+    <div className={cn(
+      'flex items-start gap-2.5 rounded-xl border px-4 py-3',
+      doublon ? 'border-due/30 bg-due-soft' : 'border-done/30 bg-done-soft'
+    )}>
+      <Icone className={cn('mt-0.5 h-4 w-4 shrink-0', doublon ? 'text-due' : 'text-done')} />
+      <div className="min-w-0">
+        <p className={cn('text-sm font-medium', doublon ? 'text-due' : 'text-done')}>
+          {doublon ? 'Doublon probable' : 'Client fidèle'}
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {doublon
+            ? `Une autre demande de cette personne est encore ouverte, reçue il y a ${analyse.jours} jour${(analyse.jours ?? 0) > 1 ? 's' : ''}. Traitez-les ensemble plutôt que de rappeler deux fois.`
+            : `Déjà ${(analyse.nb_autres ?? 0) + 1} interventions avec vous. La dernière remonte à ${analyse.jours} jours.`}
+        </p>
       </div>
     </div>
   );
