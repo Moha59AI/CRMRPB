@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Car, Shield, Briefcase, UserCog, Sparkles, Send,
+  User, Car, Shield, Briefcase, UserCog, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -319,14 +319,5 @@ function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
         n’est pas converti, il n’y a ni document, ni déclaration, ni facture à afficher.
       </p>
     </div>
-  );
-}
-
-export function BoutonAssistant({ onClick }: { onClick: () => void }) {
-  return (
-    <Button variant="ghost" size="sm" className="rounded-full" onClick={onClick}>
-      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-      Assistant
-    </Button>
   );
 }
