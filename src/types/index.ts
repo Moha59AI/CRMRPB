@@ -77,6 +77,8 @@ export interface Lead {
   vehicle_registration: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
+  /** Le client. Un client peut avoir plusieurs leads : un par intervention. */
+  contact_id: string | null;
   insurance: string | null;
   offer: string | null;
   /** Vitrage concerne, renseigne a la qualification. */

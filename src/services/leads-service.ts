@@ -110,3 +110,24 @@ export async function seedDemoLeads(): Promise<{ count: number; error: string | 
   if (error) return { count: 0, error: error.message };
   return { count: data as number, error: null };
 }
+
+/**
+ * Les autres interventions du meme client.
+ *
+ * Un client peut revenir : pare-brise en janvier, lunette arriere en juillet.
+ * Chaque intervention est un lead distinct, tous rattaches au meme contact.
+ */
+export async function fetchInterventionsDuContact(
+  contactId: string,
+  saufLeadId: string
+): Promise<Lead[]> {
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('contact_id', contactId)
+    .neq('id', saufLeadId)
+    .order('received_at', { ascending: false, nullsFirst: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Lead[];
+}

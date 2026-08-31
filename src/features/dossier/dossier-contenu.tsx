@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Car, Shield, Briefcase, UserCog, Send,
+  User, Car, Shield, Briefcase, UserCog, Send, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,10 @@ import {
 } from '@/features/leads/lead-shared';
 import { fetchCommunications, fetchNotes, createNote } from '@/services/activity-service';
 import { fetchTasks } from '@/services/planning-service';
+import { fetchInterventionsDuContact } from '@/services/leads-service';
 import type { Lead, Profile } from '@/types';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
+import { StatusBadge } from '@/features/leads/status-badge';
 
 interface EvenementTimeline {
   cle: string;
@@ -65,6 +67,14 @@ export function DossierContenu({
   const { data: taches } = useQuery({
     queryKey: ['lead-tasks', lead.id],
     queryFn: () => fetchTasks({ leadId: lead.id }),
+  });
+
+  // Un client peut revenir : pare-brise en janvier, lunette arriere en juillet.
+  // Chaque intervention est un lead distinct rattache au meme contact.
+  const { data: autresInterventions } = useQuery({
+    queryKey: ['interventions-contact', lead.contact_id, lead.id],
+    queryFn: () => fetchInterventionsDuContact(lead.contact_id as string, lead.id),
+    enabled: !!lead.contact_id,
   });
 
   const ajouterNote = useMutation({
@@ -161,6 +171,33 @@ export function DossierContenu({
           ['Email', lead.email],
           ['Ville', lead.city],
         ]} />
+
+        {autresInterventions && autresInterventions.length > 0 && (
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <History className="h-3.5 w-3.5" />
+              Déjà client
+              <span className="ml-auto tabular normal-case">
+                {autresInterventions.length + 1} intervention{autresInterventions.length > 0 ? 's' : ''}
+              </span>
+            </h3>
+            <ul className="space-y-2">
+              {autresInterventions.slice(0, 5).map((i) => (
+                <li key={i.id} className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-foreground">
+                      {i.glass_type ? LIBELLE_VITRAGE[i.glass_type] : 'Intervention'}
+                    </p>
+                    <p className="text-xs text-muted-foreground tabular">
+                      {formatDateTime(i.received_at || i.created_at)}
+                    </p>
+                  </div>
+                  <StatusBadge status={i.status} className="shrink-0" />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <FicheInfo icone={Car} titre="Véhicule" lignes={[
           ['Marque', lead.vehicle_make],
