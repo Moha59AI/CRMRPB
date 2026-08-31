@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  X, ChevronLeft, ChevronRight, Phone, MessageSquare, FileText,
+  ChevronRight, Phone, MessageSquare, FileText, User,
   CalendarPlus, Car, MapPin, Shield, AlertTriangle, Check, Clock, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { FicheOverlay, ActionMobile } from '@/features/fiche/fiche-overlay';
 import { LeadPipeline } from '@/features/leads/lead-pipeline';
 import { StatusBadge } from '@/features/leads/status-badge';
 import { LIBELLE_VITRAGE, leadName, vehicleLabel } from '@/features/leads/lead-shared';
@@ -66,13 +66,6 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     setOnglet('apercu');
   }, [navigate, etat]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') fermer();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [fermer]);
 
   const majLead = useMutation({
     mutationFn: (updates: Partial<Lead>) => updateLead(leadId as string, updates),
@@ -116,6 +109,18 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     majLead.mutate({ status: 'documents_requested' });
   };
 
+  const reporterRelance = () => {
+    const demain = new Date();
+    demain.setDate(demain.getDate() + 1);
+    demain.setHours(9, 0, 0, 0);
+    majLead.mutate({ next_action_at: demain.toISOString() }, {
+      onSuccess: () => {
+        toast.success('Reporté à demain');
+        if (suivant) allerVers(suivant); else fermer();
+      },
+    });
+  };
+
   const terminerRelance = () => {
     const demain = new Date();
     demain.setDate(demain.getDate() + 1);
@@ -129,224 +134,145 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     });
   };
 
-  const contenu = (
-    <div
-      className={cn(
-        'flex flex-col overflow-hidden bg-background',
-        pleinePage
-          ? 'h-full w-full'
-          : 'h-full w-full sm:h-[94vh] sm:max-h-[1000px] sm:w-[94vw] sm:max-w-[1600px] sm:rounded-2xl sm:border sm:border-border sm:shadow-2xl'
-      )}
-    >
-      {isLoading || !lead ? (
-        <div className="space-y-4 p-8">
-          <Skeleton className="h-10 w-64 rounded-lg" />
-          <Skeleton className="h-6 w-96 rounded-lg" />
+  if (isLoading || !lead) {
+    return (
+      <FicheOverlay
+        entete={<Skeleton className="h-8 w-64 rounded-lg" />}
+        onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
+        onFermer={fermer} pleinePage={pleinePage}
+      >
+        <div className="space-y-4">
+          <Skeleton className="h-24 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
         </div>
-      ) : (
-        <>
-          {/* ---- HEADER FIXE ---- */}
-          <header className="shrink-0 border-b border-border px-4 pt-4 sm:px-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-2">
-                {liste.length > 0 && (
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <Button
-                      variant="ghost" size="icon" className="h-8 w-8 rounded-full"
-                      disabled={!precedent}
-                      onClick={() => precedent && allerVers(precedent)}
-                      title="Dossier précédent"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="whitespace-nowrap text-xs text-muted-foreground tabular">
-                      {position + 1} / {liste.length}
-                    </span>
-                    <Button
-                      variant="ghost" size="icon" className="h-8 w-8 rounded-full"
-                      disabled={!suivant}
-                      onClick={() => suivant && allerVers(suivant)}
-                      title="Dossier suivant"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-                <h1 className="truncate text-xl font-semibold sm:text-2xl">{leadName(lead)}</h1>
-                <StatusBadge status={lead.status} />
-              </div>
+      </FicheOverlay>
+    );
+  }
 
-              <Button
-                variant="ghost" size="icon"
-                className="h-9 w-9 shrink-0 rounded-full hover:bg-muted"
-                onClick={fermer} title="Fermer (Échap)"
-              >
-                <X className="h-5 w-5" />
-                <span className="sr-only">Fermer</span>
-              </Button>
-            </div>
+  const entete = (
+    <>
+      <div className="flex items-center gap-2">
+        <h1 className="truncate text-xl font-semibold sm:text-2xl">{leadName(lead)}</h1>
+        <StatusBadge status={lead.status} />
+      </div>
 
-            {/* Identite metier : tout ce qu'il faut avant de decrocher */}
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {lead.phone && (
-                <a href={`tel:${lead.phone}`} onClick={appeler}
-                   className="font-medium text-primary tabular hover:underline">
-                  {lead.phone}
-                </a>
-              )}
-              {lead.city && (
-                <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.city}</span>
-              )}
-              {(lead.vehicle_make || lead.vehicle_model) && (
-                <span className="flex items-center gap-1"><Car className="h-3.5 w-3.5" />{vehicleLabel(lead)}</span>
-              )}
-              {lead.vehicle_registration && (
-                <span className="font-medium text-foreground tabular">{lead.vehicle_registration}</span>
-              )}
-              {lead.insurance && (
-                <span className="flex items-center gap-1"><Shield className="h-3.5 w-3.5" />{lead.insurance}</span>
-              )}
-              {lead.glass_type && (
-                <span className="font-medium text-foreground">{LIBELLE_VITRAGE[lead.glass_type]}</span>
-              )}
-              {lead.has_adas_camera && lead.glass_type === 'pare_brise' && (
-                <span className="flex items-center gap-1 rounded-full bg-due-soft px-2 py-0.5 text-xs font-medium text-due">
-                  <AlertTriangle className="h-3 w-3" />Calibrage
-                </span>
-              )}
-            </div>
+      {/* Ce qu'il faut savoir avant de decrocher, sans defiler. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        {lead.phone && (
+          <a href={`tel:${lead.phone}`} onClick={appeler}
+             className="font-medium text-primary tabular hover:underline">
+            {lead.phone}
+          </a>
+        )}
+        {lead.city && (
+          <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{lead.city}</span>
+        )}
+        {(lead.vehicle_make || lead.vehicle_model) && (
+          <span className="flex items-center gap-1"><Car className="h-3.5 w-3.5" />{vehicleLabel(lead)}</span>
+        )}
+        {lead.vehicle_registration && (
+          <span className="font-medium text-foreground tabular">{lead.vehicle_registration}</span>
+        )}
+        {lead.insurance && (
+          <span className="flex items-center gap-1"><Shield className="h-3.5 w-3.5" />{lead.insurance}</span>
+        )}
+        {lead.glass_type && (
+          <span className="font-medium text-foreground">{LIBELLE_VITRAGE[lead.glass_type]}</span>
+        )}
+        {lead.has_adas_camera && lead.glass_type === 'pare_brise' && (
+          <span className="flex items-center gap-1 rounded-full bg-due-soft px-2 py-0.5 text-xs font-medium text-due">
+            <AlertTriangle className="h-3 w-3" />Calibrage
+          </span>
+        )}
+      </div>
 
-            <div className="mt-3">
-              <LeadPipeline
-                statut={lead.status}
-                onChangerStatut={(statut: LeadStatus) => majLead.mutate({ status: statut })}
-                desactive={majLead.isPending}
-              />
-            </div>
+      <div className="mt-3">
+        <LeadPipeline
+          statut={lead.status}
+          onChangerStatut={(statut: LeadStatus) => majLead.mutate({ status: statut })}
+          desactive={majLead.isPending}
+        />
+      </div>
 
-            {/* Actions rapides : masquees sur mobile, remplacees par la barre du bas */}
-            <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
-              <Button size="sm" variant="outline" className="rounded-full"
-                onClick={appeler} disabled={!lead.phone}>
-                <Phone className="mr-1.5 h-3.5 w-3.5" />Appeler
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-full"
-                onClick={envoyerSms} disabled={!lead.phone}>
-                <MessageSquare className="mr-1.5 h-3.5 w-3.5" />SMS
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-full"
-                onClick={demanderDocuments} disabled={!lead.phone}>
-                <FileText className="mr-1.5 h-3.5 w-3.5" />Documents
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-full"
-                onClick={() => toast.info('La prise de rendez-vous arrive avec le module Planning')}>
-                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />RDV
-              </Button>
-            </div>
+      <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
+        <Button size="sm" variant="outline" className="rounded-full"
+          onClick={appeler} disabled={!lead.phone}>
+          <Phone className="mr-1.5 h-3.5 w-3.5" />Appeler
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-full"
+          onClick={envoyerSms} disabled={!lead.phone}>
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />SMS
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-full"
+          onClick={demanderDocuments} disabled={!lead.phone}>
+          <FileText className="mr-1.5 h-3.5 w-3.5" />Documents
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-full"
+          onClick={() => toast.info('La prise de rendez-vous arrive avec le module Planning')}>
+          <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />RDV
+        </Button>
+        {lead.contact_id && (
+          <Button size="sm" variant="ghost" className="rounded-full"
+            onClick={() => navigate(`/clients/${lead.contact_id}`, { state: { background: location } })}>
+            <User className="mr-1.5 h-3.5 w-3.5" />Fiche client
+          </Button>
+        )}
+      </div>
+    </>
+  );
 
-            {/* Onglets : ils ne changent que le contenu */}
-            <nav className="mt-3 flex gap-1 overflow-x-auto">
-              {ONGLETS.map(({ cle, label }) => (
-                <button
-                  key={cle} type="button" onClick={() => setOnglet(cle)}
-                  className={cn(
-                    'whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors duration-100',
-                    onglet === cle
-                      ? 'border-primary font-medium text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-          </header>
-
-          {/* ---- CONTENU SCROLLABLE ---- */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-4 sm:p-6">
-            <DossierContenu
-              lead={lead}
-              profiles={profiles ?? []}
-              onglet={onglet}
-              onUpdate={(updates) => majLead.mutate(updates)}
-              enregistrement={majLead.isPending}
-            />
-          </div>
-
-          {/* ---- MODE RELANCE ---- */}
-          {etat.mode === 'relance' && (
-            <footer className="shrink-0 border-t border-border bg-muted/40 px-4 py-2.5 sm:px-6">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button size="sm" variant="outline" className="rounded-full"
-                  disabled={majLead.isPending}
-                  onClick={() => {
-                    const demain = new Date();
-                    demain.setDate(demain.getDate() + 1);
-                    demain.setHours(9, 0, 0, 0);
-                    majLead.mutate({ next_action_at: demain.toISOString() }, {
-                      onSuccess: () => {
-                        toast.success('Reporté à demain');
-                        if (suivant) allerVers(suivant); else fermer();
-                      },
-                    });
-                  }}>
-                  <Clock className="mr-1.5 h-3.5 w-3.5" />Reporter
-                </Button>
-                <Button size="sm" className="rounded-full"
-                  disabled={majLead.isPending} onClick={terminerRelance}>
-                  {majLead.isPending
-                    ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                  Terminer la relance
-                </Button>
-                {suivant && (
-                  <Button size="sm" variant="ghost" className="rounded-full"
-                    onClick={() => allerVers(suivant)}>
-                    Client suivant<ChevronRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-            </footer>
-          )}
-
-          {/* ---- BARRE D'ACTIONS MOBILE ---- */}
-          <footer className="flex shrink-0 items-center justify-around border-t border-border px-2 py-2 sm:hidden">
-            <ActionMobile icone={Phone} label="Appeler" onClick={appeler} desactive={!lead.phone} />
-            <ActionMobile icone={MessageSquare} label="SMS" onClick={envoyerSms} desactive={!lead.phone} />
-            <ActionMobile icone={FileText} label="Documents" onClick={demanderDocuments} desactive={!lead.phone} />
-          </footer>
-        </>
+  const piedDePage = etat.mode === 'relance' ? (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button size="sm" variant="outline" className="rounded-full"
+        disabled={majLead.isPending} onClick={reporterRelance}>
+        <Clock className="mr-1.5 h-3.5 w-3.5" />Reporter
+      </Button>
+      <Button size="sm" className="rounded-full"
+        disabled={majLead.isPending} onClick={terminerRelance}>
+        {majLead.isPending
+          ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          : <Check className="mr-1.5 h-3.5 w-3.5" />}
+        Terminer la relance
+      </Button>
+      {suivant && (
+        <Button size="sm" variant="ghost" className="rounded-full"
+          onClick={() => allerVers(suivant)}>
+          Client suivant<ChevronRight className="ml-1.5 h-3.5 w-3.5" />
+        </Button>
       )}
     </div>
-  );
-
-  if (pleinePage) return contenu;
+  ) : undefined;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center animate-fade-in">
-      {/* Le fond assombri ferme au clic, comme n'importe quelle surface superposee */}
-      <button
-        type="button" onClick={fermer} aria-label="Fermer la fiche"
-        className="absolute inset-0 bg-foreground/30 backdrop-blur-[2px]"
-      />
-      <div className="relative z-10 h-full w-full sm:h-auto sm:w-auto">{contenu}</div>
-    </div>
-  );
-}
-
-function ActionMobile({
-  icone: Icone, label, onClick, desactive,
-}: {
-  icone: typeof Phone; label: string; onClick: () => void; desactive?: boolean;
-}) {
-  return (
-    <button
-      type="button" onClick={onClick} disabled={desactive}
-      className="flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-xs text-muted-foreground disabled:opacity-40"
+    <FicheOverlay
+      entete={entete}
+      onglets={ONGLETS}
+      ongletActif={onglet}
+      onChangerOnglet={setOnglet}
+      onFermer={fermer}
+      pleinePage={pleinePage}
+      piedDePage={piedDePage}
+      navigation={liste.length > 1 ? {
+        position: position + 1,
+        total: liste.length,
+        precedent: precedent ? () => allerVers(precedent) : null,
+        suivant: suivant ? () => allerVers(suivant) : null,
+      } : undefined}
+      actionsMobile={
+        <>
+          <ActionMobile icone={Phone} label="Appeler" onClick={appeler} desactive={!lead.phone} />
+          <ActionMobile icone={MessageSquare} label="SMS" onClick={envoyerSms} desactive={!lead.phone} />
+          <ActionMobile icone={FileText} label="Documents" onClick={demanderDocuments} desactive={!lead.phone} />
+        </>
+      }
     >
-      <Icone className="h-5 w-5" />
-      {label}
-    </button>
+      <DossierContenu
+        lead={lead}
+        profiles={profiles ?? []}
+        onglet={onglet}
+        onUpdate={(updates) => majLead.mutate(updates)}
+        enregistrement={majLead.isPending}
+      />
+    </FicheOverlay>
   );
 }

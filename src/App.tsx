@@ -25,6 +25,7 @@ import { UsersPage } from '@/features/settings/users-page';
 import { FollowUpPage } from '@/features/follow-up/follow-up-page';
 import { RelancesPage } from '@/features/relances/relances-page';
 import { DossierModal } from '@/features/dossier/dossier-modal';
+import { ClientModal } from '@/features/client/client-modal';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import { IntegrationsListPage } from '@/features/integrations/integrations-list-page';
 import { MetaSettingsPage } from '@/features/integrations/meta/meta-settings-page';
@@ -66,6 +67,7 @@ function AppRoutes() {
             <Route path="/relances" element={<RelancesPage />} />
           {/* Ouverte directement par son URL : plein ecran, dans le layout. */}
           <Route path="/dossiers/:leadId" element={<DossierModal pleinePage />} />
+                <Route path="/clients/:contactId" element={<ClientModal pleinePage />} />
           <Route path="/cases" element={<CasesPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
@@ -88,6 +90,7 @@ function AppRoutes() {
       {background && (
         <Routes>
           <Route path="/dossiers/:leadId" element={<DossierModal />} />
+          <Route path="/clients/:contactId" element={<ClientModal />} />
         </Routes>
       )}
     </>

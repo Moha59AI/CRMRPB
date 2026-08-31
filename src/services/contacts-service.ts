@@ -1,7 +1,7 @@
 // Contacts, vehicules et assureurs
 
 import { supabase } from '@/lib/supabase';
-import type { Contact, Vehicle, Insurer } from '@/types';
+import type { Contact, Vehicle, Insurer, Lead } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchContacts(params: { search?: string }): Promise<Contact[]> {
@@ -80,4 +80,39 @@ export async function fetchCompteursInterventions(): Promise<Map<string, number>
     compteurs.set(l.id, Number(l.nb_interventions));
   }
   return compteurs;
+}
+
+export async function fetchContactById(id: string): Promise<Contact | null> {
+  const { data, error } = await supabase
+    .from('contacts').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as Contact) ?? null;
+}
+
+export interface SyntheseClient {
+  nb_interventions: number;
+  nb_converties: number;
+  premiere_intervention: string | null;
+  derniere_intervention: string | null;
+}
+
+export async function fetchSyntheseClient(id: string): Promise<SyntheseClient | null> {
+  const { data, error } = await supabase
+    .from('v_clients')
+    .select('nb_interventions, nb_converties, premiere_intervention, derniere_intervention')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as SyntheseClient) ?? null;
+}
+
+/** Les interventions du client, de la plus recente a la plus ancienne. */
+export async function fetchInterventionsClient(contactId: string): Promise<Lead[]> {
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('contact_id', contactId)
+    .order('received_at', { ascending: false, nullsFirst: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Lead[];
 }
