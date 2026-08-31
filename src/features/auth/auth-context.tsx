@@ -130,7 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    // Sans redirectTo, Supabase renvoie vers l'URL de site configuree dans le
+    // projet — donc pas vers l'ecran de changement de mot de passe, et le lien
+    // ne sert a rien. L'origine est lue a l'execution pour que le meme code
+    // fonctionne en local et en production.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
     return { error: error?.message ?? null };
   };
 

@@ -10,6 +10,7 @@ import { AppLayout } from '@/layouts/app-layout';
 import { LoginPage } from '@/features/auth/login-page';
 import { SignupPage } from '@/features/auth/signup-page';
 import { ForgotPasswordPage } from '@/features/auth/forgot-password-page';
+import { UpdatePasswordPage } from '@/features/auth/update-password-page';
 
 import { TodayPage } from '@/features/today/today-page';
 import { LeadsPage } from '@/features/leads/leads-page';
@@ -53,6 +54,9 @@ function AppRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                {/* Cible du lien de reinitialisation : publique, puisque la
+                    session de recuperation n'est ouverte qu'a l'arrivee. */}
+                <Route path="/update-password" element={<UpdatePasswordPage />} />
 
           {/* Protected routes */}
           <Route
