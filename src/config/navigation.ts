@@ -1,4 +1,5 @@
 import {
+  BellRing,
   CalendarDays,
   FileText,
   Users,
@@ -32,6 +33,12 @@ export const navItems: NavItem[] = [
     path: '/leads',
     icon: TrendingUp,
     description: 'Gestion des prospects',
+  },
+  {
+    label: 'Relances',
+    path: '/relances',
+    icon: BellRing,
+    description: 'Ce qui attend une action',
   },
   {
     label: 'Dossiers',

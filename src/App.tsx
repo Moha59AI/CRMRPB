@@ -23,6 +23,7 @@ import { BillingPage } from '@/features/billing/billing-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { UsersPage } from '@/features/settings/users-page';
 import { FollowUpPage } from '@/features/follow-up/follow-up-page';
+import { RelancesPage } from '@/features/relances/relances-page';
 import { IntegrationsListPage } from '@/features/integrations/integrations-list-page';
 import { MetaSettingsPage } from '@/features/integrations/meta/meta-settings-page';
 import { WebhooksPage } from '@/features/webhooks/webhooks-page';
@@ -53,7 +54,8 @@ export default function App() {
                 >
                   <Route path="/today" element={<TodayPage />} />
                   <Route path="/leads" element={<LeadsPage />} />
-                  <Route path="/cases" element={<CasesPage />} />
+                  <Route path="/relances" element={<RelancesPage />} />
+                <Route path="/cases" element={<CasesPage />} />
                   <Route path="/contacts" element={<ContactsPage />} />
                   <Route path="/calendar" element={<CalendarPage />} />
                   <Route path="/follow-up" element={<FollowUpPage />} />
