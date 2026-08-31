@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,9 +11,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { LeadDetailSheet } from '@/features/leads/lead-detail-sheet';
-import { fetchLeadById } from '@/services/leads-service';
-import { fetchProfiles } from '@/services/profiles-service';
 import { RelanceRow } from './components/relance-row';
 import { SessionRelance } from './components/session-relance';
 import {
@@ -43,6 +41,8 @@ const URGENCES: CleFiltre[] = ['urgent', 'due', 'upcoming'];
 
 export function RelancesPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [filtre, setFiltre] = useState<CleFiltre>('toutes');
   const [recherche, setRecherche] = useState('');
@@ -52,9 +52,6 @@ export function RelancesPage() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enCours, setEnCours] = useState<string | null>(null);
   const [session, setSession] = useState<Relance[] | null>(null);
-  // La fiche s'ouvre en panneau lateral : quitter la page ferait perdre le
-  // filtre, la pagination et la place dans la file.
-  const [ficheLeadId, setFicheLeadId] = useState<string | null>(null);
   const [preparationSession, setPreparationSession] = useState(false);
 
   // Anti-rebond : la recherche part en base, inutile d'interroger à chaque frappe.
@@ -87,18 +84,9 @@ export function RelancesPage() {
     placeholderData: keepPreviousData,
   });
 
-  const { data: fiche } = useQuery({
-    queryKey: ['lead', ficheLeadId],
-    queryFn: () => fetchLeadById(ficheLeadId as string),
-    enabled: !!ficheLeadId,
-  });
-
-  const { data: profils } = useQuery({
-    queryKey: ['profiles'],
-    queryFn: fetchProfiles,
-  });
-
-  const relances = data?.relances ?? [];
+  // Memoise pour la meme raison : sans cela ouvrirDossier serait recree a
+  // chaque rendu et RelanceRow perdrait son memo.
+  const relances = useMemo(() => data?.relances ?? [], [data]);
   const total = data?.total ?? 0;
 
   const rafraichir = useCallback(() => {
@@ -156,8 +144,17 @@ export function RelancesPage() {
       .catch((e: Error) => toast.error(e.message));
   };
 
+  // La liste transmise permet d'enchainer les dossiers sans revenir ici, et
+  // `background` fait que cette page reste montee derriere la fiche.
+  const ouvrirDossier = useCallback((leadId: string) => {
+    const liste = relances.map((r) => r.leadId).filter((id): id is string => !!id);
+    navigate(`/dossiers/${leadId}`, {
+      state: { background: location, liste, mode: 'relance' },
+    });
+  }, [relances, navigate, location]);
+
   const ouvrir = (r: Relance) => {
-    if (r.leadId) setFicheLeadId(r.leadId);
+    if (r.leadId) ouvrirDossier(r.leadId);
     else toast.info('Cette relance n’a pas de fiche client associée');
   };
 
@@ -209,34 +206,14 @@ export function RelancesPage() {
 
   const pageMax = Math.max(0, Math.ceil(total / PAR_PAGE) - 1);
 
-  // La fiche reste montee a cote de la session : elle s'ouvre par-dessus sans
-  // interrompre l'enchainement.
-  const panneauFiche = (
-    <LeadDetailSheet
-      lead={fiche ?? null}
-      profiles={profils ?? []}
-      open={!!ficheLeadId}
-      onOpenChange={(ouvert) => {
-        if (!ouvert) {
-          setFicheLeadId(null);
-          // Le statut ou la date d'action ont pu changer dans la fiche.
-          rafraichir();
-        }
-      }}
-    />
-  );
-
   if (session) {
     return (
-      <>
-        <SessionRelance
-          file={session}
-          onFermer={() => { setSession(null); rafraichir(); }}
-          onTermine={() => { setSession(null); rafraichir(); }}
-          onOuvrirFiche={setFicheLeadId}
-        />
-        {panneauFiche}
-      </>
+      <SessionRelance
+        file={session}
+        onFermer={() => { setSession(null); rafraichir(); }}
+        onTermine={() => { setSession(null); rafraichir(); }}
+        onOuvrirFiche={ouvrirDossier}
+      />
     );
   }
 
@@ -385,7 +362,6 @@ export function RelancesPage() {
         )}
       </div>
 
-      {panneauFiche}
     </>
   );
 }
