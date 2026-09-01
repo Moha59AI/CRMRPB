@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { CarteInterventions } from './carte-interventions';
+import { ChampAdresse } from '@/components/ChampAdresse';
 import {
   fetchInterventionsCarte, compterInterventionsNonLocalisees, leadsDInterventions,
 } from '@/services/interventions-carte-service';
@@ -897,12 +898,41 @@ function CreateAppointmentDialog({
   }
 
   function handleOpenChange(v: boolean) {
-    if (!v) form.reset();
+    if (!v) {
+      form.reset();
+      setAdresseReprise(false);
+    }
     onOpenChange(v);
   }
 
   const linkType = form.watch('linkType');
   const errors = form.formState.errors;
+
+  // Signale que l'adresse ne vient pas d'une saisie : elle a ete reprise de la
+  // fiche du lead, et reste modifiable.
+  const [adresseReprise, setAdresseReprise] = useState(false);
+
+  /**
+   * Choisir un lead remplit l'adresse et le titre.
+   *
+   * On ne remplace jamais une adresse deja saisie : elle a ete tapee pour ce
+   * rendez-vous-la, et l'ecraser ferait perdre l'information sans prevenir.
+   */
+  const reprendreDuLead = (leadId: string) => {
+    const lead = (leadsQuery.data ?? []).find((l) => l.id === leadId);
+    if (!lead) return;
+
+    const adresse = [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ');
+    if (adresse && !form.getValues('address')?.trim()) {
+      form.setValue('address', adresse);
+      setAdresseReprise(true);
+    }
+
+    if (!form.getValues('title')?.trim()) {
+      const nom = [lead.first_name, lead.last_name].filter(Boolean).join(' ');
+      form.setValue('title', nom ? `Intervention — ${nom}` : 'Intervention');
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -952,12 +982,6 @@ function CreateAppointmentDialog({
                 <p className="text-xs text-destructive">{errors.endTime.message}</p>
               )}
             </div>
-          </div>
-
-          {/* Address */}
-          <div className="space-y-1.5">
-            <Label htmlFor="appt-addr">Adresse</Label>
-            <Input id="appt-addr" placeholder="12 rue des Lilas, Paris..." {...form.register('address')} />
           </div>
 
           {/* Type + assigned user */}
@@ -1066,7 +1090,10 @@ function CreateAppointmentDialog({
                 control={form.control}
                 name="leadId"
                 render={({ field }) => (
-                  <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value ?? ''}
+                    onValueChange={(v) => { field.onChange(v); reprendreDuLead(v); }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner un lead" />
                     </SelectTrigger>
@@ -1083,6 +1110,28 @@ function CreateAppointmentDialog({
               {leadsQuery.isLoading && <Skeleton className="h-4 w-24" />}
             </div>
           )}
+
+          {/* Adresse — placee apres l'association : choisir un lead la
+              remplit, et on doit le voir se produire. */}
+          <div className="space-y-1.5">
+            <ChampAdresse
+              id="appt-addr"
+              label="Adresse de l'intervention"
+              valeur={form.watch('address') ?? ''}
+              onValeurChange={(v) => form.setValue('address', v)}
+              onChoisir={(a) => form.setValue(
+                'address',
+                [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
+              )}
+              placeholder="Numéro, rue, ville…"
+            />
+            {adresseReprise && (
+              <p className="text-xs text-muted-foreground">
+                Reprise de la fiche du lead — modifiable si l'intervention a
+                lieu ailleurs.
+              </p>
+            )}
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>

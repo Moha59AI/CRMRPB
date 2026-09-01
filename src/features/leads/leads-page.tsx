@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { ChampAdresse } from '@/components/ChampAdresse';
 import { messageErreurBase } from '@/lib/erreurs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -610,7 +611,15 @@ function NewLeadDialog({
     last_name: '',
     phone: '',
     email: '',
+    // L'adresse complete, et non plus la seule ville : c'est ce qui permet a
+    // l'intervention d'apparaitre au bon endroit sur la carte de l'agenda.
+    address: '',
     city: '',
+    postal_code: '',
+    citycode: null as string | null,
+    latitude: null as number | null,
+    longitude: null as number | null,
+    geo_precision: null as 'exact' | 'approximatif' | null,
     vehicle_registration: '',
     vehicle_make: '',
     vehicle_model: '',
@@ -647,7 +656,9 @@ function NewLeadDialog({
 
   const resetForm = () => {
     setForm({
-      first_name: '', last_name: '', phone: '', email: '', city: '',
+      first_name: '', last_name: '', phone: '', email: '',
+      address: '', city: '', postal_code: '',
+      citycode: null, latitude: null, longitude: null, geo_precision: null,
       vehicle_registration: '', vehicle_make: '', vehicle_model: '',
       source: 'manual', insurance: '', offer: '',
     });
@@ -716,11 +727,26 @@ function NewLeadDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Ville</Label>
-              <Input
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="rounded-lg"
+              <ChampAdresse
+                label="Adresse"
+                valeur={form.address}
+                onValeurChange={(v) => setForm({
+                  // Saisie libre : on garde le texte sans inventer de commune,
+                  // et on abandonne une localisation qui ne lui correspond plus.
+                  ...form, address: v,
+                  citycode: null, latitude: null, longitude: null, geo_precision: null,
+                })}
+                onChoisir={(a) => setForm({
+                  ...form,
+                  address: [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
+                  city: a.city ?? '',
+                  postal_code: a.postal_code ?? '',
+                  citycode: a.citycode,
+                  latitude: a.latitude,
+                  longitude: a.longitude,
+                  geo_precision: a.geo_precision,
+                })}
+                placeholder="Numéro, rue, ville…"
               />
             </div>
             <div className="space-y-1.5">

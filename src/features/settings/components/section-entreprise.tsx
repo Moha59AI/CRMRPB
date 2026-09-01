@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { ChampAdresse } from '@/components/ChampAdresse';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchReglagesEntreprise, enregistrerReglagesEntreprise,
@@ -49,7 +50,7 @@ export function SectionEntreprise({ modifiable }: SectionEntrepriseProps) {
     attribution_auto: false,
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<Formulaire>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Formulaire>({
     resolver: zodResolver(schema),
     defaultValues: {
       nom: '', adresse: '', telephone: '', email: '', site_web: '', siret: '', zonesTexte: '',
@@ -182,9 +183,19 @@ export function SectionEntreprise({ modifiable }: SectionEntrepriseProps) {
           <Champ label="SIRET">
             <Input className="rounded-lg" disabled={!edition} {...register('siret')} />
           </Champ>
-          <Champ label="Adresse">
-            <Input className="rounded-lg" disabled={!edition} {...register('adresse')} />
-          </Champ>
+          <div className="md:col-span-2">
+            <ChampAdresse
+              label="Adresse"
+              valeur={watch('adresse') ?? ''}
+              desactive={!edition}
+              onValeurChange={(v) => setValue('adresse', v)}
+              onChoisir={(a) => setValue(
+                'adresse',
+                [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
+              )}
+              placeholder="Numéro, rue, ville…"
+            />
+          </div>
           <Champ label="Téléphone">
             <Input className="rounded-lg" disabled={!edition} {...register('telephone')} />
           </Champ>
