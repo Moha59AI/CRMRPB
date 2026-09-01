@@ -51,16 +51,30 @@ export async function localiserLeadsManquants(
   options: {
     onAvancement?: (a: Avancement) => void;
     signal?: AbortSignal;
+    /**
+     * Restreint la reprise a ces leads. Sans cette limite on geocoderait tout
+     * le carnet, soit des centaines d'appels pour des points que personne
+     * n'ira voir : seules les interventions planifiees ont un lieu.
+     */
+    idsLimites?: string[];
   } = {},
 ): Promise<ResultatLocalisation> {
   const workspaceId = await getWorkspaceId();
 
-  const { data, error } = await supabase
+  if (options.idsLimites && options.idsLimites.length === 0) {
+    return { traites: 0, total: 0, localises: 0, introuvables: 0, interrompu: false };
+  }
+
+  let selection = supabase
     .from('leads')
     .select('id, address, postal_code, city')
     .eq('workspace_id', workspaceId)
     .is('latitude', null)
     .or('address.not.is.null,city.not.is.null');
+
+  if (options.idsLimites) selection = selection.in('id', options.idsLimites);
+
+  const { data, error } = await selection;
 
   if (error) throw new Error(error.message);
 

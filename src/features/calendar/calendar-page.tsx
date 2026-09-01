@@ -34,7 +34,13 @@ import {
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
+import { CarteInterventions } from './carte-interventions';
+import {
+  fetchInterventionsCarte, compterInterventionsNonLocalisees, leadsDInterventions,
+} from '@/services/interventions-carte-service';
+import { localiserLeadsManquants, type Avancement } from '@/services/geocodage-lot';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -84,7 +90,7 @@ import type {
 // Types & constants
 // ---------------------------------------------------------------------------
 
-type View = 'day' | 'week' | 'month';
+type View = 'day' | 'week' | 'month' | 'carte';
 
 /** Valeur sentinelle : Radix refuse une SelectItem de valeur vide. */
 const SANS_CONSEILLER = '__aucun__';
@@ -1108,6 +1114,8 @@ function CreateAppointmentDialog({
 
 export function CalendarPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const today = useMemo(() => new Date(), []);
 
   const [view, setView] = useState<View>('week');
@@ -1134,7 +1142,8 @@ export function CalendarPage() {
     if (view === 'day') {
       return { rangeStart: dayStart(currentDate), rangeEnd: dayEnd(currentDate) };
     }
-    if (view === 'week') {
+    // La carte se raisonne a la semaine : c'est l'horizon d'une tournee.
+    if (view === 'week' || view === 'carte') {
       return {
         rangeStart: dayStart(startOfWeek(currentDate, { weekStartsOn: 1 })),
         rangeEnd: dayEnd(endOfWeek(currentDate, { weekStartsOn: 1 })),
@@ -1160,6 +1169,56 @@ export function CalendarPage() {
   const profilesQuery = useQuery<Profile[], Error>({
     queryKey: ['profiles'],
     queryFn: () => fetchProfiles(),
+  });
+
+  // ---- Carte ----
+  // Seules les interventions se placent sur une carte : un lead « a rappeler »
+  // n'a pas de lieu, et l'afficher noierait les deplacements reels.
+  const carteQuery = useQuery({
+    queryKey: ['interventions-carte', rangeStart.toISOString(), rangeEnd.toISOString(), effectiveAssignedUserId],
+    queryFn: () => fetchInterventionsCarte({
+      debut: rangeStart.toISOString(),
+      fin: rangeEnd.toISOString(),
+      assignedUserId: effectiveAssignedUserId,
+    }),
+    enabled: view === 'carte',
+  });
+
+  const { data: nonLocalisees } = useQuery({
+    queryKey: ['interventions-non-localisees', rangeStart.toISOString(), rangeEnd.toISOString()],
+    queryFn: () => compterInterventionsNonLocalisees({
+      debut: rangeStart.toISOString(),
+      fin: rangeEnd.toISOString(),
+    }),
+    enabled: view === 'carte',
+  });
+
+  const [avancement, setAvancement] = useState<Avancement | null>(null);
+
+  const localisation = useMutation({
+    mutationFn: async () => {
+      // Perimetre volontairement etroit : geocoder tout le carnet ferait des
+      // centaines d'appels pour des points que personne n'ira voir.
+      const ids = await leadsDInterventions({
+        debut: rangeStart.toISOString(),
+        fin: rangeEnd.toISOString(),
+      });
+      return localiserLeadsManquants({ idsLimites: ids, onAvancement: setAvancement });
+    },
+    onSuccess: (r) => {
+      setAvancement(null);
+      queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions-non-localisees'] });
+      toast.success(`${r.localises} intervention(s) localisée(s)`, {
+        description: r.introuvables > 0
+          ? `${r.introuvables} adresse(s) introuvable(s) dans le référentiel.`
+          : undefined,
+      });
+    },
+    onError: (e: Error) => {
+      setAvancement(null);
+      toast.error('La localisation a échoué', { description: e.message });
+    },
   });
 
   // ---- Client-side status filter ----
@@ -1220,16 +1279,22 @@ export function CalendarPage() {
     onError: (err) => toast.error('Erreur lors de la suppression', { description: err.message }),
   });
 
+  // La fiche s'ouvre en surface superposee : l'agenda reste monte derriere,
+  // avec sa periode et ses filtres intacts.
+  const ouvrirIntervention = (leadId: string) => {
+    navigate(`/interventions/${leadId}`, { state: { background: location } });
+  };
+
   // ---- Navigation ----
   function goPrev() {
     if (view === 'day') setCurrentDate((d) => subDays(d, 1));
-    else if (view === 'week') setCurrentDate((d) => subDays(d, 7));
+    else if (view === 'week' || view === 'carte') setCurrentDate((d) => subDays(d, 7));
     else setCurrentDate((d) => subMonths(d, 1));
   }
 
   function goNext() {
     if (view === 'day') setCurrentDate((d) => addDays(d, 1));
-    else if (view === 'week') setCurrentDate((d) => addDays(d, 7));
+    else if (view === 'week' || view === 'carte') setCurrentDate((d) => addDays(d, 7));
     else setCurrentDate((d) => addMonths(d, 1));
   }
 
@@ -1273,7 +1338,7 @@ export function CalendarPage() {
     if (view === 'day') {
       return cap(format(currentDate, 'EEEE d MMMM yyyy', { locale: fr }));
     }
-    if (view === 'week') {
+    if (view === 'week' || view === 'carte') {
       const start = startOfWeek(currentDate, { weekStartsOn: 1 });
       const end = endOfWeek(currentDate, { weekStartsOn: 1 });
       if (isSameMonth(start, end)) {
@@ -1323,7 +1388,7 @@ export function CalendarPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* View toggle */}
             <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
-              {(['day', 'week', 'month'] as View[]).map((v) => (
+              {(['day', 'week', 'month', 'carte'] as View[]).map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -1335,7 +1400,7 @@ export function CalendarPage() {
                   )}
                   onClick={() => setView(v)}
                 >
-                  {v === 'day' ? 'Jour' : v === 'week' ? 'Semaine' : 'Mois'}
+                  {v === 'day' ? 'Jour' : v === 'week' ? 'Semaine' : v === 'month' ? 'Mois' : 'Carte'}
                 </button>
               ))}
             </div>
@@ -1422,6 +1487,17 @@ export function CalendarPage() {
               <Plus className="h-4 w-4" />
               Nouveau rendez-vous
             </Button>
+          </div>
+        ) : view === 'carte' ? (
+          <div className="h-[calc(100vh-16rem)] min-h-[420px]">
+            <CarteInterventions
+              interventions={carteQuery.data ?? []}
+              onOuvrirLead={ouvrirIntervention}
+              nonLocalisees={nonLocalisees ?? 0}
+              onLocaliser={() => localisation.mutate()}
+              localisationEnCours={localisation.isPending}
+              avancement={avancement}
+            />
           </div>
         ) : view === 'day' ? (
           <DayView

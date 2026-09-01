@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star, Map as MapIcon,
+  Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -26,8 +26,6 @@ import {
 import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { messageErreurBase } from '@/lib/erreurs';
-import { compterLeadsNonLocalises, localiserLeadsManquants, type Avancement } from '@/services/geocodage-lot';
-import { CarteInterventions } from './carte-interventions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OUTILS_DEMO_ACTIFS } from '@/config/features';
@@ -43,7 +41,7 @@ import { StatusBadge } from './status-badge';
 
 // ============ MAIN PAGE ============
 
-type ViewMode = 'table' | 'kanban' | 'compact' | 'carte';
+type ViewMode = 'table' | 'kanban' | 'compact';
 
 export function LeadsPage() {
   const queryClient = useQueryClient();
@@ -78,33 +76,6 @@ export function LeadsPage() {
 
   // Seeding state
   const [seeding, setSeeding] = useState(false);
-
-  // Reprise des leads sans coordonnees, pour que la carte ne soit pas vide.
-  const [avancement, setAvancement] = useState<Avancement | null>(null);
-
-  const { data: nonLocalises } = useQuery({
-    queryKey: ['leads-non-localises'],
-    queryFn: compterLeadsNonLocalises,
-    enabled: view === 'carte',
-  });
-
-  const localisation = useMutation({
-    mutationFn: () => localiserLeadsManquants({ onAvancement: setAvancement }),
-    onSuccess: (r) => {
-      setAvancement(null);
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['leads-non-localises'] });
-      toast.success(`${r.localises} intervention(s) localisée(s)`, {
-        description: r.introuvables > 0
-          ? `${r.introuvables} adresse(s) introuvable(s) dans le référentiel.`
-          : undefined,
-      });
-    },
-    onError: (e: Error) => {
-      setAvancement(null);
-      toast.error('La localisation a échoué', { description: e.message });
-    },
-  });
 
   // Queries
   const { data: leads, isLoading, isError, error, refetch } = useQuery({
@@ -208,7 +179,6 @@ export function LeadsPage() {
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
           <ViewToggleButton active={view === 'kanban'} onClick={() => setView('kanban')} icon={Columns3} label="Pipeline" />
           <ViewToggleButton active={view === 'compact'} onClick={() => setView('compact')} icon={List} label="Liste compacte" />
-          <ViewToggleButton active={view === 'carte'} onClick={() => setView('carte')} icon={MapIcon} label="Carte" />
         </div>
 
         <div className="h-6 w-px bg-border" />
@@ -303,16 +273,6 @@ export function LeadsPage() {
               <CompactList
                 leads={leads}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
-              />
-            )}
-            {view === 'carte' && (
-              <CarteInterventions
-                leads={leads}
-                onOuvrirLead={(lead) => ouvrirIntervention(lead.id)}
-                nonLocalises={nonLocalises ?? 0}
-                onLocaliser={() => localisation.mutate()}
-                localisationEnCours={localisation.isPending}
-                avancement={avancement}
               />
             )}
           </>
