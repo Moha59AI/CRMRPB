@@ -107,3 +107,29 @@ export const LIBELLE_VITRAGE: Record<GlassType, string> = {
   impact: 'Impact / réparation',
   autre: 'Autre',
 };
+
+/**
+ * Libelles des champs modifiables, pour dire a l'utilisateur ce qu'il s'apprete
+ * a enregistrer. Les colonnes techniques (citycode, coordonnees) n'y figurent
+ * pas : elles suivent l'adresse et ne se modifient jamais seules.
+ */
+export const LIBELLE_CHAMP_LEAD: Partial<Record<keyof Lead, string>> = {
+  first_name: 'Prénom',
+  last_name: 'Nom',
+  phone: 'Téléphone',
+  email: 'Email',
+  address: 'Adresse',
+  city: 'Ville',
+  postal_code: 'Code postal',
+  vehicle_make: 'Marque',
+  vehicle_model: 'Modèle',
+  vehicle_registration: 'Immatriculation',
+  glass_type: 'Vitrage',
+  has_adas_camera: 'Caméra ADAS',
+  franchise_amount: 'Reste à charge',
+  insurance: 'Assureur',
+  offer: 'Offre',
+  status: 'Statut',
+  assigned_user_id: 'Conseiller',
+  advisor_notes: 'Notes',
+};

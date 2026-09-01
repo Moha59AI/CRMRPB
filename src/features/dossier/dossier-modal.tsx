@@ -13,6 +13,13 @@ import { LeadPipeline } from '@/features/leads/lead-pipeline';
 import { StatusBadge } from '@/features/leads/status-badge';
 import { LIBELLE_VITRAGE, leadName, vehicleLabel } from '@/features/leads/lead-shared';
 import { fetchLeadById, updateLead } from '@/services/leads-service';
+import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
+import { BarreEnregistrement } from '@/components/BarreEnregistrement';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { LIBELLE_CHAMP_LEAD } from '@/features/leads/lead-shared';
 import { fetchProfiles } from '@/services/profiles-service';
 import { createCommunication } from '@/services/activity-service';
 import { DossierContenu } from './dossier-contenu';
@@ -78,6 +85,40 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Les champs de la fiche alimentent un brouillon ; seules les actions
+  // (changer le statut, demander les documents) ecrivent immediatement.
+  const brouillon = useBrouillon<Lead>(lead ?? undefined, leadId);
+  useAvertirSiModifie(brouillon.estModifie);
+
+  const enregistrer = () => {
+    if (!brouillon.estModifie) return;
+
+    // Les espaces de bordure viennent de la frappe, pas de l'intention. On ne
+    // les coupe qu'ici : le faire a chaque touche empecherait de taper
+    // « Jean-Pierre » apres « Jean ».
+    const propre = Object.fromEntries(
+      Object.entries(brouillon.modifications).map(([cle, v]) =>
+        [cle, typeof v === 'string' ? (v.trim() || null) : v],
+      ),
+    ) as Partial<Lead>;
+
+    majLead.mutate(propre, {
+      onSuccess: () => {
+        brouillon.vider();
+        toast.success('Fiche enregistrée');
+      },
+    });
+  };
+
+  // Fermer en perdant sa saisie est le defaut que ce brouillon doit eviter :
+  // on demande, plutot que de fermer ou de refuser.
+  const [fermetureDemandee, setFermetureDemandee] = useState(false);
+
+  const fermerAvecGarde = useCallback(() => {
+    if (brouillon.estModifie) setFermetureDemandee(true);
+    else fermer();
+  }, [brouillon.estModifie, fermer]);
+
   const journaliser = (type: 'call_outbound' | 'sms_outbound', contenu: string) => {
     if (!leadId) return;
     createCommunication({
@@ -139,7 +180,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       <FicheOverlay
         entete={<Skeleton className="h-8 w-64 rounded-lg" />}
         onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
-        onFermer={fermer} pleinePage={pleinePage}
+        onFermer={fermerAvecGarde} pleinePage={pleinePage}
       >
         <div className="space-y-4">
           <Skeleton className="h-24 w-full rounded-xl" />
@@ -221,7 +262,15 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     </>
   );
 
-  const piedDePage = etat.mode === 'relance' ? (
+  const piedDePage = brouillon.estModifie ? (
+    <BarreEnregistrement
+      nombreModifications={brouillon.champsModifies.length}
+      champs={brouillon.champsModifies.map((c) => LIBELLE_CHAMP_LEAD[c] ?? String(c))}
+      enCours={majLead.isPending}
+      onEnregistrer={enregistrer}
+      onAnnuler={brouillon.annuler}
+    />
+  ) : etat.mode === 'relance' ? (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Button size="sm" variant="outline" className="rounded-full"
         disabled={majLead.isPending} onClick={reporterRelance}>
@@ -267,12 +316,58 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       }
     >
       <DossierContenu
-        lead={lead}
+        lead={brouillon.valeur ?? lead}
         profiles={profiles ?? []}
         onglet={onglet}
-        onUpdate={(updates) => majLead.mutate(updates)}
+        onUpdate={brouillon.modifier}
         enregistrement={majLead.isPending}
       />
+
+      <AlertDialog open={fermetureDemandee} onOpenChange={setFermetureDemandee}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Modifications non enregistrées</AlertDialogTitle>
+            <AlertDialogDescription>
+              {brouillon.champsModifies.length} champ
+              {brouillon.champsModifies.length > 1 ? 's ont' : ' a'} été modifié
+              {brouillon.champsModifies.length > 1 ? 's' : ''} sans être enregistré
+              {brouillon.champsModifies.length > 1 ? 's' : ''} :{' '}
+              {brouillon.champsModifies
+                .map((c) => LIBELLE_CHAMP_LEAD[c] ?? String(c))
+                .join(', ')}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Continuer la saisie</AlertDialogCancel>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                brouillon.annuler();
+                setFermetureDemandee(false);
+                fermer();
+              }}
+            >
+              Fermer sans enregistrer
+            </Button>
+            <AlertDialogAction
+              className="rounded-full"
+              onClick={() => {
+                setFermetureDemandee(false);
+                majLead.mutate(brouillon.modifications, {
+                  onSuccess: () => {
+                    brouillon.vider();
+                    toast.success('Fiche enregistrée');
+                    fermer();
+                  },
+                });
+              }}
+            >
+              Enregistrer et fermer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FicheOverlay>
   );
 }

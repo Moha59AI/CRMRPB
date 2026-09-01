@@ -1,11 +1,23 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, MapPin, Car, History, Wrench,
   BellOff, ChevronRight,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { ChampAdresse } from '@/components/ChampAdresse';
+import { BarreEnregistrement } from '@/components/BarreEnregistrement';
+import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { FicheOverlay, ActionMobile, type OngletFiche } from '@/features/fiche/fiche-overlay';
@@ -13,12 +25,19 @@ import { StatusBadge } from '@/features/leads/status-badge';
 import { LIBELLE_VITRAGE, formatDateTime, formatDate } from '@/features/leads/lead-shared';
 import {
   fetchContactById, fetchSyntheseClient, fetchInterventionsClient,
-  fetchVehiclesForContact,
+  fetchVehiclesForContact, updateContact,
 } from '@/services/contacts-service';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
-import type { Lead } from '@/types';
+import type { Lead, Contact } from '@/types';
 
 type OngletClient = 'apercu' | 'interventions' | 'vehicules';
+
+const LIBELLE_CHAMP_CLIENT: Partial<Record<keyof Contact, string>> = {
+  first_name: 'Prénom', last_name: 'Nom', phone: 'Téléphone', email: 'Email',
+  address: 'Adresse', city: 'Ville', postal_code: 'Code postal',
+  sms_consent: 'Consentement SMS', email_consent: 'Consentement email',
+  unsubscribed: 'Désinscription', notes: 'Notes',
+};
 
 const ONGLETS: readonly OngletFiche<OngletClient>[] = [
   { cle: 'apercu', label: "Vue d'ensemble" },
@@ -52,6 +71,40 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     queryFn: () => fetchVehiclesForContact(contactId as string),
     enabled: !!contactId,
   });
+
+  const queryClient = useQueryClient();
+
+  const brouillon = useBrouillon<Contact>(client ?? undefined, contactId);
+  useAvertirSiModifie(brouillon.estModifie);
+
+  const [fermetureDemandee, setFermetureDemandee] = useState(false);
+
+  const majClient = useMutation({
+    mutationFn: (updates: Partial<Contact>) => updateContact(contactId as string, updates),
+    onSuccess: (r) => {
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      brouillon.vider();
+      queryClient.invalidateQueries({ queryKey: ['client', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success('Fiche client enregistrée');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const enregistrer = (apres?: () => void) => {
+    const propre = Object.fromEntries(
+      Object.entries(brouillon.modifications).map(([cle, v]) =>
+        [cle, typeof v === 'string' ? (v.trim() || null) : v],
+      ),
+    ) as Partial<Contact>;
+
+    majClient.mutate(propre, {
+      onSuccess: (r) => { if (!r.error) apres?.(); },
+    });
+  };
 
   const etat = (location.state ?? {}) as EtatOuvertureDossier;
 
@@ -88,6 +141,9 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       </FicheOverlay>
     );
   }
+
+  // Ce que l'ecran affiche : la fiche recouverte du brouillon en cours.
+  const fiche = brouillon.valeur ?? client;
 
   const entete = (
     <>
@@ -133,8 +189,20 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       onglets={ONGLETS}
       ongletActif={onglet}
       onChangerOnglet={setOnglet}
-      onFermer={fermer}
+      onFermer={() => {
+        if (brouillon.estModifie) setFermetureDemandee(true);
+        else fermer();
+      }}
       pleinePage={pleinePage}
+      piedDePage={brouillon.estModifie ? (
+        <BarreEnregistrement
+          nombreModifications={brouillon.champsModifies.length}
+          champs={brouillon.champsModifies.map((c) => LIBELLE_CHAMP_CLIENT[c] ?? String(c))}
+          enCours={majClient.isPending}
+          onEnregistrer={() => enregistrer()}
+          onAnnuler={brouillon.annuler}
+        />
+      ) : undefined}
       actionsMobile={
         <>
           <ActionMobile icone={Phone} label="Appeler" onClick={appeler} desactive={!client.phone} />
@@ -166,18 +234,8 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           </div>
 
           <div className="space-y-4">
-            <Encart titre="Coordonnées" lignes={[
-              ['Téléphone', client.phone],
-              ['Email', client.email],
-              ['Adresse', client.address],
-              ['Ville', client.city],
-              ['Code postal', client.postal_code],
-            ]} />
-            <Encart titre="Consentements" lignes={[
-              ['SMS', client.sms_consent ? 'Accordé' : 'Refusé'],
-              ['Email', client.email_consent ? 'Accordé' : 'Refusé'],
-              ['Désinscrit', client.unsubscribed ? 'Oui' : 'Non'],
-            ]} />
+            <CoordonneesClient client={fiche} onModifier={brouillon.modifier} />
+            <ConsentementsClient client={fiche} onModifier={brouillon.modifier} />
             <Encart titre="Client depuis" lignes={[
               ['Créé le', formatDate(client.created_at)],
               ['Première intervention', synthese?.premiere_intervention
@@ -188,7 +246,196 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           </div>
         </div>
       )}
+
+      <AlertDialog open={fermetureDemandee} onOpenChange={setFermetureDemandee}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Modifications non enregistrées</AlertDialogTitle>
+            <AlertDialogDescription>
+              {brouillon.champsModifies
+                .map((c) => LIBELLE_CHAMP_CLIENT[c] ?? String(c))
+                .join(', ')} — non enregistré
+              {brouillon.champsModifies.length > 1 ? 's' : ''}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Continuer la saisie</AlertDialogCancel>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                brouillon.annuler();
+                setFermetureDemandee(false);
+                fermer();
+              }}
+            >
+              Fermer sans enregistrer
+            </Button>
+            <AlertDialogAction
+              className="rounded-full"
+              onClick={() => {
+                setFermetureDemandee(false);
+                enregistrer(fermer);
+              }}
+            >
+              Enregistrer et fermer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FicheOverlay>
+  );
+}
+
+/**
+ * Coordonnees editables.
+ *
+ * L'adresse passe par la Base Adresse Nationale : corriger la ville a la main
+ * abandonne le code INSEE et les coordonnees, qui ne lui correspondraient plus.
+ */
+function CoordonneesClient({
+  client, onModifier,
+}: { client: Contact; onModifier: (u: Partial<Contact>) => void }) {
+  const [recherche, setRecherche] = useState(
+    [client.address, client.postal_code, client.city].filter(Boolean).join(' '),
+  );
+
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Coordonnées
+      </h3>
+
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <ChampClient
+            label="Prénom" valeur={client.first_name}
+            onChange={(v) => onModifier({ first_name: v })}
+          />
+          <ChampClient
+            label="Nom" valeur={client.last_name}
+            onChange={(v) => onModifier({ last_name: v })}
+          />
+        </div>
+        <ChampClient
+          label="Téléphone" valeur={client.phone}
+          onChange={(v) => onModifier({ phone: v })}
+        />
+        <ChampClient
+          label="Email" type="email" valeur={client.email}
+          onChange={(v) => onModifier({ email: v })}
+        />
+
+        <ChampAdresse
+          label="Adresse"
+          valeur={recherche}
+          onValeurChange={(v) => {
+            setRecherche(v);
+            onModifier({
+              address: v, citycode: null, latitude: null,
+              longitude: null, geo_precision: null,
+            });
+          }}
+          onChoisir={(a) => {
+            setRecherche([a.address, a.postal_code, a.city].filter(Boolean).join(' '));
+            onModifier(a);
+          }}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <ChampClient
+            label="Ville" valeur={client.city}
+            onChange={(v) => onModifier({ city: v })}
+          />
+          <ChampClient
+            label="Code postal" valeur={client.postal_code}
+            onChange={(v) => onModifier({ postal_code: v })}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChampClient({
+  label, valeur, onChange, type,
+}: { label: string; valeur: string | null; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        type={type}
+        value={valeur ?? ''}
+        placeholder="À renseigner"
+        className="rounded-lg"
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+/**
+ * Consentements.
+ *
+ * Se desinscrire prime sur les deux consentements : c'est une demande
+ * explicite du client, et laisser un consentement actif a cote laisserait une
+ * campagne le rattraper.
+ */
+function ConsentementsClient({
+  client, onModifier,
+}: { client: Contact; onModifier: (u: Partial<Contact>) => void }) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Consentements
+      </h3>
+
+      <div className="space-y-3">
+        <LigneConsentement
+          label="SMS"
+          actif={client.sms_consent}
+          desactive={client.unsubscribed}
+          onChange={(v) => onModifier({ sms_consent: v })}
+        />
+        <LigneConsentement
+          label="Email"
+          actif={client.email_consent}
+          desactive={client.unsubscribed}
+          onChange={(v) => onModifier({ email_consent: v })}
+        />
+        <LigneConsentement
+          label="Désinscrit de tout"
+          actif={client.unsubscribed}
+          onChange={(v) => onModifier(
+            v ? { unsubscribed: true, sms_consent: false, email_consent: false }
+              : { unsubscribed: false },
+          )}
+        />
+      </div>
+
+      {client.unsubscribed && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Ce client a demandé à ne plus être contacté. Aucune campagne ne
+          l'atteindra tant que cette case est cochée.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LigneConsentement({
+  label, actif, desactive, onChange,
+}: { label: string; actif: boolean; desactive?: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-foreground">{label}</span>
+      <Switch
+        checked={actif}
+        disabled={desactive}
+        onCheckedChange={onChange}
+        aria-label={label}
+      />
+    </div>
   );
 }
 

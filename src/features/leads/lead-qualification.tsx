@@ -141,16 +141,13 @@ export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificati
             <div className="relative">
               <Input
                 id="franchise" type="number" inputMode="decimal" min={0} step="0.01"
-                defaultValue={lead.franchise_amount ?? ''}
+                value={lead.franchise_amount ?? ''}
                 placeholder="Non su"
                 disabled={desactive}
                 className="rounded-lg pr-7 tabular"
-                onBlur={(e) => {
-                  const brut = e.target.value.trim();
-                  const valeur = brut === '' ? null : Number(brut);
-                  if (valeur !== lead.franchise_amount) {
-                    onUpdate({ franchise_amount: valeur });
-                  }
+                onChange={(e) => {
+                  const brut = e.target.value;
+                  onUpdate({ franchise_amount: brut === '' ? null : Number(brut) });
                 }}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
@@ -190,31 +187,35 @@ interface ChampTexteProps {
  * telle quelle, sans code INSEE.
  */
 function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationProps) {
-  const complete = [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ');
-  const [saisie, setSaisie] = useState(complete);
+  const [saisie, setSaisie] = useState(
+    [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' '),
+  );
   const itineraire = lienItineraire(lead);
 
-  // La fiche change quand on passe au lead suivant : sans cette remise a jour,
-  // l'adresse du precedent resterait affichee.
+  // On ne resynchronise que sur changement de fiche. Se caler sur
+  // `lead.address` ferait boucler : la saisie alimente le brouillon, qui
+  // reecrirait aussitot la saisie en y recollant ville et code postal.
   useEffect(() => {
     setSaisie([lead.address, lead.postal_code, lead.city].filter(Boolean).join(' '));
-  }, [lead.id, lead.address, lead.postal_code, lead.city]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
 
   return (
     <div className="space-y-2">
       <ChampAdresse
         id="adresse_intervention"
         valeur={saisie}
-        onValeurChange={setSaisie}
+        onValeurChange={(v) => {
+          setSaisie(v);
+          // Saisie libre : on garde le texte sans inventer de commune, et on
+          // abandonne la localisation qui ne lui correspond plus.
+          onUpdate({ address: v, citycode: null, latitude: null, longitude: null, geo_precision: null });
+        }}
         desactive={desactive}
         placeholder="Numéro, rue, ville…"
-        onChoisir={(a) => onUpdate(a)}
-        onBlur={() => {
-          // Saisie libre : on ne garde que le texte, sans inventer de commune.
-          const texte = saisie.trim();
-          if (texte && texte !== complete) {
-            onUpdate({ address: texte, citycode: null, latitude: null, longitude: null });
-          }
+        onChoisir={(a) => {
+          setSaisie([a.address, a.postal_code, a.city].filter(Boolean).join(' '));
+          onUpdate(a);
         }}
       />
 
@@ -224,7 +225,7 @@ function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationPro
             <MapPin className="h-3 w-3" />
             {lead.city} · commune {lead.citycode}
           </span>
-          {itineraire && (
+          {itineraire && lead.geo_precision === 'exact' && (
             <a
               href={itineraire}
               target="_blank"
@@ -236,7 +237,7 @@ function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationPro
           )}
         </p>
       ) : (
-        complete && (
+        saisie.trim() !== '' && (
           <p className="text-xs text-muted-foreground">
             Adresse saisie à la main — choisissez une suggestion pour la localiser.
           </p>
@@ -246,21 +247,24 @@ function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationPro
   );
 }
 
-/** Champ enregistré à la sortie, et seulement si la valeur a changé. */
+/**
+ * Champ alimentant le brouillon à chaque frappe.
+ *
+ * On ne coupe pas les espaces ici : « Jean » suivi d'un espace deviendrait
+ * « Jean » et empêcherait de taper « Jean-Pierre ». Le nettoyage se fait à
+ * l'enregistrement.
+ */
 function ChampTexte({ id, label, valeur, onValider, desactive, majuscules }: ChampTexteProps) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
-        defaultValue={valeur ?? ''}
+        value={valeur ?? ''}
         placeholder="À renseigner"
         disabled={desactive}
         className={cn('rounded-lg', majuscules && 'uppercase tabular')}
-        onBlur={(e) => {
-          const suite = e.target.value.trim() || null;
-          if (suite !== valeur) onValider(suite);
-        }}
+        onChange={(e) => onValider(e.target.value)}
       />
     </div>
   );
