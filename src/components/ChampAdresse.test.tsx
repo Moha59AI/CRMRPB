@@ -71,6 +71,7 @@ describe('ChampAdresse', () => {
       citycode: '59350',
       latitude: 50.625081,
       longitude: 3.063089,
+      geo_precision: 'exact',
     });
   });
 

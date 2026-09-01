@@ -81,6 +81,8 @@ export interface Lead {
   citycode: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** exact = adresse au numero. approximatif = centre de commune. null = non localise. */
+  geo_precision: 'exact' | 'approximatif' | null;
   vehicle_registration: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
@@ -204,6 +206,8 @@ export interface Contact {
   citycode: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** exact = adresse au numero. approximatif = centre de commune. null = non localise. */
+  geo_precision: 'exact' | 'approximatif' | null;
   lead_id: string | null;
   notes: string | null;
   sms_consent: boolean;

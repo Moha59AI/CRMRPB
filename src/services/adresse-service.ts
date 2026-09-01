@@ -41,6 +41,12 @@ export interface AdresseNormalisee {
   citycode: string | null;
   latitude: number | null;
   longitude: number | null;
+  /**
+   * `exact` quand la BAN a positionne un numero ou une voie, `approximatif`
+   * quand elle n'a su placer que le centre de la commune. Suivre un point
+   * approximatif menerait le technicien devant la mairie.
+   */
+  geo_precision: 'exact' | 'approximatif' | null;
 }
 
 interface OptionsRecherche {
@@ -180,7 +186,20 @@ export function normaliser(s: AdresseSuggestion): AdresseNormalisee {
     citycode: s.citycode,
     latitude: s.latitude,
     longitude: s.longitude,
+    geo_precision: precisionDe(s),
   };
+}
+
+/**
+ * Fiabilite du point renvoye par la BAN.
+ *
+ * `municipality` et `locality` ne designent pas une adresse mais un centre de
+ * commune ou de lieu-dit : le point est bon pour une vue d'ensemble, pas pour
+ * s'y rendre.
+ */
+export function precisionDe(s: AdresseSuggestion): 'exact' | 'approximatif' | null {
+  if (s.latitude == null || s.longitude == null) return null;
+  return s.type === 'housenumber' || s.type === 'street' ? 'exact' : 'approximatif';
 }
 
 /** Lien vers un itineraire, pour le technicien qui part sur place. */

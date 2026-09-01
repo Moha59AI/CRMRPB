@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  rechercherAdresse, normaliser, lienItineraire, type AdresseSuggestion,
+  rechercherAdresse, normaliser, lienItineraire, precisionDe, type AdresseSuggestion,
 } from './adresse-service';
 
 // Reponse reelle de la Geoplateforme, copiee d'un appel a l'API.
@@ -124,6 +124,31 @@ describe('normaliser', () => {
 
   it('renvoie null plutôt qu’une chaîne vide pour une commune seule', () => {
     expect(normaliser({ ...base, numero: null, rue: null }).address).toBeNull();
+  });
+
+  it('reporte la précision, qui décide si un itinéraire est proposé', () => {
+    expect(normaliser(base).geo_precision).toBe('exact');
+    expect(normaliser({ ...base, type: 'municipality' }).geo_precision).toBe('approximatif');
+  });
+});
+
+describe('precisionDe', () => {
+  const base: AdresseSuggestion = {
+    id: 'x', label: 'Lille', numero: null, rue: null, code_postal: '59000',
+    ville: 'Lille', citycode: '59350', contexte: null,
+    type: 'municipality', latitude: 50.63, longitude: 3.06, score: 0.9,
+  };
+
+  it('ne tient une adresse pour exacte qu’au numéro ou à la voie', () => {
+    expect(precisionDe({ ...base, type: 'housenumber' })).toBe('exact');
+    expect(precisionDe({ ...base, type: 'street' })).toBe('exact');
+    // Un centre de commune mènerait le technicien devant la mairie.
+    expect(precisionDe({ ...base, type: 'municipality' })).toBe('approximatif');
+    expect(precisionDe({ ...base, type: 'locality' })).toBe('approximatif');
+  });
+
+  it('renvoie null sans coordonnées', () => {
+    expect(precisionDe({ ...base, latitude: null })).toBeNull();
   });
 });
 
