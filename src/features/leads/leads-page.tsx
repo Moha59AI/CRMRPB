@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { messageErreurBase } from '@/lib/erreurs';
 import { compterLeadsNonLocalises, localiserLeadsManquants, type Avancement } from '@/services/geocodage-lot';
 import { CarteInterventions } from './carte-interventions';
 import { toast } from 'sonner';
@@ -129,11 +130,14 @@ export function LeadsPage() {
 
   // Mutations
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => updateLead(id, { status: status as LeadStatus }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await updateLead(id, { status: status as LeadStatus });
+      if (error) throw new Error(error);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(messageErreurBase(err.message)),
   });
 
   const seedMutation = useMutation({

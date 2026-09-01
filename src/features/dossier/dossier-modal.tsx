@@ -14,6 +14,7 @@ import { StatusBadge } from '@/features/leads/status-badge';
 import { LIBELLE_VITRAGE, leadName, vehicleLabel } from '@/features/leads/lead-shared';
 import { fetchLeadById, updateLead } from '@/services/leads-service';
 import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
+import { messageErreurBase } from '@/lib/erreurs';
 import { BarreEnregistrement } from '@/components/BarreEnregistrement';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -75,14 +76,20 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
 
 
   const majLead = useMutation({
-    mutationFn: (updates: Partial<Lead>) => updateLead(leadId as string, updates),
+    // updateLead renvoie son erreur au lieu de la lever : sans ce controle,
+    // onSuccess se declenche meme quand la base refuse, le brouillon se vide
+    // et l'utilisateur voit « enregistre » alors que rien n'est ecrit.
+    mutationFn: async (updates: Partial<Lead>) => {
+      const { error } = await updateLead(leadId as string, updates);
+      if (error) throw new Error(error);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(messageErreurBase(e.message)),
   });
 
   // Les champs de la fiche alimentent un brouillon ; seules les actions

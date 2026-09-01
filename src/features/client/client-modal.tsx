@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { ChampAdresse } from '@/components/ChampAdresse';
 import { BarreEnregistrement } from '@/components/BarreEnregistrement';
 import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
+import { messageErreurBase } from '@/lib/erreurs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { FicheOverlay, ActionMobile, type OngletFiche } from '@/features/fiche/fiche-overlay';
@@ -80,18 +81,17 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const [fermetureDemandee, setFermetureDemandee] = useState(false);
 
   const majClient = useMutation({
-    mutationFn: (updates: Partial<Contact>) => updateContact(contactId as string, updates),
-    onSuccess: (r) => {
-      if (r.error) {
-        toast.error(r.error);
-        return;
-      }
+    mutationFn: async (updates: Partial<Contact>) => {
+      const { error } = await updateContact(contactId as string, updates);
+      if (error) throw new Error(error);
+    },
+    onSuccess: () => {
       brouillon.vider();
       queryClient.invalidateQueries({ queryKey: ['client', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Fiche client enregistrée');
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(messageErreurBase(e.message)),
   });
 
   const enregistrer = (apres?: () => void) => {
@@ -101,9 +101,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       ),
     ) as Partial<Contact>;
 
-    majClient.mutate(propre, {
-      onSuccess: (r) => { if (!r.error) apres?.(); },
-    });
+    majClient.mutate(propre, { onSuccess: () => apres?.() });
   };
 
   const etat = (location.state ?? {}) as EtatOuvertureDossier;
