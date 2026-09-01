@@ -32,6 +32,12 @@ create temp table resultats (
   ok boolean
 ) on commit drop;
 
+-- Les tests s'executent sous le role `authenticated` : sans ces droits, ils ne
+-- pourraient pas consigner leurs propres resultats dans la table temporaire,
+-- creee elle par le proprietaire de la session.
+grant select, insert on resultats to authenticated;
+grant usage, select on sequence resultats_ordre_seq to authenticated;
+
 -- Un test = une assertion. `attendu` dit si l'accès doit passer.
 create or replace function pg_temp.verifier(
   p_role text, p_cas text, p_attendu boolean, p_requete text
