@@ -73,7 +73,14 @@ export interface Lead {
   last_name: string | null;
   phone: string | null;
   email: string | null;
+  /** Adresse de l'intervention. Renseignee via la Base Adresse Nationale. */
+  address: string | null;
   city: string | null;
+  postal_code: string | null;
+  /** Code INSEE de la commune : identifie la commune sans ambiguite d'orthographe. */
+  citycode: string | null;
+  latitude: number | null;
+  longitude: number | null;
   vehicle_registration: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
@@ -193,6 +200,10 @@ export interface Contact {
   address: string | null;
   city: string | null;
   postal_code: string | null;
+  /** Code INSEE de la commune : identifie la commune sans ambiguite d'orthographe. */
+  citycode: string | null;
+  latitude: number | null;
+  longitude: number | null;
   lead_id: string | null;
   notes: string | null;
   sms_consent: boolean;

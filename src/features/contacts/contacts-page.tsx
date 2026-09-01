@@ -1,5 +1,5 @@
 import {
-  useState,
+  useState, useRef,
 } from 'react';
 import {
   useQuery, useMutation, useQueryClient,
@@ -22,6 +22,9 @@ import {
 import {
   PageHeader,
 } from '@/components/PageHeader';
+import {
+  ChampAdresse,
+} from '@/components/ChampAdresse';
 import {
   Input,
 } from '@/components/ui/input';
@@ -234,6 +237,14 @@ function CreateContactDialog({
 }) {
   const queryClient = useQueryClient();
 
+  const [rechercheAdresse, setRechercheAdresse] = useState('');
+  // Renseignes uniquement par la BAN : une saisie manuelle ne peut pas
+  // inventer un code INSEE ni des coordonnees.
+  const [geo, setGeo] = useState<{
+    citycode: string | null; latitude: number | null; longitude: number | null;
+  }>({ citycode: null, latitude: null, longitude: null });
+  const villeChoisie = useRef<string | null>(null);
+
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
@@ -242,9 +253,20 @@ function CreateContactDialog({
     },
   });
 
+  const reinitialiser = () => {
+    form.reset();
+    setRechercheAdresse('');
+    setGeo({ citycode: null, latitude: null, longitude: null });
+    villeChoisie.current = null;
+  };
+
   const mutation = useMutation({
-    mutationFn: (values: ContactFormValues) =>
-      createContact({
+    mutationFn: (values: ContactFormValues) => {
+      // Si la ville a ete corrigee a la main apres la selection, le code INSEE
+      // et les coordonnees ne correspondent plus : mieux vaut rien que faux.
+      const geoValide = geo.citycode !== null && values.city === villeChoisie.current;
+
+      return createContact({
         first_name: values.first_name,
         last_name: values.last_name,
         phone: values.phone,
@@ -252,9 +274,13 @@ function CreateContactDialog({
         address: values.address || null,
         city: values.city || null,
         postal_code: values.postal_code || null,
+        citycode: geoValide ? geo.citycode : null,
+        latitude: geoValide ? geo.latitude : null,
+        longitude: geoValide ? geo.longitude : null,
         sms_consent: false,
         email_consent: false,
-      }),
+      });
+    },
     onSuccess: (res) => {
       if (res.error) {
         toast.error(res.error);
@@ -262,7 +288,7 @@ function CreateContactDialog({
       }
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Contact créé');
-      form.reset();
+      reinitialiser();
       onOpenChange(false);
     },
     onError: (err) => toast.error((err as Error)?.message || 'Erreur de création'),
@@ -271,7 +297,7 @@ function CreateContactDialog({
   const onSubmit = (values: ContactFormValues) => mutation.mutate(values);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) form.reset(); }}>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reinitialiser(); }}>
       <DialogContent className="max-w-lg rounded-xl">
         <DialogHeader>
           <DialogTitle>Nouveau contact</DialogTitle>
@@ -303,6 +329,22 @@ function CreateContactDialog({
             error={form.formState.errors.email?.message}
             {...form.register('email')}
           />
+          <ChampAdresse
+            label="Rechercher une adresse"
+            valeur={rechercheAdresse}
+            onValeurChange={setRechercheAdresse}
+            onChoisir={(a) => {
+              form.setValue('address', a.address ?? '');
+              form.setValue('city', a.city ?? '');
+              form.setValue('postal_code', a.postal_code ?? '');
+              villeChoisie.current = a.city ?? '';
+              setGeo({ citycode: a.citycode, latitude: a.latitude, longitude: a.longitude });
+            }}
+          />
+
+          {/* Les trois champs restent visibles et corrigeables : la BAN ne
+              connaît pas tout, et un complément d'adresse (bâtiment, étage,
+              code) n'y figure jamais. */}
           <FormField
             label="Adresse"
             error={form.formState.errors.address?.message}

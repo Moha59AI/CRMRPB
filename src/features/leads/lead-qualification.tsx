@@ -1,6 +1,9 @@
-import { AlertTriangle, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Info, MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ChampAdresse } from '@/components/ChampAdresse';
+import { lienItineraire } from '@/services/adresse-service';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -114,11 +117,14 @@ export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificati
             onValider={(v) => onUpdate({ vehicle_registration: v?.toUpperCase() ?? null })}
             desactive={desactive}
           />
-          <ChampTexte
-            id="city" label="Ville" valeur={lead.city}
-            onValider={(v) => onUpdate({ city: v })} desactive={desactive}
-          />
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Lieu de l'intervention
+        </h3>
+        <AdresseIntervention lead={lead} onUpdate={onUpdate} desactive={desactive} />
       </section>
 
       <section className="space-y-3">
@@ -171,6 +177,73 @@ interface ChampTexteProps {
   onValider: (valeur: string | null) => void;
   desactive?: boolean;
   majuscules?: boolean;
+}
+
+/**
+ * Adresse de l'intervention, assistée par la Base Adresse Nationale.
+ *
+ * Choisir une suggestion enregistre en une fois la voie, le code postal, la
+ * ville, le code INSEE et les coordonnées — c'est ce qui permet ensuite au
+ * technicien d'ouvrir un itinéraire sans retaper quoi que ce soit.
+ *
+ * Une adresse absente du référentiel reste saisissable : elle est enregistrée
+ * telle quelle, sans code INSEE.
+ */
+function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationProps) {
+  const complete = [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ');
+  const [saisie, setSaisie] = useState(complete);
+  const itineraire = lienItineraire(lead);
+
+  // La fiche change quand on passe au lead suivant : sans cette remise a jour,
+  // l'adresse du precedent resterait affichee.
+  useEffect(() => {
+    setSaisie([lead.address, lead.postal_code, lead.city].filter(Boolean).join(' '));
+  }, [lead.id, lead.address, lead.postal_code, lead.city]);
+
+  return (
+    <div className="space-y-2">
+      <ChampAdresse
+        id="adresse_intervention"
+        valeur={saisie}
+        onValeurChange={setSaisie}
+        desactive={desactive}
+        placeholder="Numéro, rue, ville…"
+        onChoisir={(a) => onUpdate(a)}
+        onBlur={() => {
+          // Saisie libre : on ne garde que le texte, sans inventer de commune.
+          const texte = saisie.trim();
+          if (texte && texte !== complete) {
+            onUpdate({ address: texte, citycode: null, latitude: null, longitude: null });
+          }
+        }}
+      />
+
+      {lead.citycode ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <MapPin className="h-3 w-3" />
+            {lead.city} · commune {lead.citycode}
+          </span>
+          {itineraire && (
+            <a
+              href={itineraire}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:underline"
+            >
+              Itinéraire
+            </a>
+          )}
+        </p>
+      ) : (
+        complete && (
+          <p className="text-xs text-muted-foreground">
+            Adresse saisie à la main — choisissez une suggestion pour la localiser.
+          </p>
+        )
+      )}
+    </div>
+  );
 }
 
 /** Champ enregistré à la sortie, et seulement si la valeur a changé. */
