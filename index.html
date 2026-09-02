@@ -14,6 +14,9 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- iOS ignore le manifeste : ces deux balises lui disent la meme chose. -->
+    <!-- `apple-mobile-web-app-capable` est deprecie mais reste lu par les
+         anciennes versions d'iOS ; le nom standard le remplace ailleurs. -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Relais CRM" />
