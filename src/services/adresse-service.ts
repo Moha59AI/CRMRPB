@@ -1,5 +1,3 @@
-import { POSTAL_CITIES } from '@/data/postal-cities';
-
 // Base Adresse Nationale (BAN) — service de geocodage de la Geoplateforme
 //
 // API publique de l'Etat : pas de cle, pas d'inscription, Licence Ouverte 2.0.
@@ -72,6 +70,9 @@ export async function rechercherCommunesParCodePostal(
 ): Promise<CommuneCodePostal[]> {
   const cp = codePostal.replace(/\D/g, '').slice(0, 5);
   if (!/^\d{5}$/.test(cp)) return [];
+  // Le référentiel français est volumineux : il n'est chargé qu'au premier
+  // code postal saisi, pas au démarrage de chaque écran du CRM.
+  const { POSTAL_CITIES } = await import('@/data/postal-cities');
   return (POSTAL_CITIES[cp] ?? []).map((commune, index, liste) => ({
     nom: commune.name,
     code: commune.citycode,

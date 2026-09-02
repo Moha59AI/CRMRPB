@@ -38,7 +38,7 @@ Tous les modules sont développés et routés dans `src/App.tsx`.
 15. **Webhook Meta** — Edge Function GET (vérification) + POST (réception et traitement des leads)
 16. **Conversions API** — Edge Function + service TypeScript (non déclenché automatiquement)
 17. **Webhooks génériques** — Création d'endpoints, réception d'événements, retraitement
-18. **Base de données** — 28 tables avec RLS, index, contraintes, triggers
+18. **Base de données** — 29 tables avec RLS, index, contraintes, triggers
 19. **Design system** — Variables CSS centralisées, couleurs Relais Pare-Brise
 
 ## Code mort
@@ -124,11 +124,12 @@ const { register, handleSubmit } = useForm({ resolver: zodResolver(schema) });
 
 Voir `DATABASE.md` pour le schéma complet.
 
-Les 28 tables : activities, after_sales_cases, appointments, audit_logs, campaigns,
+Les 29 tables : activities, after_sales_cases, appointments, audit_logs, campaigns,
 case_documents, communications, contacts, gifts, insurers, integration_connections,
 invoices, leads, meta_forms, notes, notifications, payments, profiles, quotes,
 sms_templates, tasks, vehicles, webhook_endpoints, webhook_events, windscreen_cases,
 workflow_runs, workflows, workspaces.
+Le référentiel `postal_code_cities` complète cette liste.
 
 **Toutes les tables ont RLS activé.** Ne jamais créer de table sans RLS.
 
