@@ -36,14 +36,19 @@ export interface ChoixResultat {
 interface DialogueResultatAppelProps {
   ouvert: boolean;
   onOuvertChange: (v: boolean) => void;
-  /** Nom affiché, pour vérifier qu'on qualifie le bon appel. */
+  /** Nom affiché, pour vérifier qu'on qualifie le bon lead. */
   nom: string;
+  /**
+   * D'où vient la demande. Un appel qu'on vient de passer et une relance
+   * qu'on déclare traitée n'appellent pas la même question.
+   */
+  contexte?: 'appel' | 'traitement';
   enCours?: boolean;
   onValider: (choix: ChoixResultat) => void;
 }
 
 export function DialogueResultatAppel({
-  ouvert, onOuvertChange, nom, enCours, onValider,
+  ouvert, onOuvertChange, nom, enCours, onValider, contexte = 'appel',
 }: DialogueResultatAppelProps) {
   const [choisi, setChoisi] = useState<Resultat | null>(null);
   const [heures, setHeures] = useState<number>(24);
@@ -75,10 +80,12 @@ export function DialogueResultatAppel({
           <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
             <PhoneOff className="h-5 w-5 text-muted-foreground" />
           </div>
-          <DialogTitle>Comment s'est passé l'appel ?</DialogTitle>
+          <DialogTitle>
+            {contexte === 'appel' ? "Comment s'est passé l'appel ?" : 'Où en est ce lead ?'}
+          </DialogTitle>
           <DialogDescription>
-            {nom} — sans réponse, le lead reste où il est et vous le rappellerez
-            en boucle.
+            {nom} — sans réponse ici, le lead revient à l'identique demain, et
+            indéfiniment.
           </DialogDescription>
         </DialogHeader>
 

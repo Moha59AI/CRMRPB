@@ -95,6 +95,7 @@ export function RelancesPage() {
   // Qualifier l'appel est ce qui fait avancer le lead. Sans ce dialogue, le
   // statut ne changeait pas et le lead revenait en tete de file aussitot.
   const [appelAQualifier, setAppelAQualifier] = useState<Relance | null>(null);
+  const [contexteQualif, setContexteQualif] = useState<'appel' | 'traitement'>('appel');
 
   const rafraichir = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['relances'] });
@@ -129,6 +130,7 @@ export function RelancesPage() {
       .catch((e: Error) => toast.error(e.message));
     // Le dialogue s'ouvre tout de suite : demander le resultat plus tard
     // reviendrait a ne jamais le demander.
+    setContexteQualif('appel');
     setAppelAQualifier(r);
   };
 
@@ -374,7 +376,17 @@ export function RelancesPage() {
                 onDemanderDocuments={demanderDocuments}
                 onOuvrir={ouvrir}
                 onReporter={(x) => lancer(x, reporter.mutate)}
-                onTraiter={(x) => lancer(x, traiter.mutate)}
+                onTraiter={(x) => {
+                  // Sur un lead, « traite » ne veut rien dire : reporter d'un
+                  // jour le ramenait identique le lendemain, indefiniment.
+                  // Taches et rendez-vous, eux, ont un etat final reel.
+                  if (x.leadId && !x.taskId && !x.appointmentId) {
+                    setContexteQualif('traitement');
+                    setAppelAQualifier(x);
+                  } else {
+                    lancer(x, traiter.mutate);
+                  }
+                }}
               />
             ))}
 
@@ -402,6 +414,7 @@ export function RelancesPage() {
         ouvert={appelAQualifier !== null}
         onOuvertChange={(o) => !o && setAppelAQualifier(null)}
         nom={appelAQualifier?.titre ?? ''}
+        contexte={contexteQualif}
         enCours={qualifierAppel.isPending}
         onValider={(choix) => qualifierAppel.mutate(choix)}
       />
