@@ -124,28 +124,43 @@ export const RelanceRow = memo(function RelanceRow({
   return (
     <div
       className={cn(
-        'group grid grid-cols-[auto_auto_auto_minmax(0,2fr)_minmax(0,2fr)_auto_auto] items-center gap-3',
+        'group flex flex-col gap-1.5',
+        'md:grid md:grid-cols-[auto_auto_auto_minmax(0,2fr)_minmax(0,2fr)_auto_auto] md:items-center md:gap-3',
         'border-b border-border px-3 py-2 transition-colors duration-100',
         'hover:bg-muted/50',
         selectionnee && 'bg-accent/40',
         enCours && 'animate-check-out pointer-events-none'
       )}
     >
-      <Checkbox
-        checked={selectionnee}
-        onCheckedChange={(v) => onSelection(relance.id, v === true)}
-        aria-label={`Sélectionner ${relance.titre}`}
-        className="opacity-0 transition-opacity group-hover:opacity-100 data-[state=checked]:opacity-100"
-      />
+      <div className="flex items-center gap-2 md:contents">
+        {/* Toujours visible au téléphone : sans survol, une case masquée
+            serait introuvable. */}
+        <Checkbox
+          checked={selectionnee}
+          onCheckedChange={(v) => onSelection(relance.id, v === true)}
+          aria-label={`Sélectionner ${relance.titre}`}
+          className="transition-opacity md:opacity-0 md:group-hover:opacity-100 md:data-[state=checked]:opacity-100"
+        />
 
-      <span className={cn('h-2 w-2 rounded-full', POINT[relance.urgency])} aria-hidden />
+        <span className={cn('h-2 w-2 rounded-full', POINT[relance.urgency])} aria-hidden />
 
-      <span
-        className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', PRIORITE_STYLE[relance.priority])}
-        title={`Score de priorité : ${relance.score}`}
-      >
-        {PRIORITE_LIBELLE[relance.priority]}
-      </span>
+        <span
+          className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', PRIORITE_STYLE[relance.priority])}
+          title={`Score de priorité : ${relance.score}`}
+        >
+          {PRIORITE_LIBELLE[relance.priority]}
+        </span>
+
+        {/* Le delai remonte sur cette ligne au telephone, ou il tiendrait mal
+            en fin de carte. */}
+        <span className={cn('ml-auto text-xs font-medium tabular md:hidden',
+          relance.waitingMinutes !== null
+            ? relance.waitingMinutes > 120 ? 'text-urgent'
+              : relance.waitingMinutes > 30 ? 'text-due' : 'text-done'
+            : DELAI_STYLE[relance.urgency])}>
+          {libelleDelai(relance)}
+        </span>
+      </div>
 
       {/* Identité */}
       <button type="button" onClick={() => onOuvrir(relance)} className="min-w-0 text-left">
@@ -183,7 +198,7 @@ export const RelanceRow = memo(function RelanceRow({
         {derniere && <p className="truncate text-xs text-muted-foreground">{derniere}</p>}
       </div>
 
-      <span className={cn('shrink-0 text-xs font-medium tabular',
+      <span className={cn('hidden shrink-0 text-xs font-medium tabular md:inline',
         relance.waitingMinutes !== null
           ? relance.waitingMinutes > 120 ? 'text-urgent'
             : relance.waitingMinutes > 30 ? 'text-due' : 'text-done'
@@ -193,7 +208,12 @@ export const RelanceRow = memo(function RelanceRow({
 
       {/* Actions : masquées au repos pour garder la liste calme, mais
           atteignables au clavier via focus-within. */}
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-100 focus-within:opacity-100 group-hover:opacity-100">
+      <div className={cn(
+        'flex shrink-0 items-center gap-0.5 transition-opacity duration-100',
+        // Sans survol sur un ecran tactile, des actions masquees sont des
+        // actions perdues.
+        'justify-end md:justify-start md:opacity-0 md:focus-within:opacity-100 md:group-hover:opacity-100',
+      )}>
         {actions.includes('appeler') && relance.phone && (
           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full"
             onClick={() => onAppeler(relance)} title="Appeler">

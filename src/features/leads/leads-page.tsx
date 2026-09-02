@@ -11,6 +11,7 @@ import { peutSupprimer } from '@/config/permissions';
 import { DialogueArchivage } from './dialogue-archivage';
 import { DialogueSuppressionArchives } from './dialogue-suppression-archives';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
+import { useEstMobile } from '@/hooks/use-media-query';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,9 @@ type ViewMode = 'table' | 'kanban' | 'compact';
 export function LeadsPage() {
   const queryClient = useQueryClient();
   const { profile: profileCourant } = useAuth();
+  // Sur telephone, le tableau et le pipeline sont illisibles : la liste en
+  // cartes remplace la vue choisie, quelle qu'elle soit.
+  const estMobile = useEstMobile();
 
   // Search with debounce
   const [searchInput, setSearchInput] = useState('');
@@ -207,7 +211,7 @@ export function LeadsPage() {
       {/* Toolbar: view toggle + filters */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-3">
         {/* View toggle */}
-        <div className="inline-flex items-center rounded-lg bg-muted p-1">
+        <div className="hidden items-center rounded-lg bg-muted p-1 md:inline-flex">
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
           <ViewToggleButton active={view === 'kanban'} onClick={() => setView('kanban')} icon={Columns3} label="Pipeline" />
           <ViewToggleButton active={view === 'compact'} onClick={() => setView('compact')} icon={List} label="Liste compacte" />
@@ -321,7 +325,16 @@ export function LeadsPage() {
 
         {!isLoading && !isError && leads && leads.length > 0 && (
           <>
-            {view === 'table' && (
+            {estMobile && (
+              <ListeMobile
+                leads={leads}
+                onOuvrir={(lead) => ouvrirIntervention(lead.id)}
+                onSupprimer={
+                  peutSupprimer(profileCourant?.role ?? null) ? setASupprimer : undefined
+                }
+              />
+            )}
+            {!estMobile && view === 'table' && (
               <LeadsTable
                 leads={leads}
                 advisorMap={advisorMap}
@@ -332,14 +345,14 @@ export function LeadsPage() {
                 }
               />
             )}
-            {view === 'kanban' && (
+            {!estMobile && view === 'kanban' && (
               <KanbanBoard
                 leads={leads}
                 onStatusChange={handleStatusChange}
                 onCardClick={(lead) => ouvrirIntervention(lead.id)}
               />
             )}
-            {view === 'compact' && (
+            {!estMobile && view === 'compact' && (
               <CompactList
                 leads={leads}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
@@ -411,6 +424,75 @@ function ViewToggleButton({
 }
 
 // ============ TABLE VIEW ============
+
+/**
+ * Liste en cartes, pour telephone.
+ *
+ * Le tableau porte huit colonnes : a 375 px, chacune ferait quarante pixels.
+ * La carte reprend ce qu'on lit pour decider d'appeler -- qui, quel numero, ou,
+ * quel statut, depuis quand -- et rien d'autre.
+ *
+ * Le numero est un lien `tel:` distinct de la carte : sur un telephone, ouvrir
+ * la fiche et lancer l'appel sont deux gestes differents, et le second doit
+ * rester a un doigt.
+ */
+function ListeMobile({
+  leads, onOuvrir, onSupprimer,
+}: {
+  leads: Lead[];
+  onOuvrir: (lead: Lead) => void;
+  onSupprimer?: (lead: Lead) => void;
+}) {
+  return (
+    <div className="h-full overflow-y-auto">
+      <ul className="divide-y divide-border">
+        {leads.map((lead) => (
+          <li key={lead.id} className="flex items-stretch">
+            <button
+              type="button"
+              onClick={() => onOuvrir(lead)}
+              className="min-w-0 flex-1 px-4 py-3 text-left active:bg-muted/50"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                  {leadName(lead)}
+                </span>
+                <StatusBadge status={lead.status} className="shrink-0" />
+              </div>
+
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {lead.city && <span className="truncate">{lead.city}</span>}
+                {vehicleLabel(lead) && <span className="truncate">{vehicleLabel(lead)}</span>}
+                <span className="tabular">{formatDate(lead.arrive_le)}</span>
+              </div>
+            </button>
+
+            {lead.phone && (
+              <a
+                href={`tel:${lead.phone}`}
+                aria-label={`Appeler ${leadName(lead)}`}
+                className="flex w-14 shrink-0 items-center justify-center border-l border-border text-primary active:bg-muted/50"
+              >
+                <Phone className="h-4 w-4" />
+              </a>
+            )}
+
+            {onSupprimer && (
+              <button
+                type="button"
+                aria-label={`Supprimer ${leadName(lead)}`}
+                onClick={() => onSupprimer(lead)}
+                className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground active:bg-muted/50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function LeadsTable({
   leads, advisorMap, onRowClick, onStatusChange, onSupprimer,
