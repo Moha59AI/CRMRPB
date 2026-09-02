@@ -17,7 +17,7 @@ export async function fetchLeads(params: {
 
   if (params.search) {
     const s = params.search.trim();
-    query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,city.ilike.%${s}%,vehicle_registration.ilike.%${s}%`);
+    query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,address.ilike.%${s}%,postal_code.ilike.%${s}%,city.ilike.%${s}%,intervention_address.ilike.%${s}%,intervention_postal_code.ilike.%${s}%,intervention_city.ilike.%${s}%,vehicle_registration.ilike.%${s}%`);
   }
   if (params.source && params.source !== 'all') query = query.eq('source', params.source);
   if (params.status && params.status !== 'all') query = query.eq('status', params.status);

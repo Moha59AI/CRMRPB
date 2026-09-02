@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  rechercherAdresse, normaliser, lienItineraire, precisionDe, type AdresseSuggestion,
+  rechercherAdresse, rechercherCommunesParCodePostal,
+  normaliser, lienItineraire, precisionDe, type AdresseSuggestion,
 } from './adresse-service';
 
 // Reponse reelle de la Geoplateforme, copiee d'un appel a l'API.
@@ -98,6 +99,17 @@ describe('rechercherAdresse', () => {
     ));
     const res = await rechercherAdresse('lille');
     expect(res).toHaveLength(1);
+  });
+});
+
+describe('rechercherCommunesParCodePostal', () => {
+  it('remplit la ville depuis la table locale du 59/62', async () => {
+    const communes = await rechercherCommunesParCodePostal(' 59 000 ');
+    expect(communes[0]).toMatchObject({ nom: 'Lille', code_postal: '59000' });
+  });
+
+  it("n'appelle pas l'API tant que le code postal n'a pas cinq chiffres", async () => {
+    expect(await rechercherCommunesParCodePostal('5900')).toEqual([]);
   });
 });
 

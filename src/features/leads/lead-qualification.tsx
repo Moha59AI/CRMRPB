@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Info, MapPin } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChampAdresse } from '@/components/ChampAdresse';
+import { Checkbox } from '@/components/ui/checkbox';
 import { lienItineraire } from '@/services/adresse-service';
+import { LeadAddressFields, type ValeurAdresseLead } from './lead-address-fields';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -26,6 +27,54 @@ interface LeadQualificationProps {
   lead: Lead;
   onUpdate: (updates: Partial<Lead>) => void;
   desactive?: boolean;
+}
+
+/** Identité et coordonnées du prospect, modifiables depuis la fiche lead. */
+export function LeadIdentity({ lead, onUpdate, desactive }: LeadQualificationProps) {
+  const adresse: ValeurAdresseLead = {
+    address: lead.address,
+    postal_code: lead.postal_code,
+    city: lead.city,
+    citycode: lead.citycode,
+    latitude: lead.latitude,
+    longitude: lead.longitude,
+    geo_precision: lead.geo_precision,
+  };
+
+  return (
+    <div className="space-y-5">
+      <section className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Identité et contact
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ChampTexte id="lead_first_name" label="Prénom" valeur={lead.first_name}
+            onValider={(v) => onUpdate({ first_name: v })} desactive={desactive} />
+          <ChampTexte id="lead_last_name" label="Nom" valeur={lead.last_name}
+            onValider={(v) => onUpdate({ last_name: v })} desactive={desactive} />
+          <ChampTexte id="lead_phone" label="Téléphone" valeur={lead.phone}
+            onValider={(v) => onUpdate({ phone: v })} desactive={desactive} />
+          <ChampTexte id="lead_email" label="Email" valeur={lead.email}
+            onValider={(v) => onUpdate({ email: v })} desactive={desactive} />
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Adresse principale</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Elle est utilisée comme adresse d'intervention tant qu'aucune autre adresse n'est indiquée.
+          </p>
+        </div>
+        <LeadAddressFields
+          idPrefix={`lead-${lead.id}-main`}
+          value={adresse}
+          onUpdate={onUpdate}
+          disabled={desactive}
+        />
+      </section>
+    </div>
+  );
 }
 
 export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificationProps) {
@@ -177,55 +226,106 @@ interface ChampTexteProps {
 }
 
 /**
- * Adresse de l'intervention, assistée par la Base Adresse Nationale.
- *
- * Choisir une suggestion enregistre en une fois la voie, le code postal, la
- * ville, le code INSEE et les coordonnées — c'est ce qui permet ensuite au
- * technicien d'ouvrir un itinéraire sans retaper quoi que ce soit.
- *
- * Une adresse absente du référentiel reste saisissable : elle est enregistrée
- * telle quelle, sans code INSEE.
+ * Par défaut l'intervention a lieu à l'adresse principale du lead. Une adresse
+ * différente n'est enregistrée que lorsque le conseiller la demande.
  */
 function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationProps) {
-  const [saisie, setSaisie] = useState(
-    [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' '),
+  const aUneAdresseDifferente = Boolean(
+    lead.intervention_address || lead.intervention_postal_code || lead.intervention_city,
   );
-  const itineraire = lienItineraire(lead);
+  const [adresseDifferente, setAdresseDifferente] = useState(aUneAdresseDifferente);
 
-  // On ne resynchronise que sur changement de fiche. Se caler sur
-  // `lead.address` ferait boucler : la saisie alimente le brouillon, qui
-  // reecrirait aussitot la saisie en y recollant ville et code postal.
   useEffect(() => {
-    setSaisie([lead.address, lead.postal_code, lead.city].filter(Boolean).join(' '));
+    setAdresseDifferente(aUneAdresseDifferente);
+    // Le choix local doit rester ouvert avant la saisie du premier champ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
-  return (
-    <div className="space-y-2">
-      <ChampAdresse
-        id="adresse_intervention"
-        valeur={saisie}
-        onValeurChange={(v) => {
-          setSaisie(v);
-          // Saisie libre : on garde le texte sans inventer de commune, et on
-          // abandonne la localisation qui ne lui correspond plus.
-          onUpdate({ address: v, citycode: null, latitude: null, longitude: null, geo_precision: null });
-        }}
-        desactive={desactive}
-        placeholder="Numéro, rue, ville…"
-        onChoisir={(a) => {
-          setSaisie([a.address, a.postal_code, a.city].filter(Boolean).join(' '));
-          onUpdate(a);
-        }}
-      />
+  const adresseIntervention: ValeurAdresseLead = adresseDifferente ? {
+    address: lead.intervention_address,
+    postal_code: lead.intervention_postal_code,
+    city: lead.intervention_city,
+    citycode: lead.intervention_citycode,
+    latitude: lead.intervention_latitude,
+    longitude: lead.intervention_longitude,
+    geo_precision: lead.intervention_geo_precision,
+  } : {
+    address: lead.address,
+    postal_code: lead.postal_code,
+    city: lead.city,
+    citycode: lead.citycode,
+    latitude: lead.latitude,
+    longitude: lead.longitude,
+    geo_precision: lead.geo_precision,
+  };
 
-      {lead.citycode ? (
+  const itineraire = lienItineraire(adresseIntervention);
+
+  const mettreAJourAdresseIntervention = (adresse: Partial<ValeurAdresseLead>) => {
+    const updates: Partial<Lead> = {};
+    if ('address' in adresse) updates.intervention_address = adresse.address ?? null;
+    if ('postal_code' in adresse) updates.intervention_postal_code = adresse.postal_code ?? null;
+    if ('city' in adresse) updates.intervention_city = adresse.city ?? null;
+    if ('citycode' in adresse) updates.intervention_citycode = adresse.citycode ?? null;
+    if ('latitude' in adresse) updates.intervention_latitude = adresse.latitude ?? null;
+    if ('longitude' in adresse) updates.intervention_longitude = adresse.longitude ?? null;
+    if ('geo_precision' in adresse) updates.intervention_geo_precision = adresse.geo_precision ?? null;
+    onUpdate(updates);
+  };
+
+  const utiliserAdressePrincipale = (identique: boolean) => {
+    setAdresseDifferente(!identique);
+    if (identique) {
+      onUpdate({
+        intervention_address: null,
+        intervention_postal_code: null,
+        intervention_city: null,
+        intervention_citycode: null,
+        intervention_latitude: null,
+        intervention_longitude: null,
+        intervention_geo_precision: null,
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/20 p-3">
+        <Checkbox
+          checked={!adresseDifferente}
+          disabled={desactive}
+          onCheckedChange={(valeur) => utiliserAdressePrincipale(valeur === true)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="block text-sm font-medium text-foreground">Même adresse que l'adresse principale</span>
+          <span className="block text-xs text-muted-foreground">Décochez seulement si le véhicule se trouve ailleurs.</span>
+        </span>
+      </label>
+
+      {adresseDifferente ? (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <p className="mb-3 text-sm font-semibold text-foreground">Autre adresse d'intervention</p>
+          <LeadAddressFields
+            idPrefix={`lead-${lead.id}-intervention`}
+            value={adresseIntervention}
+            onUpdate={mettreAJourAdresseIntervention}
+            disabled={desactive}
+          />
+        </div>
+      ) : (
+        <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+          {[lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ') || 'Adresse principale à renseigner'}
+        </p>
+      )}
+
+      {adresseIntervention.citycode ? (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <MapPin className="h-3 w-3" />
-            {lead.city} · commune {lead.citycode}
+            {adresseIntervention.city} · commune {adresseIntervention.citycode}
           </span>
-          {itineraire && lead.geo_precision === 'exact' && (
+          {itineraire && adresseIntervention.geo_precision === 'exact' && (
             <a
               href={itineraire}
               target="_blank"
@@ -236,13 +336,7 @@ function AdresseIntervention({ lead, onUpdate, desactive }: LeadQualificationPro
             </a>
           )}
         </p>
-      ) : (
-        saisie.trim() !== '' && (
-          <p className="text-xs text-muted-foreground">
-            Adresse saisie à la main — choisissez une suggestion pour la localiser.
-          </p>
-        )
-      )}
+      ) : null}
     </div>
   );
 }

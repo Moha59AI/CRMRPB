@@ -53,11 +53,17 @@ interface LigneJointe {
     latitude: number | null;
     longitude: number | null;
     geo_precision: 'exact' | 'approximatif' | null;
+    intervention_address: string | null;
+    intervention_city: string | null;
+    intervention_postal_code: string | null;
+    intervention_latitude: number | null;
+    intervention_longitude: number | null;
+    intervention_geo_precision: 'exact' | 'approximatif' | null;
   } | null;
 }
 
 const CHAMPS_LEAD =
-  'first_name, last_name, phone, vehicle_registration, address, city, postal_code, latitude, longitude, geo_precision';
+  'first_name, last_name, phone, vehicle_registration, address, city, postal_code, latitude, longitude, geo_precision, intervention_address, intervention_city, intervention_postal_code, intervention_latitude, intervention_longitude, intervention_geo_precision';
 
 export async function fetchInterventionsCarte(params: {
   debut: string;
@@ -84,6 +90,9 @@ export async function fetchInterventionsCarte(params: {
 
   return ((data ?? []) as unknown as LigneJointe[]).map((r) => {
     const nom = [r.leads?.first_name, r.leads?.last_name].filter(Boolean).join(' ');
+    const adresseDifferente = Boolean(
+      r.leads?.intervention_address || r.leads?.intervention_city || r.leads?.intervention_postal_code,
+    );
 
     return {
       appointment_id: r.id,
@@ -100,12 +109,12 @@ export async function fetchInterventionsCarte(params: {
 
       // L'adresse du rendez-vous prime : elle a ete saisie pour ce
       // deplacement-la. Les coordonnees, elles, ne peuvent venir que du lead.
-      adresse: r.address ?? r.leads?.address ?? null,
-      ville: r.leads?.city ?? null,
-      code_postal: r.leads?.postal_code ?? null,
-      latitude: r.leads?.latitude ?? null,
-      longitude: r.leads?.longitude ?? null,
-      geo_precision: r.leads?.geo_precision ?? null,
+      adresse: r.address ?? (adresseDifferente ? r.leads?.intervention_address : r.leads?.address) ?? null,
+      ville: (adresseDifferente ? r.leads?.intervention_city : r.leads?.city) ?? null,
+      code_postal: (adresseDifferente ? r.leads?.intervention_postal_code : r.leads?.postal_code) ?? null,
+      latitude: (adresseDifferente ? r.leads?.intervention_latitude : r.leads?.latitude) ?? null,
+      longitude: (adresseDifferente ? r.leads?.intervention_longitude : r.leads?.longitude) ?? null,
+      geo_precision: (adresseDifferente ? r.leads?.intervention_geo_precision : r.leads?.geo_precision) ?? null,
     };
   });
 }

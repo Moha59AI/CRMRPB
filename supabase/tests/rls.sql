@@ -133,8 +133,17 @@ select pg_temp.compter('conseiller', 'voit les leads de son espace', 2,
 select pg_temp.verifier('conseiller', 'cree un lead', true,
   $q$insert into leads (workspace_id, first_name, phone, source, status)
      values ('11111111-1111-1111-1111-111111111111', 'Nouveau', '0600000199', 'manual', 'new')$q$);
-select pg_temp.verifier('conseiller', 'ne supprime pas un lead', false,
-  $q$delete from leads where id = 'ccccccc1-0000-0000-0000-000000000001'$q$);
+select pg_temp.verifier('conseiller', 'ne supprime pas un lead', true,
+  $q$do $test$
+     begin
+       delete from leads where id = 'ccccccc1-0000-0000-0000-000000000001';
+       if not exists (
+         select 1 from leads where id = 'ccccccc1-0000-0000-0000-000000000001'
+       ) then
+         raise exception 'le lead a ete supprime';
+       end if;
+     end
+     $test$$q$);
 select pg_temp.compter('conseiller', 'ne voit aucune integration', 0,
   'select count(*)::int from integration_connections');
 select pg_temp.compter('conseiller', 'ne voit aucune facture', 0,
@@ -143,6 +152,12 @@ select pg_temp.compter('conseiller', 'ne voit aucun webhook', 0,
   'select count(*)::int from webhook_endpoints');
 select pg_temp.compter('conseiller', 'ne lit pas le journal d''audit', 0,
   'select count(*)::int from audit_logs');
+select pg_temp.compter('conseiller', 'lit le referentiel postal', 1,
+  $q$select count(*)::int from postal_code_cities
+     where postal_code = '59000' and city = 'Lille'$q$);
+select pg_temp.verifier('conseiller', 'ne modifie pas le referentiel postal', false,
+  $q$insert into postal_code_cities (postal_code, city, citycode, population)
+     values ('00999', 'Test interdit', '00999', 0)$q$);
 
 
 -- ============ TECHNICIEN ============
@@ -197,6 +212,15 @@ select pg_temp.compter('administrateur', 'lit le journal d''audit', 0,
   'select count(*)::int from audit_logs');
 select pg_temp.verifier('administrateur', 'supprime un lead', true,
   $q$delete from leads where id = 'ccccccc1-0000-0000-0000-000000000002'$q$);
+select pg_temp.verifier('administrateur', 'complete le referentiel postal', true,
+  $q$insert into postal_code_cities (postal_code, city, citycode, population)
+     values ('00999', 'Test admin', '00999', 0)$q$);
+select pg_temp.verifier('administrateur', 'corrige le referentiel postal', true,
+  $q$update postal_code_cities set city = 'Test admin corrige'
+     where postal_code = '00999' and citycode = '00999'$q$);
+select pg_temp.verifier('administrateur', 'nettoie le referentiel postal', true,
+  $q$delete from postal_code_cities
+     where postal_code = '00999' and citycode = '00999'$q$);
 
 
 -- ============ ISOLATION ENTRE ESPACES ============
@@ -240,5 +264,6 @@ delete from profiles where workspace_id in
 delete from auth.users where email like '%@test.local';
 delete from workspaces where id in
   ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
+delete from postal_code_cities where postal_code = '00999' and citycode = '00999';
 
 commit;

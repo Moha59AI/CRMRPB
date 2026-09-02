@@ -305,7 +305,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       onglets={ONGLETS}
       ongletActif={onglet}
       onChangerOnglet={setOnglet}
-      onFermer={fermer}
+      onFermer={fermerAvecGarde}
       pleinePage={pleinePage}
       piedDePage={piedDePage}
       navigation={liste.length > 1 ? {

@@ -73,7 +73,7 @@ export interface Lead {
   last_name: string | null;
   phone: string | null;
   email: string | null;
-  /** Adresse de l'intervention. Renseignee via la Base Adresse Nationale. */
+  /** Adresse principale, utilisée aussi pour l'intervention par défaut. */
   address: string | null;
   city: string | null;
   postal_code: string | null;
@@ -83,6 +83,14 @@ export interface Lead {
   longitude: number | null;
   /** exact = adresse au numero. approximatif = centre de commune. null = non localise. */
   geo_precision: 'exact' | 'approximatif' | null;
+  /** Adresse différente utilisée uniquement pour cette intervention. */
+  intervention_address: string | null;
+  intervention_postal_code: string | null;
+  intervention_city: string | null;
+  intervention_citycode: string | null;
+  intervention_latitude: number | null;
+  intervention_longitude: number | null;
+  intervention_geo_precision: 'exact' | 'approximatif' | null;
   vehicle_registration: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;

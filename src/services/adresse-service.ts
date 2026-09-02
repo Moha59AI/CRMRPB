@@ -1,3 +1,5 @@
+import { POSTAL_CITIES } from '@/data/postal-cities';
+
 // Base Adresse Nationale (BAN) — service de geocodage de la Geoplateforme
 //
 // API publique de l'Etat : pas de cle, pas d'inscription, Licence Ouverte 2.0.
@@ -47,6 +49,37 @@ export interface AdresseNormalisee {
    * approximatif menerait le technicien devant la mairie.
    */
   geo_precision: 'exact' | 'approximatif' | null;
+}
+
+export interface CommuneCodePostal {
+  nom: string;
+  code: string;
+  code_postal: string;
+  latitude: number | null;
+  longitude: number | null;
+  population: number;
+}
+
+/**
+ * Communes correspondant à un code postal français.
+ *
+ * Certains codes postaux couvrent plusieurs communes. La plus peuplée est
+ * placée en premier. La table est embarquée dans le CRM : aucun code postal
+ * de client n'est envoyé à un service tiers.
+ */
+export async function rechercherCommunesParCodePostal(
+  codePostal: string,
+): Promise<CommuneCodePostal[]> {
+  const cp = codePostal.replace(/\D/g, '').slice(0, 5);
+  if (!/^\d{5}$/.test(cp)) return [];
+  return (POSTAL_CITIES[cp] ?? []).map((commune, index, liste) => ({
+    nom: commune.name,
+    code: commune.citycode,
+    code_postal: cp,
+    latitude: null,
+    longitude: null,
+    population: liste.length - index,
+  }));
 }
 
 interface OptionsRecherche {

@@ -922,7 +922,12 @@ function CreateAppointmentDialog({
     const lead = (leadsQuery.data ?? []).find((l) => l.id === leadId);
     if (!lead) return;
 
-    const adresse = [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ');
+    const adresseDifferente = Boolean(
+      lead.intervention_address || lead.intervention_postal_code || lead.intervention_city,
+    );
+    const adresse = adresseDifferente
+      ? [lead.intervention_address, lead.intervention_postal_code, lead.intervention_city].filter(Boolean).join(' ')
+      : [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ');
     if (adresse && !form.getValues('address')?.trim()) {
       form.setValue('address', adresse);
       setAdresseReprise(true);

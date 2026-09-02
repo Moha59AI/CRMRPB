@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
-import { ChampAdresse } from '@/components/ChampAdresse';
+import { LeadAddressFields } from './lead-address-fields';
 import { messageErreurBase } from '@/lib/erreurs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -725,46 +725,43 @@ function NewLeadDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <ChampAdresse
-                label="Adresse"
-                valeur={form.address}
-                onValeurChange={(v) => setForm({
-                  // Saisie libre : on garde le texte sans inventer de commune,
-                  // et on abandonne une localisation qui ne lui correspond plus.
-                  ...form, address: v,
-                  citycode: null, latitude: null, longitude: null, geo_precision: null,
-                })}
-                onChoisir={(a) => setForm({
-                  ...form,
-                  address: [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
-                  city: a.city ?? '',
-                  postal_code: a.postal_code ?? '',
-                  citycode: a.citycode,
-                  latitude: a.latitude,
-                  longitude: a.longitude,
-                  geo_precision: a.geo_precision,
-                })}
-                placeholder="Numéro, rue, ville…"
-              />
+          <div className="rounded-lg border border-border p-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Adresse principale
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Elle sera aussi utilisée comme adresse d'intervention par défaut.
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Source</Label>
-              <Select
-                value={form.source}
-                onValueChange={(v) => setForm({ ...form, source: v as LeadSource })}
-              >
-                <SelectTrigger className="rounded-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sourceSelectOptions.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LeadAddressFields
+              idPrefix="new-lead-main"
+              value={form}
+              onUpdate={(updates) => setForm((courant) => ({
+                ...courant,
+                ...updates,
+                address: updates.address ?? courant.address,
+                postal_code: updates.postal_code ?? courant.postal_code,
+                city: updates.city ?? courant.city,
+              }))}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Source</Label>
+            <Select
+              value={form.source}
+              onValueChange={(v) => setForm({ ...form, source: v as LeadSource })}
+            >
+              <SelectTrigger className="rounded-lg">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sourceSelectOptions.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Vehicle */}

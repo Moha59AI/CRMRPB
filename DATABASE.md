@@ -40,7 +40,20 @@ Prospects reçus depuis Meta et autres sources.
 | last_name | text | |
 | phone | text | |
 | email | text | |
+| address | text | Adresse principale (voie uniquement) |
 | city | text | |
+| postal_code | text | Code postal de l'adresse principale |
+| citycode | text | Code INSEE de la commune principale |
+| latitude | double precision | Coordonnée BAN de l'adresse principale |
+| longitude | double precision | Coordonnée BAN de l'adresse principale |
+| geo_precision | text | exact, approximatif ou NULL |
+| intervention_address | text | Adresse différente ; NULL = adresse principale |
+| intervention_postal_code | text | Code postal différent |
+| intervention_city | text | Ville différente |
+| intervention_citycode | text | Code INSEE différent |
+| intervention_latitude | double precision | Latitude différente |
+| intervention_longitude | double precision | Longitude différente |
+| intervention_geo_precision | text | Précision de l'adresse différente |
 | vehicle_registration | text | Immatriculation |
 | vehicle_make | text | Marque |
 | vehicle_model | text | Modèle |
@@ -68,6 +81,17 @@ Prospects reçus depuis Meta et autres sources.
 
 **Index** : workspace_id, status, source, phone, email, vehicle_registration, created_at
 **Unique** : meta_lead_id (partial, WHERE NOT NULL)
+
+### postal_code_cities
+Référentiel local des couples code postal/commune des départements 59 et 62.
+Il sert à compléter la ville lorsqu'un formulaire ne transmet que le code
+postal, sans envoyer la donnée du client à un service tiers.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| postal_code | text PK partielle | Code postal |
+| city | text | Nom officiel de la commune |
+| citycode | text PK partielle | Code INSEE |
+| population | integer | Sert à choisir la commune principale en cas d'ambiguïté |
 
 ### integration_connections
 Connexions aux services externes.
@@ -183,6 +207,10 @@ Journal d'audit des actions administratives.
 ### audit_logs
 - SELECT : admin (tous) + soi-même
 - INSERT : membres du workspace
+
+### postal_code_cities
+- SELECT : tous les utilisateurs authentifiés
+- INSERT/UPDATE/DELETE : administrateur uniquement
 
 ## Fonctions SQL
 

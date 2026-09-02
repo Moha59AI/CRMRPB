@@ -85,6 +85,7 @@ Un paiement ne se supprime pas — on passe un avoir.
 | `profiles` | LCMS | L | L | L | L |
 | `workspaces` | LM | L | L | L | L |
 | `audit_logs` | L | — | — | — | — |
+| `postal_code_cities` | LCMS | L | L | L | L |
 
 `integration_connections` porte les références aux secrets du Vault : y donner
 accès en lecture revient à donner les clés Meta. Réservé à l'administrateur,

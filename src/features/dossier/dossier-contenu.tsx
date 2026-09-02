@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { LeadQualification } from '@/features/leads/lead-qualification';
+import { LeadIdentity, LeadQualification } from '@/features/leads/lead-qualification';
 import {
   formatDateTime, profileName, LIBELLE_VITRAGE, sourceLabels,
 } from '@/features/leads/lead-shared';
@@ -146,7 +146,11 @@ export function DossierContenu({
 
         <ProchaineAction lead={lead} />
 
-        <Bloc titre="Qualification">
+        <Bloc titre="Client et coordonnées">
+          <LeadIdentity lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
+        </Bloc>
+
+        <Bloc titre="Intervention et qualification">
           <LeadQualification lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
         </Bloc>
 
@@ -176,11 +180,15 @@ export function DossierContenu({
 
       {/* Colonne informations */}
       <div className="space-y-4">
-        <FicheInfo icone={User} titre="Client" lignes={[
-          ['Nom', [lead.first_name, lead.last_name].filter(Boolean).join(' ') || null],
+        <FicheInfo icone={User} titre="Résumé client" lignes={[
+          ['Prénom', lead.first_name],
+          ['Nom', lead.last_name],
           ['Téléphone', lead.phone],
           ['Email', lead.email],
-          ['Ville', lead.city],
+          ['Adresse', [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ') || null],
+          ["Intervention", (lead.intervention_address || lead.intervention_postal_code || lead.intervention_city)
+            ? [lead.intervention_address, lead.intervention_postal_code, lead.intervention_city].filter(Boolean).join(' ')
+            : 'Même adresse'],
         ]} />
 
         {autresInterventions && autresInterventions.length > 0 && (

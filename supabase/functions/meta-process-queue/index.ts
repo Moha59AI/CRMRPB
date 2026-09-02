@@ -66,6 +66,25 @@ function splitFullName(value: string): [string | null, string | null] {
   return [first, last.length > 0 ? last : null];
 }
 
+async function cityFromPostalCode(postalCode: string): Promise<{
+  city: string;
+  citycode: string;
+} | null> {
+  if (!/^\d{5}$/.test(postalCode)) return null;
+
+  const { data, error } = await supabase
+    .from('postal_code_cities')
+    .select('city, citycode')
+    .eq('postal_code', postalCode)
+    .order('population', { ascending: false })
+    .order('city', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data;
+}
+
 async function getMetaSecret(workspaceId: string, keyName: string): Promise<string | null> {
   try {
     const { data, error } = await supabase
@@ -203,7 +222,8 @@ Deno.serve(async (req: Request) => {
         const mapping = (metaForm?.field_mapping ?? {}) as Record<string, string>;
         const mapped: Record<string, string | null> = {
           first_name: null, last_name: null, phone: null, email: null,
-          city: null, vehicle_registration: null, vehicle_make: null, vehicle_model: null,
+          postal_code: null, city: null,
+          vehicle_registration: null, vehicle_make: null, vehicle_model: null,
         };
 
         for (const [metaField, leadField] of Object.entries(mapping)) {
@@ -250,7 +270,15 @@ Deno.serve(async (req: Request) => {
           if (e) mapped.email = normalizeEmail(e);
         }
         if (!mapped.city) {
-          mapped.city = pick(leadFields, ['city', 'ville', 'zip_code', 'code_postal']);
+          mapped.city = pick(leadFields, ['city', 'ville']);
+        }
+        if (!mapped.postal_code) {
+          mapped.postal_code = pick(leadFields, [
+            'postal_code', 'postcode', 'zip_code', 'code_postal', 'code_postale',
+          ])?.replace(/\D/g, '').slice(0, 5) ?? null;
+        }
+        if (!mapped.city && mapped.postal_code) {
+          mapped.city = (await cityFromPostalCode(mapped.postal_code))?.city ?? null;
         }
         if (!mapped.vehicle_registration) {
           const r = pick(leadFields, ['vehicle_registration', 'immatriculation', 'plaque']);
@@ -282,7 +310,11 @@ Deno.serve(async (req: Request) => {
           p_meta_ad_id: leadData.ad_id ?? null,
           p_meta_adset_id: leadData.adset_id ?? null,
           p_meta_campaign_id: leadData.campaign_id ?? null,
-          p_raw_payload: leadData,
+          p_raw_payload: {
+            ...leadData,
+            code_postal: mapped.postal_code,
+            ville: mapped.city,
+          },
           p_received_at: leadData.created_time ?? new Date().toISOString(),
         });
 
