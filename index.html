@@ -9,6 +9,14 @@
     <!-- Outil interne : rien a indexer ni a partager. -->
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#16A34A" />
+
+    <!-- Installation sur l'ecran d'accueil. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- iOS ignore le manifeste : ces deux balises lui disent la meme chose. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Relais CRM" />
   </head>
   <body>
     <div id="root"></div>
