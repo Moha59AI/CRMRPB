@@ -7,8 +7,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
-  reporterRelance, marquerRelanceTraitee, journaliserAction, type Relance,
+  reporterRelance, marquerRelanceTraitee, journaliserAction,
+  enregistrerResultatAppel, type Relance,
 } from '@/services/relances-service';
+import { DialogueResultatAppel, type ChoixResultat } from './dialogue-resultat-appel';
+import { resultatParCle } from '../resultat-appel';
 
 /**
  * Mode concentré : un dossier à la fois, passage automatique au suivant.
@@ -36,6 +39,10 @@ interface SessionRelanceProps {
 }
 
 export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: SessionRelanceProps) {
+  // Qualifier est ce qui fait sortir le lead de la file. Sans ce dialogue, la
+  // session faisait defiler des leads qui revenaient tous le lendemain.
+  const [aQualifier, setAQualifier] = useState<Relance | null>(null);
+  const [contexte, setContexte] = useState<'appel' | 'traitement'>('appel');
   const [index, setIndex] = useState(0);
   const [traitees, setTraitees] = useState(0);
   const [occupe, setOccupe] = useState(false);
@@ -56,6 +63,8 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
     window.location.href = `tel:${relance.phone}`;
     void journaliserAction(relance, 'call_outbound', 'Appel — session de relance')
       .catch((e: Error) => toast.error(e.message));
+    setContexte('appel');
+    setAQualifier(relance);
   }, [relance]);
 
   const envoyerSms = useCallback(() => {
@@ -86,6 +95,15 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
 
   const traiter = useCallback(async () => {
     if (!relance || occupe) return;
+
+    // Sur un lead, « traite » ne veut rien dire : marquerRelanceTraitee se
+    // contentait de reporter d'un jour, donc le lead revenait a l'identique.
+    if (relance.leadId && !relance.taskId && !relance.appointmentId) {
+      setContexte('traitement');
+      setAQualifier(relance);
+      return;
+    }
+
     setOccupe(true);
     try {
       await marquerRelanceTraitee(relance);
@@ -97,6 +115,32 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
       setOccupe(false);
     }
   }, [relance, occupe, suivant]);
+
+  const qualifier = useCallback(async (choix: ChoixResultat) => {
+    if (!aQualifier?.leadId) return;
+    setOccupe(true);
+    try {
+      const resultat = resultatParCle(choix.cle);
+      await enregistrerResultatAppel({
+        leadId: aQualifier.leadId,
+        statut: resultat.statut,
+        prochaineAction: choix.prochaineAction,
+        note: choix.note,
+      });
+      toast.success(
+        resultat.sortDeFile
+          ? `${aQualifier.titre} quitte les relances`
+          : `${aQualifier.titre} — ${resultat.label.toLowerCase()}`,
+      );
+      setAQualifier(null);
+      setTraitees((t) => t + 1);
+      // On enchaine : c'est tout l'interet de la session.
+      suivant();
+    } catch (e) {
+      toast.error((e as Error).message);
+      setOccupe(false);
+    }
+  }, [aQualifier, suivant]);
 
   // Les raccourcis sont la raison d'être du mode : on ne quitte pas le clavier.
   useEffect(() => {
@@ -268,6 +312,16 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
           </span>
         ))}
       </footer>
+
+      <DialogueResultatAppel
+        ouvert={aQualifier !== null}
+        onOuvertChange={(o) => { if (!o) { setAQualifier(null); setOccupe(false); } }}
+        nom={aQualifier?.titre ?? ''}
+        contexte={contexte}
+        enCours={occupe}
+        onValider={(choix) => void qualifier(choix)}
+      />
+
     </div>
   );
 }

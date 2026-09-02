@@ -10,6 +10,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { LeadStatus } from '@/types';
+import { createNote } from '@/services/activity-service';
 
 export type UrgencyLevel = 'urgent' | 'due' | 'upcoming';
 export type PriorityLevel = 'urgent' | 'haute' | 'normale' | 'faible';
@@ -273,13 +274,19 @@ export async function enregistrerResultatAppel(params: {
   if (error) throw new Error(error.message);
 
   if (params.note?.trim()) {
-    // Une note d'appel echouee ne doit pas annuler le changement de statut :
-    // le lead a bien ete traite, c'est ce qui compte pour la file.
-    const { error: erreurNote } = await supabase.from('notes').insert({
+    // On passe par createNote plutot que d'inserer ici : `notes` exige
+    // `workspace_id`, faute de quoi la politique RLS refuse la ligne. Dupliquer
+    // l'insertion, c'etait dupliquer l'occasion de l'oublier.
+    const { error: erreurNote } = await createNote({
       lead_id: params.leadId,
       content: params.note.trim(),
     });
-    if (erreurNote) throw new Error(erreurNote.message);
+
+    if (erreurNote) {
+      // Le statut est deja enregistre : le dire, sinon l'utilisateur croit que
+      // rien n'a ete pris en compte et recommence.
+      throw new Error(`Statut enregistré, mais la note n'a pas pu l'être : ${erreurNote}`);
+    }
   }
 }
 

@@ -64,6 +64,32 @@ export function DialogueResultatAppel({
     }
   }, [ouvert]);
 
+  // Chiffres 1 a 7 pour choisir, Entree pour valider. Le mode session ne
+  // quitte pas le clavier : un dialogue qui obligerait a prendre la souris
+  // casserait ce qui fait son interet.
+  useEffect(() => {
+    if (!ouvert) return;
+
+    const auClavier = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const rang = Number(e.key);
+      if (rang >= 1 && rang <= RESULTATS.length) {
+        e.preventDefault();
+        setChoisi(RESULTATS[rang - 1]);
+        return;
+      }
+
+      if (e.key === 'Enter' && choisi && !enCours) {
+        e.preventDefault();
+        valider();
+      }
+    };
+
+    window.addEventListener('keydown', auClavier);
+    return () => window.removeEventListener('keydown', auClavier);
+  });
+
   const valider = () => {
     if (!choisi) return;
     onValider({
@@ -90,7 +116,7 @@ export function DialogueResultatAppel({
         </DialogHeader>
 
         <div className="space-y-1.5">
-          {RESULTATS.map((r) => {
+          {RESULTATS.map((r, i) => {
             const actif = choisi?.cle === r.cle;
             return (
               <button
@@ -119,7 +145,7 @@ export function DialogueResultatAppel({
                   {actif && <Check className="h-2.5 w-2.5" />}
                 </span>
 
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className={cn(
                     'block text-sm font-medium',
                     r.negatif && actif ? 'text-destructive' : 'text-foreground',
@@ -130,6 +156,11 @@ export function DialogueResultatAppel({
                       devrait connaitre les cadences par coeur. */}
                   <span className="block text-xs text-muted-foreground">{r.effet}</span>
                 </span>
+
+                {/* Un raccourci qu'on ne voit pas n'existe pas. */}
+                <kbd className="mt-0.5 hidden shrink-0 rounded border border-border px-1.5 text-[10px] text-muted-foreground sm:block">
+                  {i + 1}
+                </kbd>
               </button>
             );
           })}
