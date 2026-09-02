@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   Receipt,
   Settings,
+  Shield,
   LayoutDashboard,
   type LucideIcon,
 } from 'lucide-react';
@@ -155,6 +156,12 @@ export const settingsNavItems: NavItem[] = [
     path: '/settings/webhooks',
     icon: Workflow,
     description: 'Endpoints entrants',
+  },
+  {
+    label: 'Assureurs',
+    path: '/settings/insurers',
+    icon: Shield,
+    description: 'Franchises, conventions et lignes sinistre',
   },
   {
     label: 'Utilisateurs',

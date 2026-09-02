@@ -1,7 +1,7 @@
-// Contacts, vehicules et assureurs
+// Contacts et vehicules
 
 import { supabase } from '@/lib/supabase';
-import type { Contact, Vehicle, Insurer, Lead } from '@/types';
+import type { Contact, Vehicle, Lead } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchContacts(params: { search?: string }): Promise<Contact[]> {
@@ -40,25 +40,9 @@ export async function fetchVehiclesForContact(contactId: string): Promise<Vehicl
   return (data as Vehicle[]) ?? [];
 }
 
-export async function fetchInsurers(): Promise<Insurer[]> {
-  const { data, error } = await supabase
-    .from('insurers')
-    .select('*')
-    .order('name', { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data as Insurer[]) ?? [];
-}
-
-export async function createInsurer(name: string): Promise<{ error: string | null; insurer: Insurer | null }> {
-  const wsId = await getWorkspaceId();
-  const { data, error } = await supabase
-    .from('insurers')
-    .insert({ name, workspace_id: wsId })
-    .select('*')
-    .maybeSingle();
-  if (error) return { error: error.message, insurer: null };
-  return { error: null, insurer: data as Insurer };
-}
+// Les assureurs vivent dans insurers-service : ils se gerent depuis les
+// reglages, avec franchise habituelle, convention et ligne sinistre.
+export { fetchInsurers } from '@/services/insurers-service';
 
 // ============ WINDSCREEN_CASES ============
 

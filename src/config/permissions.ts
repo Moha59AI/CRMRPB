@@ -25,6 +25,7 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/settings/integrations': ['admin'],
   '/settings/integrations/meta': ['admin'],
   '/settings/webhooks': ['admin'],
+  '/settings/insurers': ['admin', 'manager'],
   '/settings/users': ['admin'],
 };
 

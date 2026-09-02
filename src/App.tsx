@@ -22,6 +22,7 @@ import { CommunicationsPage } from '@/features/communications/communications-pag
 import { BillingPage } from '@/features/billing/billing-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { UsersPage } from '@/features/settings/users-page';
+import { InsurersPage } from '@/features/settings/insurers-page';
 import { FollowUpPage } from '@/features/follow-up/follow-up-page';
 import { RelancesPage } from '@/features/relances/relances-page';
 import { DossierModal } from '@/features/dossier/dossier-modal';
@@ -87,6 +88,7 @@ function AppRoutes() {
             <Route path="/settings/integrations/meta" element={<MetaSettingsPage />} />
             <Route path="/settings/webhooks" element={<WebhooksPage />} />
             <Route path="/settings/users" element={<UsersPage />} />
+            <Route path="/settings/insurers" element={<InsurersPage />} />
           </Route>
 
           {/* Fallback */}

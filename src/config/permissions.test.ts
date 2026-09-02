@@ -19,6 +19,16 @@ describe('matrice des roles', () => {
     expect(cheminAutorise('/settings/integrations', 'admin')).toBe(true);
   });
 
+  it('ouvre les assureurs au responsable, pas au conseiller', () => {
+    // La matrice donne l'ecriture sur `insurers` a l'administrateur et au
+    // responsable ; le conseiller ne fait que lire, depuis la fiche dossier.
+    expect(cheminAutorise('/settings/insurers', 'admin')).toBe(true);
+    expect(cheminAutorise('/settings/insurers', 'manager')).toBe(true);
+    for (const role of ['advisor', 'technician', 'accountant'] as const) {
+      expect(cheminAutorise('/settings/insurers', role)).toBe(false);
+    }
+  });
+
   it('laisse le chemin le plus specifique l emporter', () => {
     // /settings est ouvert au responsable, mais pas /settings/webhooks.
     expect(cheminAutorise('/settings', 'manager')).toBe(true);

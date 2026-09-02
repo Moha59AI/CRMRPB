@@ -154,7 +154,7 @@ export function CasesPage() {
   const { data: leads } = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
   const { data: contacts } = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const { data: profiles } = useQuery({ queryKey: ['profiles-all'], queryFn: fetchProfiles });
-  const { data: insurers } = useQuery({ queryKey: ['insurers-all'], queryFn: fetchInsurers });
+  const { data: insurers } = useQuery({ queryKey: ['insurers-all'], queryFn: () => fetchInsurers() });
 
   const leadMap = useMemo(() => {
     const m = new Map<string, Lead>();

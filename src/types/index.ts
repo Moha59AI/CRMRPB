@@ -247,6 +247,16 @@ export interface Insurer {
   phone: string | null;
   email: string | null;
   address: string | null;
+  /** Ligne de declaration de sinistre, distincte du standard. */
+  claims_phone: string | null;
+  claims_email: string | null;
+  /** Numero de convention conditionnant la prise en charge directe. */
+  agreement_number: string | null;
+  /** Franchise habituelle en euros. Proposee a la qualification, jamais imposee. */
+  default_franchise: number | null;
+  notes: string | null;
+  /** false retire l'assureur des listes sans casser les dossiers existants. */
+  actif: boolean;
   created_at: string;
   updated_at: string;
 }
