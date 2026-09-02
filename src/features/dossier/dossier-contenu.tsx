@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Car, Shield, Briefcase, UserCog, Send, History, Copy, Award,
+  User, Briefcase, UserCog, Send, History, Copy, Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -178,19 +178,14 @@ export function DossierContenu({
         </Bloc>
       </div>
 
-      {/* Colonne informations */}
-      <div className="space-y-4">
-        <FicheInfo icone={User} titre="Résumé client" lignes={[
-          ['Prénom', lead.first_name],
-          ['Nom', lead.last_name],
-          ['Téléphone', lead.phone],
-          ['Email', lead.email],
-          ['Adresse', [lead.address, lead.postal_code, lead.city].filter(Boolean).join(' ') || null],
-          ["Intervention", (lead.intervention_address || lead.intervention_postal_code || lead.intervention_city)
-            ? [lead.intervention_address, lead.intervention_postal_code, lead.intervention_city].filter(Boolean).join(' ')
-            : 'Même adresse'],
-        ]} />
+      {/* Colonne laterale : ce qu'on consulte, et qu'on ne saisit pas pendant
+          l'appel.
 
+          Les cartes « Résumé client », « Véhicule » et « Assurance » ont été
+          retirées : elles répétaient mot pour mot les champs éditables de la
+          colonne de gauche. On lisait deux fois la même chose, côte à côte, ce
+          qui allongeait la fiche sans rien apprendre. */}
+      <div className="space-y-4">
         {autresInterventions && autresInterventions.length > 0 && (
           <section className="rounded-xl border border-border bg-card p-4">
             <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -217,20 +212,6 @@ export function DossierContenu({
             </ul>
           </section>
         )}
-
-        <FicheInfo icone={Car} titre="Véhicule" lignes={[
-          ['Marque', lead.vehicle_make],
-          ['Modèle', lead.vehicle_model],
-          ['Immatriculation', lead.vehicle_registration],
-          ['Vitrage', lead.glass_type ? LIBELLE_VITRAGE[lead.glass_type] : null],
-          ['Caméra ADAS', lead.has_adas_camera === null ? null : lead.has_adas_camera ? 'Oui' : 'Non'],
-        ]} />
-
-        <FicheInfo icone={Shield} titre="Assurance" lignes={[
-          ['Assureur', lead.insurance],
-          ['Reste à charge', lead.franchise_amount === null ? null : `${lead.franchise_amount} €`],
-          ['Offre', lead.offer],
-        ]} />
 
         <FicheInfo icone={Briefcase} titre="Dossier" lignes={[
           ['Source', sourceLabels[lead.source] ?? lead.source],

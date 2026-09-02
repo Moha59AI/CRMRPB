@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ShieldCheck, PhoneCall, UserCheck, ClipboardCheck, CalendarClock,
-  Send, AlertTriangle, Mail,
+  Send, AlertTriangle, Mail, ChevronDown,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,13 @@ export function ProcedureAssureur({ nomSaisi }: ProcedureAssureurProps) {
     staleTime: 10 * 60_000,
   });
 
+  // Depliee d'office quand l'expertise est obligatoire : c'est elle qui
+  // decide du creneau, la replier reviendrait a la cacher au moment ou elle
+  // compte.
+  const [deplieManuel, setDeplieManuel] = useState<boolean | null>(null);
+  const deplie = deplieManuel ?? (assureur?.expertise_obligatoire ?? false);
+  const setDeplie = (f: (d: boolean) => boolean) => setDeplieManuel(f(deplie));
+
   if (terme.length < 2 || isLoading) return null;
 
   if (!assureur) {
@@ -54,8 +62,13 @@ export function ProcedureAssureur({ nomSaisi }: ProcedureAssureurProps) {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="rounded-xl border border-border bg-muted/20">
+      <button
+        type="button"
+        onClick={() => setDeplie((d) => !d)}
+        aria-expanded={deplie}
+        className="flex w-full flex-wrap items-center gap-2 p-3 text-left"
+      >
         <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="text-sm font-semibold text-foreground">{assureur.name}</span>
 
@@ -70,7 +83,22 @@ export function ProcedureAssureur({ nomSaisi }: ProcedureAssureurProps) {
             Client requis
           </Badge>
         )}
-      </div>
+        {!deplie && assureur.franchise_texte && (
+          <span className="truncate text-xs text-muted-foreground">
+            {assureur.franchise_texte}
+          </span>
+        )}
+
+        <ChevronDown
+          className={cn(
+            'ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            deplie && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {deplie && (
+      <div className="space-y-3 px-3 pb-3">
 
       {/* Ce qui change le creneau qu'on propose, donc affiche avant le reste. */}
       {assureur.expertise_obligatoire && (
@@ -122,6 +150,8 @@ export function ProcedureAssureur({ nomSaisi }: ProcedureAssureurProps) {
         <Ligne icone={<Mail className="h-3.5 w-3.5" />} titre="Envoi facture">
           <span className="break-all">{assureur.claims_email}</span>
         </Ligne>
+      )}
+      </div>
       )}
     </div>
   );
