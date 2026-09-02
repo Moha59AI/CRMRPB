@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, BellRing, Check, TrendingUp } from 'lucide-react';
+import { Bell, BellRing, Check, TrendingUp, BellOff, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -13,6 +13,9 @@ import {
   ecouterNotifications,
 } from '@/services/notifications-service';
 import type { Notification } from '@/types';
+import {
+  etatAlertes, demanderAlertes, afficherAlerte, type EtatAlertes,
+} from '@/lib/alertes';
 
 /**
  * Cloche des notifications.
@@ -42,6 +45,7 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [ouvert, setOuvert] = useState(false);
+  const [alertes, setAlertes] = useState<EtatAlertes>(() => etatAlertes());
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
@@ -66,9 +70,31 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
 
-      alerterSysteme(n);
+      // L'onglet est au premier plan : la pastille suffit, une alerte
+      // par-dessus serait redondante.
+      if (document.visibilityState !== 'visible') {
+        afficherAlerte({
+          titre: n.title, corps: n.body, lien: n.link, etiquette: n.id,
+        });
+      }
     });
   }, [profile?.id, queryClient]);
+
+  // Le clic sur une alerte systeme demande au service worker de reveiller
+  // l'onglet ; c'est lui qui nous transmet la destination. Naviguer par le
+  // routeur plutot que recharger evite de perdre l'ecran en cours.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const auMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'naviguer' && typeof e.data.lien === 'string') {
+        navigate(e.data.lien);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', auMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', auMessage);
+  }, [navigate]);
 
   const compte = nonLues ?? 0;
 
@@ -92,12 +118,7 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   return (
     <Popover
       open={ouvert}
-      onOpenChange={(o) => {
-        setOuvert(o);
-        // La permission se demande au premier geste volontaire, pas au
-        // chargement : reclamee d'emblee, elle se refuse par reflexe.
-        if (o) demanderPermission();
-      }}
+      onOpenChange={setOuvert}
     >
       <PopoverTrigger asChild>
         <Button
@@ -139,6 +160,8 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
             </button>
           )}
         </div>
+
+        <BandeauAlertes etat={alertes} onChange={setAlertes} />
 
         <div className="max-h-96 overflow-y-auto">
           {(!notifications || notifications.length === 0) && (
@@ -182,41 +205,63 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
 }
 
 /**
- * Demande la permission d'alerter, une seule fois.
+ * Etat des alertes systeme, et moyen de l'changer.
  *
- * `default` signifie que rien n'a encore ete demande. Une fois refusee, le
- * navigateur ne redemandera pas : insister est inutile.
+ * Sans ce bandeau, une permission refusee est invisible : l'utilisateur voit
+ * la pastille, n'a aucune alerte, et n'a aucun moyen de comprendre pourquoi.
  */
-function demanderPermission(): void {
-  if (typeof Notification === 'undefined') return;
-  if (Notification.permission !== 'default') return;
-  Notification.requestPermission().catch(() => {
-    // Refus ou navigateur sans support : le CRM affiche la pastille, c'est tout.
-  });
-}
+function BandeauAlertes({
+  etat, onChange,
+}: { etat: EtatAlertes; onChange: (e: EtatAlertes) => void }) {
+  if (etat === 'indisponible') return null;
 
-/**
- * Alerte systeme, quand elle est autorisee.
- *
- * Sans elle, un conseiller qui a le CRM dans un onglet en arriere-plan ne
- * verrait jamais la pastille -- donc jamais le lead.
- */
-function alerterSysteme(n: Notification): void {
-  if (typeof Notification === 'undefined') return;
-  if (Notification.permission !== 'granted') return;
-  // L'onglet est au premier plan : la pastille suffit, une alerte systeme
-  // par-dessus serait redondante.
-  if (document.visibilityState === 'visible') return;
-
-  try {
-    new Notification(n.title, {
-      body: n.body ?? undefined,
-      icon: '/icon-192.png',
-      // Un seul lead ne doit pas empiler cinq alertes identiques.
-      tag: n.id,
-    });
-  } catch {
-    // Certains navigateurs mobiles refusent le constructeur hors service
-    // worker : la pastille reste.
+  if (etat === 'autorisee') {
+    return (
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-done-soft/40 px-3 py-2">
+        <span className="flex items-center gap-1.5 text-xs text-done">
+          <Volume2 className="h-3 w-3" />
+          Alertes système activées
+        </span>
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => afficherAlerte({
+            titre: 'Essai',
+            corps: "Voilà à quoi ressemblera l'arrivée d'un lead.",
+            etiquette: 'essai',
+          })}
+        >
+          Tester
+        </button>
+      </div>
+    );
   }
+
+  if (etat === 'refusee') {
+    return (
+      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-3 py-2">
+        <BellOff className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+        <p className="text-xs leading-snug text-muted-foreground">
+          Alertes refusées pour ce site. Le navigateur ne redemandera pas :
+          il faut les réactiver dans ses réglages, à l’icône à gauche de
+          l’adresse.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-3 py-2">
+      <span className="text-xs text-muted-foreground">
+        Être alerté même hors du CRM
+      </span>
+      <Button
+        size="sm"
+        className="h-6 rounded-full text-xs"
+        onClick={async () => onChange(await demanderAlertes())}
+      >
+        Activer
+      </Button>
+    </div>
+  );
 }

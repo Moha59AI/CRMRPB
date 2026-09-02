@@ -99,3 +99,38 @@ self.addEventListener('fetch', (e) => {
     return reponse;
   })());
 });
+
+
+/*
+ * Clic sur une alerte systeme.
+ *
+ * Sans ce gestionnaire, cliquer une notification ne fait rien : elle se
+ * ferme et l'utilisateur doit retrouver l'onglet lui-meme, ce qui annule
+ * l'interet de l'alerte.
+ *
+ * On reutilise un onglet deja ouvert plutot que d'en empiler un nouveau a
+ * chaque lead -- sinon une matinee chargee laisse quinze onglets du CRM.
+ */
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const cible = e.notification.data && e.notification.data.lien;
+
+  e.waitUntil((async () => {
+    const fenetres = await self.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true,
+    });
+
+    for (const f of fenetres) {
+      if (new URL(f.url).origin === self.location.origin) {
+        await f.focus();
+        // Le routeur de l'application gere la navigation : recharger ferait
+        // perdre l'etat de l'ecran en cours.
+        if (cible) f.postMessage({ type: 'naviguer', lien: cible });
+        return;
+      }
+    }
+
+    await self.clients.openWindow(cible || '/today');
+  })());
+});
