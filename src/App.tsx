@@ -24,6 +24,7 @@ import { SettingsPage } from '@/features/settings/settings-page';
 import { UsersPage } from '@/features/settings/users-page';
 import { InsurersPage } from '@/features/settings/insurers-page';
 import { CadencesPage } from '@/features/settings/cadences-page';
+import { SettingsLayout } from '@/features/settings/settings-layout';
 import { FollowUpPage } from '@/features/follow-up/follow-up-page';
 import { RelancesPage } from '@/features/relances/relances-page';
 import { DossierModal } from '@/features/dossier/dossier-modal';
@@ -84,13 +85,17 @@ function AppRoutes() {
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/communications" element={<CommunicationsPage />} />
             <Route path="/billing" element={<BillingPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings/integrations" element={<IntegrationsListPage />} />
-            <Route path="/settings/integrations/meta" element={<MetaSettingsPage />} />
-            <Route path="/settings/webhooks" element={<WebhooksPage />} />
-            <Route path="/settings/users" element={<UsersPage />} />
-            <Route path="/settings/insurers" element={<InsurersPage />} />
-            <Route path="/settings/relances" element={<CadencesPage />} />
+            {/* Les reglages partagent une sous-navigation : sans elle, ces
+                pages n'etaient joignables qu'en tapant leur URL. */}
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<SettingsPage />} />
+              <Route path="integrations" element={<IntegrationsListPage />} />
+              <Route path="integrations/meta" element={<MetaSettingsPage />} />
+              <Route path="webhooks" element={<WebhooksPage />} />
+              <Route path="users" element={<UsersPage />} />
+              <Route path="insurers" element={<InsurersPage />} />
+              <Route path="relances" element={<CadencesPage />} />
+            </Route>
           </Route>
 
           {/* Fallback */}
