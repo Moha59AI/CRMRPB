@@ -128,6 +128,16 @@ export interface Lead {
   utm_term: string | null;
   raw_payload: Record<string, unknown> | null;
   received_at: string | null;
+  /**
+   * Date d'arrivee du prospect : `received_at` quand elle existe, `created_at`
+   * sinon. Calculee en base, sert au tri du plus recent au plus ancien.
+   */
+  arrive_le: string;
+  /**
+   * Sortie du champ de travail. null = actif. Ce n'est pas une suppression :
+   * le lead reste rattache a son client et se retrouve.
+   */
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }

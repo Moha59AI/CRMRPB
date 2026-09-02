@@ -9,11 +9,19 @@ export async function fetchLeads(params: {
   source?: string;
   status?: string;
   assignedUserId?: string;
+  /** Sans valeur, les archives sont exclues : c'est le point de l'archivage. */
+  archives?: boolean;
 }): Promise<Lead[]> {
   let query = supabase
     .from('leads')
     .select('*')
-    .order('created_at', { ascending: false });
+    // `arrive_le` et non `created_at` : pour un lead Meta, la date d'ecriture
+    // en base n'est pas celle ou le prospect a rempli le formulaire.
+    .order('arrive_le', { ascending: false });
+
+  query = params.archives
+    ? query.not('archived_at', 'is', null)
+    : query.is('archived_at', null);
 
   if (params.search) {
     const s = params.search.trim();
@@ -166,3 +174,44 @@ export async function analyserDoublon(params: {
   if (error) throw new Error(error.message);
   return data as AnalyseDoublon;
 }
+
+// ============ ARCHIVAGE ============
+
+export interface CompteArchivables {
+  total: number;
+  jamais_contactes: number;
+  deja_contactes: number;
+  plus_ancien: string | null;
+  plus_recent: string | null;
+}
+
+/** Ce que l'archivage emporterait, avant de le declencher. */
+export async function compterLeadsArchivables(jours = 2): Promise<CompteArchivables> {
+  const { data, error } = await supabase.rpc('compter_leads_archivables', { p_jours: jours });
+  if (error) throw new Error(error.message);
+  return data as CompteArchivables;
+}
+
+/**
+ * Archive les leads plus anciens que `jours`.
+ *
+ * `inclureJamaisContactes` est a false par defaut : enterrer un lead qu'on n'a
+ * jamais appele n'est pas du rangement, c'est renoncer a une affaire.
+ */
+export async function archiverLeadsAnciens(
+  jours = 2,
+  inclureJamaisContactes = false,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('archiver_leads_anciens', {
+    p_jours: jours,
+    p_inclure_jamais_contactes: inclureJamaisContactes,
+  });
+  if (error) throw new Error(error.message);
+  return (data as number) ?? 0;
+}
+
+export async function desarchiverLead(leadId: string): Promise<void> {
+  const { error } = await supabase.rpc('desarchiver_lead', { p_lead: leadId });
+  if (error) throw new Error(error.message);
+}
+

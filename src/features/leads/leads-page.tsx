@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
+  Archive, ArchiveRestore,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { DialogueArchivage } from './dialogue-archivage';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -78,14 +80,20 @@ export function LeadsPage() {
   // Seeding state
   const [seeding, setSeeding] = useState(false);
 
+  // Les archives se consultent, elles ne se melangent pas a la file de
+  // travail : c'est tout l'interet de les avoir sorties.
+  const [voirArchives, setVoirArchives] = useState(false);
+  const [archivageOuvert, setArchivageOuvert] = useState(false);
+
   // Queries
   const { data: leads, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['leads', search, sourceFilter, statusFilter, advisorFilter],
+    queryKey: ['leads', search, sourceFilter, statusFilter, advisorFilter, voirArchives],
     queryFn: () => fetchLeads({
       search,
       source: sourceFilter,
       status: statusFilter,
       assignedUserId: advisorFilter,
+      archives: voirArchives,
     }),
   });
 
@@ -180,6 +188,32 @@ export function LeadsPage() {
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
           <ViewToggleButton active={view === 'kanban'} onClick={() => setView('kanban')} icon={Columns3} label="Pipeline" />
           <ViewToggleButton active={view === 'compact'} onClick={() => setView('compact')} icon={List} label="Liste compacte" />
+        </div>
+
+        <div className="h-6 w-px bg-border" />
+
+        {/* Archives : consulter, et ranger. */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant={voirArchives ? 'default' : 'outline'}
+            size="sm"
+            className="rounded-full"
+            onClick={() => setVoirArchives((v) => !v)}
+          >
+            {voirArchives
+              ? <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
+              : <Archive className="mr-1.5 h-3.5 w-3.5" />}
+            {voirArchives ? 'Voir les actifs' : 'Archives'}
+          </Button>
+
+          {!voirArchives && (
+            <Button
+              variant="outline" size="sm" className="rounded-full"
+              onClick={() => setArchivageOuvert(true)}
+            >
+              Archiver les anciens
+            </Button>
+          )}
         </div>
 
         <div className="h-6 w-px bg-border" />
@@ -279,6 +313,8 @@ export function LeadsPage() {
           </>
         )}
       </div>
+
+      <DialogueArchivage ouvert={archivageOuvert} onOuvertChange={setArchivageOuvert} />
 
       {/* New Lead Dialog */}
       <NewLeadDialog
