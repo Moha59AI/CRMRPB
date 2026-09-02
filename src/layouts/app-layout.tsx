@@ -5,6 +5,7 @@ import { LogOut, ChevronLeft, ChevronRight, Car, Menu } from 'lucide-react';
 import { navSections, type NavSection } from '@/config/navigation';
 import { cheminAutorise } from '@/config/permissions';
 import { SelecteurTheme } from '@/components/SelecteurTheme';
+import { ClocheNotifications } from '@/components/ClocheNotifications';
 import { useTitrePage } from '@/hooks/use-titre-page';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
@@ -127,6 +128,9 @@ export function AppLayout() {
 
         <div className="border-t border-border p-2">
           <div className="mb-1">
+            <ClocheNotifications reduit={!expanded} />
+          </div>
+          <div className="mb-1">
             <SelecteurTheme reduit={!expanded} />
           </div>
           <button
@@ -201,6 +205,10 @@ export function AppLayout() {
             <span className="truncate text-sm font-semibold text-foreground">
               {titreCourant}
             </span>
+          </div>
+
+          <div className="w-9 shrink-0">
+            <ClocheNotifications reduit />
           </div>
 
           <Avatar className="h-8 w-8 shrink-0">
