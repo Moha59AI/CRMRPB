@@ -3,10 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
-  Archive, ArchiveRestore,
+  Archive, ArchiveRestore, Trash2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { useAuth } from '@/features/auth/auth-context';
+import { peutSupprimer } from '@/config/permissions';
 import { DialogueArchivage } from './dialogue-archivage';
+import { DialogueSuppressionArchives } from './dialogue-suppression-archives';
+import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -25,7 +29,9 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead } from '@/services/leads-service';
+import {
+  checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead, supprimerLead,
+} from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { LeadAddressFields } from './lead-address-fields';
 import { messageErreurBase } from '@/lib/erreurs';
@@ -48,6 +54,7 @@ type ViewMode = 'table' | 'kanban' | 'compact';
 
 export function LeadsPage() {
   const queryClient = useQueryClient();
+  const { profile: profileCourant } = useAuth();
 
   // Search with debounce
   const [searchInput, setSearchInput] = useState('');
@@ -84,6 +91,22 @@ export function LeadsPage() {
   // travail : c'est tout l'interet de les avoir sorties.
   const [voirArchives, setVoirArchives] = useState(false);
   const [archivageOuvert, setArchivageOuvert] = useState(false);
+  const [suppressionOuverte, setSuppressionOuverte] = useState(false);
+  const [aSupprimer, setASupprimer] = useState<Lead | null>(null);
+
+  const suppressionUnitaire = useMutation({
+    mutationFn: (id: string) => supprimerLead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
+      setASupprimer(null);
+      toast.success('Lead supprimé');
+    },
+    onError: (e: Error) => {
+      setASupprimer(null);
+      toast.error(messageErreurBase(e.message));
+    },
+  });
 
   // Queries
   const { data: leads, isLoading, isError, error, refetch } = useQuery({
@@ -206,12 +229,21 @@ export function LeadsPage() {
             {voirArchives ? 'Voir les actifs' : 'Archives'}
           </Button>
 
-          {!voirArchives && (
+          {!voirArchives ? (
             <Button
               variant="outline" size="sm" className="rounded-full"
               onClick={() => setArchivageOuvert(true)}
             >
               Archiver les anciens
+            </Button>
+          ) : peutSupprimer(profileCourant?.role ?? null) && (
+            <Button
+              variant="outline" size="sm"
+              className="rounded-full text-destructive hover:text-destructive"
+              onClick={() => setSuppressionOuverte(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Vider les archives
             </Button>
           )}
         </div>
@@ -295,6 +327,9 @@ export function LeadsPage() {
                 advisorMap={advisorMap}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
                 onStatusChange={handleStatusChange}
+                onSupprimer={
+                  peutSupprimer(profileCourant?.role ?? null) ? setASupprimer : undefined
+                }
               />
             )}
             {view === 'kanban' && (
@@ -315,6 +350,29 @@ export function LeadsPage() {
       </div>
 
       <DialogueArchivage ouvert={archivageOuvert} onOuvertChange={setArchivageOuvert} />
+      <DialogueSuppressionArchives
+        ouvert={suppressionOuverte} onOuvertChange={setSuppressionOuverte}
+      />
+
+      <ConfirmerSuppression
+        ouvert={aSupprimer !== null}
+        onOuvertChange={(o) => !o && setASupprimer(null)}
+        nom={
+          aSupprimer
+            ? [aSupprimer.first_name, aSupprimer.last_name].filter(Boolean).join(' ')
+              || aSupprimer.phone || 'Sans nom'
+            : ''
+        }
+        consequence="Les notes et tâches de ce lead sont détruites avec lui. Les appels, SMS et rendez-vous sont conservés mais perdent leur lien."
+        alternative={
+          <>
+            L'archiver le retire des listes et des relances sans rien détruire,
+            et reste réversible.
+          </>
+        }
+        enCours={suppressionUnitaire.isPending}
+        onConfirmer={() => aSupprimer && suppressionUnitaire.mutate(aSupprimer.id)}
+      />
 
       {/* New Lead Dialog */}
       <NewLeadDialog
@@ -355,12 +413,14 @@ function ViewToggleButton({
 // ============ TABLE VIEW ============
 
 function LeadsTable({
-  leads, advisorMap, onRowClick, onStatusChange,
+  leads, advisorMap, onRowClick, onStatusChange, onSupprimer,
 }: {
   leads: Lead[];
   advisorMap: Map<string, Profile>;
   onRowClick: (lead: Lead) => void;
   onStatusChange: (leadId: string, status: string) => void;
+  /** Absent quand le role ne permet pas de supprimer. */
+  onSupprimer?: (lead: Lead) => void;
 }) {
   return (
     <div className="h-full overflow-y-auto">
@@ -377,6 +437,7 @@ function LeadsTable({
         <TableHead className="text-xs">Statut</TableHead>
         <TableHead className="text-xs">Conseiller</TableHead>
         <TableHead className="text-xs text-right">Score</TableHead>
+        {onSupprimer && <TableHead className="w-10" />}
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -443,6 +504,19 @@ function LeadsTable({
                 {lead.score}
               </span>
             </TableCell>
+            {onSupprimer && (
+              <TableCell className="pr-2 text-right">
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-7 w-7 rounded-full p-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Supprimer ${[lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'ce lead'}`}
+                  // Sans cela, le clic ouvrirait aussi la fiche.
+                  onClick={(e) => { e.stopPropagation(); onSupprimer(lead); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         );
       })}

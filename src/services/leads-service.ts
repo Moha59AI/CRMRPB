@@ -215,3 +215,40 @@ export async function desarchiverLead(leadId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// ============ SUPPRESSION ============
+//
+// Archiver est reversible, supprimer ne l'est pas. Les notes et les taches
+// partent avec le lead (CASCADE) ; les appels, SMS, rendez-vous et dossiers
+// survivent mais perdent leur lien (SET NULL).
+
+export interface ImpactSuppression {
+  leads: number;
+  /** Detruits avec le lead. */
+  notes: number;
+  taches: number;
+  /** Conserves, mais sans lien vers le lead. */
+  communications: number;
+  rendez_vous: number;
+  dossiers: number;
+}
+
+/** Ce que vider les archives detruirait, avant de le faire. */
+export async function impactSuppressionArchives(): Promise<ImpactSuppression> {
+  const { data, error } = await supabase.rpc('impact_suppression_archives');
+  if (error) throw new Error(error.message);
+  return data as ImpactSuppression;
+}
+
+/** Ne porte que sur les leads deja archives : c'est un garde-fou volontaire. */
+export async function supprimerLeadsArchives(): Promise<number> {
+  const { data, error } = await supabase.rpc('supprimer_leads_archives');
+  if (error) throw new Error(error.message);
+  return (data as number) ?? 0;
+}
+
+/** Suppression d'un lead isole, pour le spam et les doublons evidents. */
+export async function supprimerLead(leadId: string): Promise<void> {
+  const { error } = await supabase.rpc('supprimer_lead', { p_lead: leadId });
+  if (error) throw new Error(error.message);
+}
+
