@@ -29,6 +29,14 @@ describe('matrice des roles', () => {
     }
   });
 
+  it('reserve les cadences a l administrateur et au responsable', () => {
+    // Changer une cadence deplace la file de toute l'equipe : un conseiller
+    // ne doit pas pouvoir la modifier, meme s'il la subit.
+    expect(cheminAutorise('/settings/relances', 'admin')).toBe(true);
+    expect(cheminAutorise('/settings/relances', 'manager')).toBe(true);
+    expect(cheminAutorise('/settings/relances', 'advisor')).toBe(false);
+  });
+
   it('laisse le chemin le plus specifique l emporter', () => {
     // /settings est ouvert au responsable, mais pas /settings/webhooks.
     expect(cheminAutorise('/settings', 'manager')).toBe(true);

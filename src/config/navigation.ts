@@ -158,6 +158,12 @@ export const settingsNavItems: NavItem[] = [
     description: 'Endpoints entrants',
   },
   {
+    label: 'Cadences de relance',
+    path: '/settings/relances',
+    icon: BellRing,
+    description: 'Quand un lead revient dans la file',
+  },
+  {
     label: 'Assureurs',
     path: '/settings/insurers',
     icon: Shield,
