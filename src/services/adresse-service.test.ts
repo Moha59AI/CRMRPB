@@ -103,7 +103,7 @@ describe('rechercherAdresse', () => {
 });
 
 describe('rechercherCommunesParCodePostal', () => {
-  it('remplit la ville depuis la table locale du 59/62', async () => {
+  it('remplit la ville depuis la table locale française', async () => {
     const communes = await rechercherCommunesParCodePostal(' 59 000 ');
     expect(communes[0]).toMatchObject({ nom: 'Lille', code_postal: '59000' });
   });

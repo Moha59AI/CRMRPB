@@ -83,7 +83,7 @@ Prospects reçus depuis Meta et autres sources.
 **Unique** : meta_lead_id (partial, WHERE NOT NULL)
 
 ### postal_code_cities
-Référentiel local des couples code postal/commune des départements 59 et 62.
+Référentiel local des couples code postal/commune de France.
 Il sert à compléter la ville lorsqu'un formulaire ne transmet que le code
 postal, sans envoyer la donnée du client à un service tiers.
 | Colonne | Type | Description |
