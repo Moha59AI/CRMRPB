@@ -110,7 +110,12 @@ Deno.serve(async (req: Request) => {
       // Map fields from the payload
       const mappedLead: Record<string, string | null> = {
         first_name: null, last_name: null, phone: null, email: null,
-        city: null, vehicle_registration: null, vehicle_make: null, vehicle_model: null,
+        address: null, city: null, postal_code: null, citycode: null,
+        vehicle_registration: null, vehicle_make: null, vehicle_model: null,
+        gclid: null, gbraid: null, wbraid: null,
+        google_campaign_id: null, google_ad_group_id: null, google_ad_id: null,
+        utm_source: null, utm_medium: null, utm_campaign: null,
+        utm_content: null, utm_term: null,
       };
 
       for (const [payloadField, leadField] of Object.entries(fieldMapping)) {
@@ -147,6 +152,28 @@ Deno.serve(async (req: Request) => {
         if (email) mappedLead.email = email.toLowerCase().trim();
       }
       if (!mappedLead.city) mappedLead.city = getFirstValid(payload, ['city', 'ville']) ?? null;
+      if (!mappedLead.address) mappedLead.address = getFirstValid(payload, ['address', 'adresse', 'street_address']) ?? null;
+      if (!mappedLead.postal_code) mappedLead.postal_code = getFirstValid(payload, ['postal_code', 'postcode', 'zip', 'code_postal']) ?? null;
+
+      // Les formulaires du site peuvent envoyer ces valeurs a la racine ou
+      // dans un objet tracking/attribution. Les conserver des l'arrivee est
+      // indispensable : un GCLID perdu ne peut pas etre reconstruit ensuite.
+      const trackingFields = {
+        gclid: ['gclid', 'tracking.gclid', 'attribution.gclid'],
+        gbraid: ['gbraid', 'tracking.gbraid', 'attribution.gbraid'],
+        wbraid: ['wbraid', 'tracking.wbraid', 'attribution.wbraid'],
+        google_campaign_id: ['google_campaign_id', 'campaignid', 'campaign_id', 'tracking.campaignid'],
+        google_ad_group_id: ['google_ad_group_id', 'adgroupid', 'ad_group_id', 'tracking.adgroupid'],
+        google_ad_id: ['google_ad_id', 'creative', 'ad_id', 'tracking.creative'],
+        utm_source: ['utm_source', 'tracking.utm_source', 'attribution.utm_source'],
+        utm_medium: ['utm_medium', 'tracking.utm_medium', 'attribution.utm_medium'],
+        utm_campaign: ['utm_campaign', 'tracking.utm_campaign', 'attribution.utm_campaign'],
+        utm_content: ['utm_content', 'tracking.utm_content', 'attribution.utm_content'],
+        utm_term: ['utm_term', 'tracking.utm_term', 'attribution.utm_term'],
+      };
+      for (const [field, candidates] of Object.entries(trackingFields)) {
+        if (!mappedLead[field]) mappedLead[field] = getFirstValid(payload, candidates) ?? null;
+      }
 
       // Create lead if we have at least a name or phone
       if (mappedLead.first_name || mappedLead.last_name || mappedLead.phone || mappedLead.email) {
@@ -156,11 +183,25 @@ Deno.serve(async (req: Request) => {
           p_last_name: mappedLead.last_name,
           p_phone: mappedLead.phone,
           p_email: mappedLead.email,
+          p_address: mappedLead.address,
           p_city: mappedLead.city,
+          p_postal_code: mappedLead.postal_code,
+          p_citycode: mappedLead.citycode,
           p_vehicle_registration: mappedLead.vehicle_registration,
           p_vehicle_make: mappedLead.vehicle_make,
           p_vehicle_model: mappedLead.vehicle_model,
           p_source: 'webhook',
+          p_gclid: mappedLead.gclid,
+          p_gbraid: mappedLead.gbraid,
+          p_wbraid: mappedLead.wbraid,
+          p_google_campaign_id: mappedLead.google_campaign_id,
+          p_google_ad_group_id: mappedLead.google_ad_group_id,
+          p_google_ad_id: mappedLead.google_ad_id,
+          p_utm_source: mappedLead.utm_source,
+          p_utm_medium: mappedLead.utm_medium,
+          p_utm_campaign: mappedLead.utm_campaign,
+          p_utm_content: mappedLead.utm_content,
+          p_utm_term: mappedLead.utm_term,
           p_raw_payload: payload,
           p_received_at: new Date().toISOString(),
         });

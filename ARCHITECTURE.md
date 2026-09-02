@@ -29,6 +29,8 @@ Modules fonctionnels, chacun contient ses pages, services et composants :
 - `leads/` — Page Leads (liste + détail)
 - `integrations/` — Liste des intégrations
   - `meta/` — Configuration Meta Ads, service Meta, Conversions API service
+  - `google/` — OAuth Google Ads, secrets Vault et synchronisation
+- `marketing/` — Tableau de bord du clic à l'intervention
 - `webhooks/` — Gestion des webhooks entrants
 - `placeholders/` — Pages vides pour modules futurs
 
@@ -61,11 +63,13 @@ Types TypeScript partagés pour toutes les entités.
 | `/follow-up` | Suivi | Placeholder |
 | `/workflows` | Scénarios | Placeholder |
 | `/campaigns` | Campagnes | Placeholder |
+| `/marketing` | Marketing Google Ads | Fonctionnel |
 | `/communications` | Communications | Placeholder |
 | `/billing` | Facturation | Placeholder |
 | `/settings` | Réglages | Placeholder |
 | `/settings/integrations` | Intégrations | Fonctionnel |
 | `/settings/integrations/meta` | Meta Ads | Fonctionnel |
+| `/settings/integrations/google` | Google Ads | Fonctionnel |
 | `/settings/webhooks` | Webhooks | Fonctionnel |
 | `/settings/users` | Utilisateurs | Placeholder |
 
@@ -95,7 +99,7 @@ Centralisé dans `src/index.css` via des variables CSS :
 
 ## Edge Functions
 
-7 fonctions déployées :
+13 fonctions déployées :
 1. `meta-lead-webhook` — Réception et traitement des leads Meta (GET + POST)
 2. `meta-conversions` — Envoi d'événements à la Conversions API
 3. `meta-store-secrets` — Stockage chiffré des secrets Meta
@@ -103,6 +107,12 @@ Centralisé dans `src/index.css` via des variables CSS :
 5. `meta-sync-forms` — Synchronisation des formulaires Meta
 6. `meta-subscribe-leads` — Abonnement de la page aux leads
 7. `inbound-webhook` — Webhook générique entrant
+8. `meta-process-queue` — Traitement différé et résilient des leads Meta
+9. `google-ads-store-secrets` — Stockage des secrets Google dans Vault
+10. `google-ads-oauth-start` — Démarrage de l'autorisation Google
+11. `google-ads-oauth-callback` — Échange du code et stockage du refresh token
+12. `google-ads-test-connection` — Vérification du compte publicitaire
+13. `google-ads-sync` — Import des coûts, clics et campagnes, puis attribution GCLID
 
 ## Gestion des erreurs
 

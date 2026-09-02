@@ -69,6 +69,12 @@ Prospects reçus depuis Meta et autres sources.
 | fbclid | text | |
 | fbc | text | Click ID cookie |
 | fbp | text | Browser ID cookie |
+| gclid | text | Identifiant de clic Google Ads |
+| gbraid | text | Identifiant Google Ads pour certains parcours iOS applicatifs |
+| wbraid | text | Identifiant Google Ads pour certains parcours iOS web |
+| google_campaign_id | text | Campagne Google résolue depuis le clic ou le formulaire |
+| google_ad_group_id | text | Groupe d'annonces Google |
+| google_ad_id | text | Annonce Google |
 | utm_source | text | |
 | utm_medium | text | |
 | utm_campaign | text | |
@@ -110,6 +116,35 @@ Connexions aux services externes.
 | updated_at | timestamptz | |
 
 **Note** : Les secrets (App Secret, tokens) ne sont JAMAIS stockés dans `settings`. Ils sont stockés via Supabase Vault avec une référence dans `settings`.
+
+### google_ads_daily_metrics
+Mesures Google Ads synchronisées toutes les 15 minutes, une ligne par campagne
+et par jour. Les résultats métier ne sont pas copiés ici : la page Marketing
+les recalcule depuis les leads, rendez-vous et interventions afin de garder une
+seule source de vérité.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| connection_id | uuid → integration_connections | Connexion Google utilisée |
+| customer_id | text | Numéro client Google Ads |
+| metric_date | date | Jour du rapport |
+| campaign_id | text | Identifiant de campagne |
+| campaign_name | text | Nom de campagne au dernier import |
+| campaign_status | text | ENABLED, PAUSED… |
+| impressions | bigint | |
+| clicks | bigint | |
+| cost_micros | bigint | Dépense en millionièmes de devise |
+| conversions | numeric | Conversions déclarées dans Google Ads |
+| conversion_value | numeric | Valeur déclarée dans Google Ads |
+| synced_at | timestamptz | Dernière lecture de Google |
+
+**Unique** : (connection_id, metric_date, campaign_id)
+
+### google_ads_oauth_states
+États OAuth à usage unique, valides dix minutes. Seul leur condensat SHA-256 est
+stocké. Aucune politique RLS n'autorise le navigateur à lire ou écrire cette
+table ; seules les Edge Functions avec `service_role` y accèdent.
 
 ### meta_forms
 Formulaires Meta Lead Ads synchronisés.
@@ -189,8 +224,15 @@ Journal d'audit des actions administratives.
 - SELECT/INSERT/UPDATE/DELETE : membres du workspace
 
 ### integration_connections
-- SELECT : membres du workspace
+- SELECT : administrateur uniquement
 - INSERT/UPDATE/DELETE : admin uniquement
+
+### google_ads_daily_metrics
+- SELECT : admin, responsable et conseiller du workspace
+- INSERT/UPDATE/DELETE : administrateur uniquement (les imports ordinaires passent par la service role)
+
+### google_ads_oauth_states
+- SELECT/INSERT/UPDATE/DELETE : aucune opération directe depuis le navigateur
 
 ### meta_forms
 - SELECT : membres du workspace
@@ -215,7 +257,7 @@ Journal d'audit des actions administratives.
 ## Fonctions SQL
 
 ### upsert_lead_from_webhook()
-SECURITY DEFINER — insère ou met à jour un lead depuis un webhook. Vérifie `meta_lead_id` pour la déduplication. Appelée par les edge functions avec la service role key.
+SECURITY DEFINER — insère ou met à jour un lead depuis un webhook. Vérifie `meta_lead_id` pour la déduplication et conserve GCLID, GBRAID, WBRAID, identifiants Google et UTM. Appelée par les edge functions avec la service role key.
 
 ### update_updated_at_column()
 Trigger automatique pour `updated_at` sur toutes les tables avec timestamps.

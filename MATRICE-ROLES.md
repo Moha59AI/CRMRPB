@@ -55,6 +55,7 @@ est une trace, pas un brouillon.
 | `sms_templates` | LCMS | LCMS | L | — | — |
 | `workflows` | LCMS | LCM | L | — | — |
 | `workflow_runs` | L | L | L | — | — |
+| `google_ads_daily_metrics` | LCMS | L | L | — | — |
 
 Un scénario peut envoyer des SMS en masse et appeler des API externes : sa
 suppression reste à l'administrateur.
@@ -86,10 +87,15 @@ Un paiement ne se supprime pas — on passe un avoir.
 | `workspaces` | LM | L | L | L | L |
 | `audit_logs` | L | — | — | — | — |
 | `postal_code_cities` | LCMS | L | L | L | L |
+| `google_ads_oauth_states` | — | — | — | — | — |
 
 `integration_connections` porte les références aux secrets du Vault : y donner
 accès en lecture revient à donner les clés Meta. Réservé à l'administrateur,
 sans exception.
+
+`google_ads_oauth_states` ne contient pas de token mais protège le retour de
+l'autorisation Google contre la réutilisation. Seules les Edge Functions en
+`service_role` y accèdent.
 
 Tout le monde lit `profiles` : c'est ce qui permet d'afficher « assigné à
 Karim » sans requête privilégiée. Seul l'administrateur y écrit.

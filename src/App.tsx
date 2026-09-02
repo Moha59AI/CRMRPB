@@ -18,6 +18,7 @@ import { ContactsPage } from '@/features/contacts/contacts-page';
 import { CalendarPage } from '@/features/calendar/calendar-page';
 import { WorkflowsPage } from '@/features/workflows/workflows-page';
 import { CampaignsPage } from '@/features/campaigns/campaigns-page';
+import { MarketingPage } from '@/features/marketing/marketing-page';
 import { CommunicationsPage } from '@/features/communications/communications-page';
 import { BillingPage } from '@/features/billing/billing-page';
 import { SettingsPage } from '@/features/settings/settings-page';
@@ -32,6 +33,7 @@ import { ClientModal } from '@/features/client/client-modal';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import { IntegrationsListPage } from '@/features/integrations/integrations-list-page';
 import { MetaSettingsPage } from '@/features/integrations/meta/meta-settings-page';
+import { GoogleAdsSettingsPage } from '@/features/integrations/google/google-ads-settings-page';
 import { WebhooksPage } from '@/features/webhooks/webhooks-page';
 
 /**
@@ -82,6 +84,7 @@ function AppRoutes() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/follow-up" element={<FollowUpPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route path="/marketing" element={<MarketingPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/communications" element={<CommunicationsPage />} />
             <Route path="/billing" element={<BillingPage />} />
@@ -91,6 +94,7 @@ function AppRoutes() {
               <Route index element={<SettingsPage />} />
               <Route path="integrations" element={<IntegrationsListPage />} />
               <Route path="integrations/meta" element={<MetaSettingsPage />} />
+              <Route path="integrations/google" element={<GoogleAdsSettingsPage />} />
               <Route path="webhooks" element={<WebhooksPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="insurers" element={<InsurersPage />} />

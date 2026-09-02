@@ -300,6 +300,7 @@ Deno.serve(async (req: Request) => {
           p_phone: mapped.phone,
           p_email: mapped.email,
           p_city: mapped.city,
+          p_postal_code: mapped.postal_code,
           p_vehicle_registration: mapped.vehicle_registration,
           p_vehicle_make: mapped.vehicle_make,
           p_vehicle_model: mapped.vehicle_model,

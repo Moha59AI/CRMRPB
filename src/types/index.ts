@@ -121,6 +121,12 @@ export interface Lead {
   fbclid: string | null;
   fbc: string | null;
   fbp: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  google_campaign_id: string | null;
+  google_ad_group_id: string | null;
+  google_ad_id: string | null;
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;

@@ -21,3 +21,18 @@ verify_jwt = true
 
 [functions.meta-process-queue]
 verify_jwt = false
+
+[functions.google-ads-store-secrets]
+verify_jwt = true
+
+[functions.google-ads-oauth-start]
+verify_jwt = true
+
+[functions.google-ads-oauth-callback]
+verify_jwt = false
+
+[functions.google-ads-test-connection]
+verify_jwt = true
+
+[functions.google-ads-sync]
+verify_jwt = false

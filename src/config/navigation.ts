@@ -11,6 +11,7 @@ import {
   Shield,
   Webhook,
   LayoutDashboard,
+  ChartNoAxesCombined,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -91,6 +92,12 @@ export const navSections: NavSection[] = [
   {
     titre: 'Acquisition',
     items: [
+      {
+        label: 'Marketing',
+        path: '/marketing',
+        icon: ChartNoAxesCombined,
+        description: "Du clic publicitaire à l'intervention",
+      },
       {
         label: 'Campagnes',
         path: '/campaigns',
@@ -190,6 +197,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/integrations/meta',
         icon: Megaphone,
         description: 'Meta Lead Ads et Conversions API',
+      },
+      {
+        label: 'Google Ads',
+        path: '/settings/integrations/google',
+        icon: ChartNoAxesCombined,
+        description: 'Compte publicitaire, coûts et attribution des clics',
       },
       {
         label: 'Webhooks',
