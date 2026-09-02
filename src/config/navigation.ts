@@ -9,6 +9,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  Webhook,
   LayoutDashboard,
   type LucideIcon,
 } from 'lucide-react';
@@ -132,47 +133,73 @@ export const navSections: NavSection[] = [
 /** Liste à plat, pour les usages qui ne s'intéressent pas aux sections. */
 export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
 
-export const settingsNavItems: NavItem[] = [
+/**
+ * Reglages, groupes par nature.
+ *
+ * Sept entrees a plat ne se lisent pas : on cherche « Assureurs » parmi
+ * « Webhooks » et « Meta Ads », qui n'ont rien a voir. Les sections separent
+ * ce qui decrit l'atelier, ce qui regle le metier, et ce qui branche
+ * l'exterieur.
+ */
+export const settingsNavSections: NavSection[] = [
   {
-    label: 'Général',
-    path: '/settings',
-    icon: Settings,
-    description: 'Paramètres généraux',
+    titre: 'Espace de travail',
+    items: [
+      {
+        label: 'Général',
+        path: '/settings',
+        icon: Settings,
+        description: "Coordonnées, horaires, zones d'intervention",
+      },
+      {
+        label: 'Utilisateurs',
+        path: '/settings/users',
+        icon: Users,
+        description: 'Inviter, changer un rôle, retirer un accès',
+      },
+    ],
   },
   {
-    label: 'Intégrations',
-    path: '/settings/integrations',
-    icon: Workflow,
-    description: 'Connexions externes',
+    titre: 'Métier',
+    items: [
+      {
+        label: 'Assureurs',
+        path: '/settings/insurers',
+        icon: Shield,
+        description: 'Franchises, conventions et procédures sinistre',
+      },
+      {
+        label: 'Cadences de relance',
+        path: '/settings/relances',
+        icon: BellRing,
+        description: 'Quand un lead revient dans la file, et quand il en sort',
+      },
+    ],
   },
   {
-    label: 'Meta Ads',
-    path: '/settings/integrations/meta',
-    icon: Megaphone,
-    description: 'Meta Lead Ads et Conversions API',
-  },
-  {
-    label: 'Webhooks',
-    path: '/settings/webhooks',
-    icon: Workflow,
-    description: 'Endpoints entrants',
-  },
-  {
-    label: 'Cadences de relance',
-    path: '/settings/relances',
-    icon: BellRing,
-    description: 'Quand un lead revient dans la file',
-  },
-  {
-    label: 'Assureurs',
-    path: '/settings/insurers',
-    icon: Shield,
-    description: 'Franchises, conventions et lignes sinistre',
-  },
-  {
-    label: 'Utilisateurs',
-    path: '/settings/users',
-    icon: Users,
-    description: 'Gestion des accès',
+    titre: 'Connexions',
+    items: [
+      {
+        label: 'Intégrations',
+        path: '/settings/integrations',
+        icon: Workflow,
+        description: 'Connexions externes',
+      },
+      {
+        label: 'Meta Ads',
+        path: '/settings/integrations/meta',
+        icon: Megaphone,
+        description: 'Meta Lead Ads et Conversions API',
+      },
+      {
+        label: 'Webhooks',
+        path: '/settings/webhooks',
+        icon: Webhook,
+        description: 'Endpoints entrants',
+      },
+    ],
   },
 ];
+
+/** Liste a plat, pour les usages qui ne s'interessent pas aux sections. */
+export const settingsNavItems: NavItem[] = settingsNavSections.flatMap((s) => s.items);

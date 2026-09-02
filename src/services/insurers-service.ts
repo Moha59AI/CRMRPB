@@ -12,7 +12,8 @@ import type { Insurer } from '@/types';
 export type SaisieAssureur = Pick<
   Insurer,
   'name' | 'phone' | 'email' | 'address' | 'claims_phone' | 'claims_email'
-  | 'agreement_number' | 'default_franchise' | 'notes' | 'actif'
+  | 'agreement_number' | 'default_franchise' | 'franchise_texte' | 'notes' | 'actif'
+  | 'avant_rdv' | 'jour_rdv' | 'apres_rdv' | 'client_present' | 'expertise_obligatoire'
 >;
 
 export const ASSUREUR_VIDE: SaisieAssureur = {
@@ -24,8 +25,14 @@ export const ASSUREUR_VIDE: SaisieAssureur = {
   claims_email: null,
   agreement_number: null,
   default_franchise: null,
+  franchise_texte: null,
   notes: null,
   actif: true,
+  avant_rdv: null,
+  jour_rdv: null,
+  apres_rdv: null,
+  client_present: false,
+  expertise_obligatoire: false,
 };
 
 export async function fetchInsurers(options: { inclureInactifs?: boolean } = {}): Promise<Insurer[]> {
@@ -95,3 +102,22 @@ export async function compterDossiersAssureur(id: string): Promise<number> {
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
+
+/**
+ * Retrouve la compagnie a partir du texte libre de `leads.insurance`.
+ *
+ * L'appariement se fait en base, sur les variantes de nom : « credit mutuel »
+ * mene a Constatel, « direct assurance » a Avanssur. Le faire cote navigateur
+ * imposerait de charger les 51 compagnies pour en trouver une.
+ */
+export async function trouverAssureur(recherche: string): Promise<Insurer | null> {
+  const terme = recherche.trim();
+  if (!terme) return null;
+
+  const { data, error } = await supabase.rpc('trouver_assureur', { p_recherche: terme });
+  if (error) throw new Error(error.message);
+
+  const trouves = (data ?? []) as Insurer[];
+  return trouves[0] ?? null;
+}
+

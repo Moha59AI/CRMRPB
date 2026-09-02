@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  RefreshCw, Users, Plug, Webhook, ArrowRight, ScrollText,
+  RefreshCw, Users, Plug, ScrollText,
   Activity, Loader2, ShieldAlert,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
@@ -176,45 +176,37 @@ export function SettingsPage() {
                     />
                   </div>
 
-                  <Card className="rounded-xl border border-border">
-                    <CardHeader>
-                      <CardTitle className="text-sm">Administration</CardTitle>
-                      <CardDescription className="text-xs">
-                        {etat.equipe.membres} membre{etat.equipe.membres > 1 ? 's' : ''}
-                        {etat.equipe.invitations_en_attente > 0 &&
-                          ` · ${etat.equipe.invitations_en_attente} invitation${
-                            etat.equipe.invitations_en_attente > 1 ? 's' : ''
-                          } en attente`}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-3 sm:grid-cols-3">
-                      <Raccourci
-                        to="/settings/users" icone={<Users className="h-4 w-4" />}
-                        titre="Utilisateurs"
-                        detail={
-                          etat.equipe.invitations_en_attente > 0
-                            ? `${etat.equipe.invitations_en_attente} en attente`
-                            : 'Inviter, changer un rôle'
-                        }
-                        signale={etat.equipe.invitations_en_attente > 0}
-                      />
-                      <Raccourci
-                        to="/settings/integrations" icone={<Plug className="h-4 w-4" />}
-                        titre="Intégrations"
-                        detail={
-                          etat.integrations.find((i) => i.statut === 'error')
-                            ? 'Une connexion en erreur'
-                            : `${etat.integrations.filter((i) => i.statut === 'connected').length} connectée(s)`
-                        }
-                        signale={etat.integrations.some((i) => i.statut === 'error')}
-                      />
-                      <Raccourci
-                        to="/settings/webhooks" icone={<Webhook className="h-4 w-4" />}
-                        titre="Webhooks"
-                        detail="Endpoints entrants"
-                      />
-                    </CardContent>
-                  </Card>
+                  {/* Les raccourcis vers Utilisateurs, Integrations et Webhooks
+                      ont ete retires : la navigation laterale y mene deja, et
+                      deux chemins pour la meme page se lisent comme deux
+                      destinations. Seul ce qui n'est pas dans le menu reste. */}
+                  {(etat.equipe.invitations_en_attente > 0
+                    || etat.integrations.some((i) => i.statut === 'error')) && (
+                    <Card className="rounded-xl border border-due/30 bg-due-soft/30">
+                      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
+                        {etat.equipe.invitations_en_attente > 0 && (
+                          <Link
+                            to="/settings/users"
+                            className="flex items-center gap-2 text-sm text-due hover:underline"
+                          >
+                            <Users className="h-4 w-4" />
+                            {etat.equipe.invitations_en_attente} invitation
+                            {etat.equipe.invitations_en_attente > 1 ? 's' : ''} en attente
+                          </Link>
+                        )}
+                        {etat.integrations.some((i) => i.statut === 'error') && (
+                          <Link
+                            to="/settings/integrations"
+                            className="flex items-center gap-2 text-sm text-due hover:underline"
+                          >
+                            <Plug className="h-4 w-4" />
+                            Une connexion en erreur
+                          </Link>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                 </>
               )}
             </TabsContent>
@@ -256,33 +248,6 @@ function Compteur({
   );
 
   return lien ? <Link to={lien}>{contenu}</Link> : contenu;
-}
-
-function Raccourci({
-  to, icone, titre, detail, signale,
-}: {
-  to: string; icone: React.ReactNode; titre: string;
-  detail: string; signale?: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      className={cn(
-        'flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors',
-        signale ? 'border-due/30 bg-due-soft/40' : 'border-border',
-        'hover:border-primary/40 hover:bg-muted/40',
-      )}
-    >
-      <div className={cn('shrink-0', signale ? 'text-due' : 'text-muted-foreground')}>
-        {icone}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{titre}</p>
-        <p className="truncate text-xs text-muted-foreground">{detail}</p>
-      </div>
-      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-    </Link>
-  );
 }
 
 const LIBELLES_ACTION: Record<string, string> = {

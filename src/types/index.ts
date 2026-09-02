@@ -252,8 +252,26 @@ export interface Insurer {
   claims_email: string | null;
   /** Numero de convention conditionnant la prise en charge directe. */
   agreement_number: string | null;
-  /** Franchise habituelle en euros. Proposee a la qualification, jamais imposee. */
+  /** Franchise habituelle en euros, quand un seul montant s'applique. */
   default_franchise: number | null;
+  /**
+   * Regle de franchise telle qu'ecrite sur la carte verte. Un nombre seul
+   * serait faux : « 25% du montant » ou « BG = 0 / BGB = 50 » ne s'y reduisent
+   * pas.
+   */
+  franchise_texte: string | null;
+  /** Marche a suivre avant le rendez-vous : photos, devis, accords prealables. */
+  avant_rdv: string | null;
+  /** Le jour meme : declaration, numero de sinistre, contraintes d'horaire. */
+  jour_rdv: string | null;
+  /** Apres : ou envoyer la facture et sous quelle forme. */
+  apres_rdv: string | null;
+  /** Le client doit etre en ligne pour obtenir le numero de sinistre. */
+  client_present: boolean;
+  /** Immobilise le vehicule a la journee, rendez-vous a 8h30. */
+  expertise_obligatoire: boolean;
+  /** Variantes de nom, pour retrouver la compagnie depuis un texte libre. */
+  tags: string[];
   notes: string | null;
   /** false retire l'assureur des listes sans casser les dossiers existants. */
   actif: boolean;

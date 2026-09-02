@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { lienItineraire } from '@/services/adresse-service';
 import { LeadAddressFields, type ValeurAdresseLead } from './lead-address-fields';
+import { ProcedureAssureur } from './procedure-assureur';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -209,6 +210,10 @@ export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificati
               id="offer" label="Offre / cadeau annoncé" valeur={lead.offer}
               onValider={(v) => onUpdate({ offer: v })} desactive={desactive}
             />
+          </div>
+
+          <div className="sm:col-span-2">
+            <ProcedureAssureur nomSaisi={lead.insurance} />
           </div>
         </div>
       </section>
