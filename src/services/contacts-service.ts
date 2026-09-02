@@ -100,3 +100,46 @@ export async function fetchInterventionsClient(contactId: string): Promise<Lead[
   if (error) throw new Error(error.message);
   return (data ?? []) as Lead[];
 }
+
+/**
+ * Ouvre une nouvelle intervention pour un client existant.
+ *
+ * C'est le geste central du modele : un client peut revenir -- pare-brise en
+ * janvier, lunette arriere en juillet -- et chaque intervention est un lead
+ * distinct rattache au meme contact.
+ *
+ * Les coordonnees sont recopiees pour que la fiche soit exploitable tout de
+ * suite. L'adresse aussi, y compris ses coordonnees geographiques : sans
+ * elles, l'intervention n'apparaitrait pas sur la carte de l'agenda.
+ */
+export async function creerInterventionPourClient(
+  contact: Contact,
+): Promise<{ error: string | null; lead: Lead | null }> {
+  const wsId = await getWorkspaceId();
+
+  const { data, error } = await supabase
+    .from('leads')
+    .insert({
+      workspace_id: wsId,
+      contact_id: contact.id,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      phone: contact.phone,
+      email: contact.email,
+      address: contact.address,
+      city: contact.city,
+      postal_code: contact.postal_code,
+      citycode: contact.citycode,
+      latitude: contact.latitude,
+      longitude: contact.longitude,
+      geo_precision: contact.geo_precision,
+      source: 'manual',
+      status: 'new',
+    })
+    .select('*')
+    .single();
+
+  if (error) return { error: error.message, lead: null };
+  return { error: null, lead: data as Lead };
+}
+

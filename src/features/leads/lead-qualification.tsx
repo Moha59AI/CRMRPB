@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { lienItineraire } from '@/services/adresse-service';
 import { LeadAddressFields, type ValeurAdresseLead } from './lead-address-fields';
 import { ProcedureAssureur } from './procedure-assureur';
+import { ChampAssureur } from './champ-assureur';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -182,9 +183,9 @@ export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificati
           Assurance et offre
         </h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <ChampTexte
-            id="insurance" label="Assureur" valeur={lead.insurance}
-            onValider={(v) => onUpdate({ insurance: v })} desactive={desactive}
+          <ChampAssureur
+            id="insurance" valeur={lead.insurance}
+            onChange={(v) => onUpdate({ insurance: v })} desactive={desactive}
           />
           <div className="space-y-1.5">
             <Label htmlFor="franchise">Reste à charge</Label>

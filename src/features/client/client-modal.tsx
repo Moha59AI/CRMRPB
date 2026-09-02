@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, MapPin, Car, History, Wrench,
-  BellOff, ChevronRight,
+  BellOff, ChevronRight, Plus, Loader2,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ChampAdresse } from '@/components/ChampAdresse';
+import { Textarea } from '@/components/ui/textarea';
+import { ProcedureAssureur } from '@/features/leads/procedure-assureur';
 import { BarreEnregistrement } from '@/components/BarreEnregistrement';
 import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
 import { messageErreurBase } from '@/lib/erreurs';
@@ -26,7 +28,7 @@ import { StatusBadge } from '@/features/leads/status-badge';
 import { LIBELLE_VITRAGE, formatDateTime, formatDate } from '@/features/leads/lead-shared';
 import {
   fetchContactById, fetchSyntheseClient, fetchInterventionsClient,
-  fetchVehiclesForContact, updateContact,
+  fetchVehiclesForContact, updateContact, creerInterventionPourClient,
 } from '@/services/contacts-service';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { Lead, Contact } from '@/types';
@@ -94,6 +96,23 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     onError: (e: Error) => toast.error(messageErreurBase(e.message)),
   });
 
+  // Un client qui revient ouvre une nouvelle intervention : c'est le geste
+  // central du modele, et il n'existait nulle part depuis la fiche client.
+  const nouvelleIntervention = useMutation({
+    mutationFn: () => creerInterventionPourClient(client as Contact),
+    onSuccess: (r) => {
+      if (r.error || !r.lead) {
+        toast.error(r.error ?? 'Création impossible');
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['client-interventions', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success('Intervention créée');
+      navigate(`/interventions/${r.lead.id}`, { state: { background: location } });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const enregistrer = (apres?: () => void) => {
     const propre = Object.fromEntries(
       Object.entries(brouillon.modifications).map(([cle, v]) =>
@@ -139,6 +158,12 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       </FicheOverlay>
     );
   }
+
+  // L'assureur du dossier le plus recent : c'est celui qu'on cherche quand le
+  // client rappelle, et il change rarement d'une intervention a l'autre.
+  const assureurHabituel = (interventions ?? [])
+    .map((i) => i.insurance)
+    .find((a) => a != null && a.trim() !== '') ?? null;
 
   // Ce que l'ecran affiche : la fiche recouverte du brouillon en cours.
   const fiche = brouillon.valeur ?? client;
@@ -220,10 +245,33 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
           <div className="min-w-0 space-y-6">
             {synthese && <Synthese synthese={synthese} />}
+            {/* L'assureur du dernier dossier, avec sa procedure : c'est ce
+                qu'on cherche quand le client rappelle. */}
+            {assureurHabituel && (
+              <section>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Assureur habituel
+                </h3>
+                <ProcedureAssureur nomSaisi={assureurHabituel} />
+              </section>
+            )}
+
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Interventions
-              </h3>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Interventions
+                </h3>
+                <Button
+                  size="sm" variant="outline" className="h-7 rounded-full text-xs"
+                  onClick={() => nouvelleIntervention.mutate()}
+                  disabled={nouvelleIntervention.isPending}
+                >
+                  {nouvelleIntervention.isPending
+                    ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                    : <Plus className="mr-1.5 h-3 w-3" />}
+                  Nouvelle intervention
+                </Button>
+              </div>
               <ListeInterventions
                 interventions={(interventions ?? []).slice(0, 5)}
                 onOuvrir={ouvrirIntervention}
@@ -234,6 +282,19 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           <div className="space-y-4">
             <CoordonneesClient client={fiche} onModifier={brouillon.modifier} />
             <ConsentementsClient client={fiche} onModifier={brouillon.modifier} />
+
+            <div className="rounded-xl border border-border p-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Notes
+              </h3>
+              <Textarea
+                rows={4}
+                value={fiche.notes ?? ''}
+                placeholder="Particularités, préférences, historique de la relation…"
+                className="rounded-lg"
+                onChange={(e) => brouillon.modifier({ notes: e.target.value })}
+              />
+            </div>
             <Encart titre="Client depuis" lignes={[
               ['Créé le', formatDate(client.created_at)],
               ['Première intervention', synthese?.premiere_intervention
