@@ -20,4 +20,4 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.meta-process-queue]
-verify_jwt = true
+verify_jwt = false

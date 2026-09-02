@@ -14,6 +14,25 @@ const supabase = createClient(
 const BATCH_SIZE = 25;
 const MAX_ATTEMPTS = 6;
 
+function isAuthorized(req: Request): boolean {
+  const provided = req.headers.get('apikey') ?? '';
+  const configured = Deno.env.get('SUPABASE_SECRET_KEYS') ?? '';
+
+  try {
+    const keys = JSON.parse(configured) as Record<string, string>;
+    const expected = keys.automations ?? '';
+    if (!provided || !expected || provided.length !== expected.length) return false;
+
+    let difference = 0;
+    for (let i = 0; i < provided.length; i++) {
+      difference |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    return difference === 0;
+  } catch {
+    return false;
+  }
+}
+
 function normalizePhone(phone: string): string {
   const cleaned = phone.replace(/[\s.-]/g, '');
   if (cleaned.startsWith('+33')) return '0' + cleaned.slice(3);
@@ -94,6 +113,13 @@ async function markRetry(eventId: string, attempts: number, message: string) {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  if (!isAuthorized(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
