@@ -25,6 +25,7 @@ import {
 import {
   ChampAdresse,
 } from '@/components/ChampAdresse';
+import { fondDepuis } from '@/features/dossier/dossier-constants';
 import {
   Input,
 } from '@/components/ui/input';
@@ -78,7 +79,7 @@ export function ContactsPage() {
   // `background` fait que cette page reste montee derriere, avec sa recherche
   // et son defilement intacts.
   const ouvrirClient = (contactId: string) => {
-    navigate(`/clients/${contactId}`, { state: { background: location } });
+    navigate(`/clients/${contactId}`, { state: { background: fondDepuis(location) } });
   };
 
   const { data: contacts, isLoading, isError, error, refetch } = useQuery({

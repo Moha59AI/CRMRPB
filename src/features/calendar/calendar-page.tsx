@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1336,7 +1337,7 @@ export function CalendarPage() {
   // La fiche s'ouvre en surface superposee : l'agenda reste monte derriere,
   // avec sa periode et ses filtres intacts.
   const ouvrirIntervention = (leadId: string) => {
-    navigate(`/interventions/${leadId}`, { state: { background: location } });
+    navigate(`/interventions/${leadId}`, { state: { background: fondDepuis(location) } });
   };
 
   // ---- Navigation ----

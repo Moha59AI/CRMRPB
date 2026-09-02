@@ -24,7 +24,7 @@ import { LIBELLE_CHAMP_LEAD } from '@/features/leads/lead-shared';
 import { fetchProfiles } from '@/services/profiles-service';
 import { createCommunication } from '@/services/activity-service';
 import { DossierContenu } from './dossier-contenu';
-import { ONGLETS, type OngletDossier, type EtatOuvertureDossier } from './dossier-constants';
+import { ONGLETS, type OngletDossier, type EtatOuvertureDossier, fondDepuis } from './dossier-constants';
 import type { Lead, LeadStatus } from '@/types';
 
 interface DossierModalProps {
@@ -261,7 +261,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
         </Button>
         {lead.contact_id && (
           <Button size="sm" variant="ghost" className="rounded-full"
-            onClick={() => navigate(`/clients/${lead.contact_id}`, { state: { background: location } })}>
+            onClick={() => navigate(`/clients/${lead.contact_id}`, { state: { background: fondDepuis(location) } })}>
             <User className="mr-1.5 h-3.5 w-3.5" />Fiche client
           </Button>
         )}

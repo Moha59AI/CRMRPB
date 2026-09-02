@@ -30,6 +30,7 @@ import {
   fetchContactById, fetchSyntheseClient, fetchInterventionsClient,
   fetchVehiclesForContact, updateContact, creerInterventionPourClient,
 } from '@/services/contacts-service';
+import { fondDepuis } from '@/features/dossier/dossier-constants';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { Lead, Contact } from '@/types';
 
@@ -108,7 +109,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['client-interventions', contactId] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Intervention créée');
-      navigate(`/interventions/${r.lead.id}`, { state: { background: location } });
+      navigate(`/interventions/${r.lead.id}`, { state: { background: fondDepuis(location) } });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -133,7 +134,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   // Depuis un client, on ouvre une intervention : la fiche dossier se
   // superpose a celle-ci, et Echap ramene ici.
   const ouvrirIntervention = (leadId: string) => {
-    navigate(`/interventions/${leadId}`, { state: { background: location } });
+    navigate(`/interventions/${leadId}`, { state: { background: fondDepuis(location) } });
   };
 
   const nom = client

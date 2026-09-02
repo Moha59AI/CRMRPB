@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -82,7 +83,7 @@ export function LeadsPage() {
   // Une intervention s'ouvre en surface superposee : la liste reste montee
   // derriere, avec ses filtres et son defilement.
   const ouvrirIntervention = (leadId: string) => {
-    navigate(`/interventions/${leadId}`, { state: { background: location } });
+    navigate(`/interventions/${leadId}`, { state: { background: fondDepuis(location) } });
   };
 
   // New lead dialog

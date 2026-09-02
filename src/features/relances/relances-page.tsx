@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
@@ -186,7 +187,7 @@ export function RelancesPage() {
   const ouvrirDossier = useCallback((leadId: string) => {
     const liste = relances.map((r) => r.leadId).filter((id): id is string => !!id);
     navigate(`/interventions/${leadId}`, {
-      state: { background: location, liste, mode: 'relance' },
+      state: { background: fondDepuis(location), liste, mode: 'relance' },
     });
   }, [relances, navigate, location]);
 
