@@ -146,6 +146,10 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Le dialogue de resultat a ses propres raccourcis : laisser passer
+      // ceux-ci relancerait un appel ou passerait au lead suivant en plein
+      // milieu de la qualification.
+      if (aQualifier) return;
       const cible = e.target as HTMLElement | null;
       if (cible && ['INPUT', 'TEXTAREA'].includes(cible.tagName)) return;
 
@@ -164,7 +168,7 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [appeler, envoyerSms, reporter, traiter, suivant, onFermer, onOuvrirFiche, relance]);
+  }, [appeler, envoyerSms, reporter, traiter, suivant, onFermer, onOuvrirFiche, relance, aQualifier]);
 
   const progression = file.length > 0 ? Math.round((index / file.length) * 100) : 0;
 

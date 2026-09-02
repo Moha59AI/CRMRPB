@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Bell, BellRing, Check, TrendingUp, BellOff, Volume2 } from 'lucide-react';
@@ -59,16 +59,31 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
     enabled: !!profile?.id,
   });
 
-  // Temps reel : le serveur pousse, on ne sonde pas.
+  /*
+   * Temps reel : le serveur pousse, on ne sonde pas.
+   *
+   * Les invalidations sont regroupees. La file Meta traite vingt-cinq leads
+   * par lot : sans ce delai, vingt-cinq notifications arrivees en quelques
+   * secondes declenchaient une centaine de rechargements simultanes, et
+   * l'interface se figeait le temps qu'ils passent.
+   */
+  const minuteurRafraichissement = useRef<number | null>(null);
+
   useEffect(() => {
     if (!profile?.id) return;
 
-    return ecouterNotifications(profile.id, (n) => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-non-lues'] });
-      // Un nouveau lead change aussi les listes ouvertes derriere.
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['relances'] });
+    const desabonner = ecouterNotifications(profile.id, (n) => {
+      if (minuteurRafraichissement.current !== null) {
+        window.clearTimeout(minuteurRafraichissement.current);
+      }
+      minuteurRafraichissement.current = window.setTimeout(() => {
+        minuteurRafraichissement.current = null;
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['notifications-non-lues'] });
+        // Un nouveau lead change aussi les listes ouvertes derriere.
+        queryClient.invalidateQueries({ queryKey: ['leads'] });
+        queryClient.invalidateQueries({ queryKey: ['relances'] });
+      }, 800);
 
       // L'onglet est au premier plan : la pastille suffit, une alerte
       // par-dessus serait redondante.
@@ -78,6 +93,13 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
         });
       }
     });
+
+    return () => {
+      desabonner();
+      if (minuteurRafraichissement.current !== null) {
+        window.clearTimeout(minuteurRafraichissement.current);
+      }
+    };
   }, [profile?.id, queryClient]);
 
   // Le clic sur une alerte systeme demande au service worker de reveiller

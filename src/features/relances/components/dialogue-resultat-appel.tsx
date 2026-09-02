@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2, PhoneOff, Check } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -64,6 +64,15 @@ export function DialogueResultatAppel({
     }
   }, [ouvert]);
 
+  const valider = useCallback(() => {
+    if (!choisi) return;
+    onValider({
+      cle: choisi.cle,
+      prochaineAction: choisi.demandeDelai ? dansNHeures(heures) : null,
+      note: note.trim() || null,
+    });
+  }, [choisi, heures, note, onValider]);
+
   // Chiffres 1 a 7 pour choisir, Entree pour valider. Le mode session ne
   // quitte pas le clavier : un dialogue qui obligerait a prendre la souris
   // casserait ce qui fait son interet.
@@ -76,28 +85,23 @@ export function DialogueResultatAppel({
       const rang = Number(e.key);
       if (rang >= 1 && rang <= RESULTATS.length) {
         e.preventDefault();
+        // Le mode session ecoute la meme fenetre : sans cet arret, un chiffre
+        // choisirait une issue *et* declencherait un de ses raccourcis.
+        e.stopPropagation();
         setChoisi(RESULTATS[rang - 1]);
         return;
       }
 
       if (e.key === 'Enter' && choisi && !enCours) {
         e.preventDefault();
+        e.stopPropagation();
         valider();
       }
     };
 
     window.addEventListener('keydown', auClavier);
     return () => window.removeEventListener('keydown', auClavier);
-  });
-
-  const valider = () => {
-    if (!choisi) return;
-    onValider({
-      cle: choisi.cle,
-      prochaineAction: choisi.demandeDelai ? dansNHeures(heures) : null,
-      note: note.trim() || null,
-    });
-  };
+  }, [ouvert, choisi, enCours, valider]);
 
   return (
     <Dialog open={ouvert} onOpenChange={onOuvertChange}>
