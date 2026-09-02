@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
+import { DialogueResultatAppel, type ChoixResultat } from './components/dialogue-resultat-appel';
+import { resultatParCle } from './resultat-appel';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,7 @@ import { SessionRelance } from './components/session-relance';
 import {
   fetchRelances, compterRelances, reporterRelance, marquerRelanceTraitee,
   journaliserAction,
+  enregistrerResultatAppel,
   type Relance, type RelanceKind, type UrgencyLevel, type RelanceSort,
   type CompteursRelances,
 } from '@/services/relances-service';
@@ -89,6 +92,10 @@ export function RelancesPage() {
   const relances = useMemo(() => data?.relances ?? [], [data]);
   const total = data?.total ?? 0;
 
+  // Qualifier l'appel est ce qui fait avancer le lead. Sans ce dialogue, le
+  // statut ne changeait pas et le lead revenait en tete de file aussitot.
+  const [appelAQualifier, setAppelAQualifier] = useState<Relance | null>(null);
+
   const rafraichir = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['relances'] });
     queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
@@ -119,9 +126,37 @@ export function RelancesPage() {
     if (!r.phone) return;
     window.location.href = `tel:${r.phone}`;
     journaliserAction(r, 'call_outbound', 'Appel depuis les relances')
-      .then(rafraichir)
       .catch((e: Error) => toast.error(e.message));
+    // Le dialogue s'ouvre tout de suite : demander le resultat plus tard
+    // reviendrait a ne jamais le demander.
+    setAppelAQualifier(r);
   };
+
+  const qualifierAppel = useMutation({
+    mutationFn: async (choix: ChoixResultat) => {
+      if (!appelAQualifier?.leadId) return;
+      const resultat = resultatParCle(choix.cle);
+      await enregistrerResultatAppel({
+        leadId: appelAQualifier.leadId,
+        statut: resultat.statut,
+        prochaineAction: choix.prochaineAction,
+        note: choix.note,
+      });
+      return resultat;
+    },
+    onSuccess: (resultat) => {
+      const nom = appelAQualifier?.titre ?? 'Le lead';
+      setAppelAQualifier(null);
+      rafraichir();
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success(
+        resultat?.sortDeFile
+          ? `${nom} quitte les relances`
+          : `${nom} — ${resultat?.label.toLowerCase()}`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const envoyerSms = (r: Relance) => {
     if (!r.phone) return;
@@ -361,6 +396,15 @@ export function RelancesPage() {
           </>
         )}
       </div>
+
+
+      <DialogueResultatAppel
+        ouvert={appelAQualifier !== null}
+        onOuvertChange={(o) => !o && setAppelAQualifier(null)}
+        nom={appelAQualifier?.titre ?? ''}
+        enCours={qualifierAppel.isPending}
+        onValider={(choix) => qualifierAppel.mutate(choix)}
+      />
 
     </>
   );

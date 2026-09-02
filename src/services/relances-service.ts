@@ -9,6 +9,7 @@
 // travail ne peut pas se faire dans le navigateur.
 
 import { supabase } from '@/lib/supabase';
+import type { LeadStatus } from '@/types';
 
 export type UrgencyLevel = 'urgent' | 'due' | 'upcoming';
 export type PriorityLevel = 'urgent' | 'haute' | 'normale' | 'faible';
@@ -241,3 +242,44 @@ export async function journaliserAction(
 
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Enregistre le resultat d'un appel.
+ *
+ * C'est ce qui fait avancer le lead dans la file. Sans lui, appeler
+ * n'incrementait qu'un compteur de tentatives : le statut ne bougeait pas, la
+ * cadence de ce statut restait a zero minute, et le lead revenait en tete
+ * aussitot -- on rappelait la meme personne en boucle.
+ *
+ * `next_action_at` est remis a null hors du cas « rappeler plus tard » : une
+ * date de rappel laissee d'une decision precedente prendrait le pas sur la
+ * cadence et fausserait la file en silence.
+ */
+export async function enregistrerResultatAppel(params: {
+  leadId: string;
+  statut: LeadStatus;
+  prochaineAction: string | null;
+  note?: string | null;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('leads')
+    .update({
+      status: params.statut,
+      next_action_at: params.prochaineAction,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.leadId);
+
+  if (error) throw new Error(error.message);
+
+  if (params.note?.trim()) {
+    // Une note d'appel echouee ne doit pas annuler le changement de statut :
+    // le lead a bien ete traite, c'est ce qui compte pour la file.
+    const { error: erreurNote } = await supabase.from('notes').insert({
+      lead_id: params.leadId,
+      content: params.note.trim(),
+    });
+    if (erreurNote) throw new Error(erreurNote.message);
+  }
+}
+
