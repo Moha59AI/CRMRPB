@@ -143,7 +143,9 @@ export async function fetchRelances(filtres: FiltresRelances = {}): Promise<Page
     p_priorities: filtres.priorities?.length ? filtres.priorities : null,
     p_assigned: filtres.assignedUserId ?? null,
     p_city: filtres.city ?? null,
-    p_sort: filtres.sort ?? 'priorite',
+    // Le plus recent d'abord : un prospect vitrage rappele trois semaines
+    // apres a deja fait poser son pare-brise ailleurs.
+    p_sort: filtres.sort ?? 'plus_recent',
     p_horizon_days: filtres.horizonDays ?? 7,
     p_limit: filtres.limit ?? 50,
     p_offset: filtres.offset ?? 0,

@@ -47,7 +47,7 @@ export function RelancesPage() {
   const [filtre, setFiltre] = useState<CleFiltre>('toutes');
   const [recherche, setRecherche] = useState('');
   const [rechercheDifferee, setRechercheDifferee] = useState('');
-  const [tri, setTri] = useState<RelanceSort>('priorite');
+  const [tri, setTri] = useState<RelanceSort>('plus_recent');
   const [page, setPage] = useState(0);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enCours, setEnCours] = useState<string | null>(null);
@@ -184,7 +184,7 @@ export function RelancesPage() {
     setPreparationSession(true);
     try {
       const { relances: file } = await fetchRelances({
-        ...filtresRequete, sort: 'priorite', limit: 200, offset: 0,
+        ...filtresRequete, sort: 'plus_recent', limit: 200, offset: 0,
       });
       if (file.length === 0) {
         toast.info('Aucune relance à traiter dans ce filtre');
@@ -277,9 +277,9 @@ export function RelancesPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="priorite">Priorité recommandée</SelectItem>
-            <SelectItem value="plus_ancien">Plus ancien</SelectItem>
-            <SelectItem value="plus_recent">Plus récent</SelectItem>
+            <SelectItem value="plus_recent">Arrivés en dernier</SelectItem>
+            <SelectItem value="plus_ancien">Arrivés en premier</SelectItem>
+            <SelectItem value="priorite">Priorité calculée</SelectItem>
           </SelectContent>
         </Select>
 
