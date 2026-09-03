@@ -156,7 +156,8 @@ export function GoogleAdsSettingsPage() {
   }
 
   const settings = parseGoogleAdsSettings(connection);
-  const connected = connection?.status === 'connected' && Boolean(settings.refresh_token_ref);
+  const authorized = Boolean(settings.refresh_token_ref);
+  const connected = connection?.status === 'connected' && authorized;
   const hasBaseCredentials = Boolean(settings.developer_token_ref && settings.client_secret_ref && settings.client_id);
 
   return (
@@ -253,7 +254,7 @@ export function GoogleAdsSettingsPage() {
             </div>
             <Separator className="my-4" />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={testConnection} disabled={!connected || testing}>
+              <Button type="button" variant="outline" className="rounded-full" onClick={testConnection} disabled={!authorized || testing}>
                 {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                 Tester
               </Button>

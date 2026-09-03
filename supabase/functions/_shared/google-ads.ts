@@ -158,7 +158,23 @@ export async function googleAdsSearchWithSession(
   );
   const payload = await response.json();
   if (!response.ok) {
-    const detail = payload?.error?.message ?? `Google Ads HTTP ${response.status}`;
+    const apiError = payload?.error;
+    const failure = Array.isArray(apiError?.details)
+      ? apiError.details
+        .flatMap((item: Record<string, unknown>) => Array.isArray(item?.errors) ? item.errors : [])
+        .find(Boolean) as Record<string, unknown> | undefined
+      : undefined;
+    const errorCode = failure?.errorCode && typeof failure.errorCode === 'object'
+      ? Object.values(failure.errorCode as Record<string, unknown>).find(Boolean)
+      : undefined;
+    const parts = [
+      typeof apiError === 'string' ? apiError : apiError?.message,
+      typeof errorCode === 'string' ? errorCode : undefined,
+      typeof failure?.message === 'string' ? failure.message : undefined,
+    ].filter((part, index, values) => part && values.indexOf(part) === index);
+    const detail = parts.length
+      ? parts.join(' — ')
+      : `Google Ads HTTP ${response.status}`;
     throw new Error(detail);
   }
 
