@@ -295,6 +295,87 @@
     to { opacity: 1; transform: translateX(0); }
   }
 
+  /*
+   * Arrivée d'une notification.
+   *
+   * Trois mouvements, chacun pour une raison distincte.
+   *
+   * La cloche sonne : c'est l'annonce, et elle part du point d'accroche en
+   * haut, comme une vraie cloche — une rotation centrée ressemblerait à un
+   * essuie-glace.
+   */
+  .animate-sonnerie {
+    animation: sonnerie 900ms var(--ease-out);
+    transform-origin: 50% 10%;
+  }
+  @keyframes sonnerie {
+    0%, 100% { transform: rotate(0deg); }
+    10% { transform: rotate(14deg); }
+    22% { transform: rotate(-12deg); }
+    34% { transform: rotate(9deg); }
+    46% { transform: rotate(-6deg); }
+    58% { transform: rotate(4deg); }
+    70% { transform: rotate(-2deg); }
+    82% { transform: rotate(1deg); }
+  }
+
+  /*
+   * L'onde part de la pastille et s'éteint. C'est le seul des trois qui se
+   * voie sans regarder : un mouvement qui s'étale est perçu du coin de l'œil,
+   * alors qu'un chiffre qui change ne l'est pas. Elle joue une fois et
+   * s'arrête — une pulsation en boucle attire l'œil toute la journée pour
+   * une information déjà lue.
+   */
+  .animate-onde {
+    /*
+     * Courbe propre a cette animation, contre l'habitude de la maison.
+     * `--ease-out` est tres charge au debut : l'onde atteignait sa taille
+     * finale au tiers du temps et passait le reste invisible -- un claquement,
+     * pas une onde. Une courbe plus douce lui rend son etalement.
+     */
+    animation: onde 900ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+  @keyframes onde {
+    0% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.9); opacity: 0.28; }
+    100% { transform: scale(2.6); opacity: 0; }
+  }
+
+  /*
+   * La pastille apparaît en dépassant sa taille avant de s'y poser. Le
+   * dépassement est ce qui la rend perceptible : une apparition linéaire de
+   * la même durée passe inaperçue.
+   */
+  .animate-pastille {
+    animation: pastille var(--motion-slow) var(--ease-out);
+  }
+  @keyframes pastille {
+    0% { transform: scale(0.4); opacity: 0; }
+    60% { transform: scale(1.18); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /*
+   * Une notification non lue arrive dans la liste en glissant, et son fond
+   * s'éteint vers celui du repos : on repère celle qui vient d'entrer sans
+   * relire les autres.
+   */
+  .animate-entree-notification {
+    animation: entree-notification var(--motion-slow) var(--ease-out);
+  }
+  @keyframes entree-notification {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+      background-color: hsl(var(--primary) / 0.16);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+      background-color: hsl(var(--primary) / 0.05);
+    }
+  }
+
   /* Une relance traitée s'efface au lieu de disparaître d'un coup :
      l'utilisateur voit ce qu'il vient de faire. */
   .animate-check-out {

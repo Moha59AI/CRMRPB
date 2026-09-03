@@ -47,6 +47,19 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   const [ouvert, setOuvert] = useState(false);
   const [alertes, setAlertes] = useState<EtatAlertes>(() => etatAlertes());
 
+  /*
+   * Nombre d'arrivées depuis le chargement.
+   *
+   * Ce n'est pas une donnée affichée : il sert de clé React. Une animation
+   * CSS ne rejoue pas si la classe est déjà posée — deux leads coup sur coup
+   * ne feraient sonner la cloche qu'une fois. En changeant de clé, l'élément
+   * est remonté et le mouvement repart à zéro.
+   */
+  const [arrivees, setArrivees] = useState(0);
+
+  /* Ce que le panneau contenait à son ouverture : le reste vient d'arriver. */
+  const idsALOuverture = useRef<Set<string>>(new Set());
+
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => fetchNotifications(),
@@ -84,6 +97,11 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
         queryClient.invalidateQueries({ queryKey: ['leads'] });
         queryClient.invalidateQueries({ queryKey: ['relances'] });
       }, 800);
+
+      // Le mouvement part tout de suite, sans attendre le regroupement des
+      // rechargements : sonner une seconde apres l'arrivee donnerait
+      // l'impression que le CRM traine.
+      setArrivees((v) => v + 1);
 
       // L'onglet est au premier plan : la pastille suffit, une alerte
       // par-dessus serait redondante.
@@ -140,7 +158,12 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   return (
     <Popover
       open={ouvert}
-      onOpenChange={setOuvert}
+      onOpenChange={(o) => {
+        // Fige avant le rendu du panneau : ce qui est deja la ne doit pas
+        // s'animer comme si ca venait d'arriver.
+        if (o) idsALOuverture.current = new Set((notifications ?? []).map((x) => x.id));
+        setOuvert(o);
+      }}
     >
       <PopoverTrigger asChild>
         <Button
@@ -151,13 +174,35 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
           )}
           aria-label={compte > 0 ? `${compte} notification(s) non lue(s)` : 'Notifications'}
         >
-          {compte > 0 ? <BellRing className="h-4 w-4 shrink-0" /> : <Bell className="h-4 w-4 shrink-0" />}
+          {/* La cle remonte l'element a chaque arrivee, ce qui rejoue la
+              sonnerie. Au premier rendu il n'y a rien a annoncer. */}
+          <span
+            key={arrivees}
+            className={cn('inline-flex shrink-0', arrivees > 0 && 'animate-sonnerie')}
+          >
+            {compte > 0 ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+          </span>
           {!reduit && <span className="text-sm">Notifications</span>}
+
+          {/* L'onde ne depend pas du compteur : celui-ci n'arrive qu'apres le
+              regroupement des rechargements, soit presque une seconde plus
+              tard, et l'onde serait partie sans avoir rien accompagne. */}
+          {arrivees > 0 && (
+            <span
+              key={`onde-${arrivees}`}
+              aria-hidden="true"
+              className={cn(
+                'animate-onde pointer-events-none absolute h-4 w-4 rounded-full bg-primary',
+                reduit ? 'right-1 top-1' : 'right-2 top-1.5',
+              )}
+            />
+          )}
 
           {compte > 0 && (
             <span
+              key={`compte-${compte}`}
               className={cn(
-                'absolute flex h-4 min-w-4 items-center justify-center rounded-full',
+                'animate-pastille absolute flex h-4 min-w-4 items-center justify-center rounded-full',
                 'bg-primary px-1 text-[10px] font-semibold text-primary-foreground',
                 reduit ? 'right-1 top-1' : 'right-2 top-1.5',
               )}
@@ -201,6 +246,8 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
                 'flex w-full items-start gap-2.5 border-b border-border px-3 py-2.5 text-left last:border-b-0',
                 'hover:bg-muted/50',
                 !n.read && 'bg-primary/5',
+                // Arrivee sous les yeux, panneau deja ouvert.
+                !idsALOuverture.current.has(n.id) && 'animate-entree-notification',
               )}
             >
               <span className={cn('mt-0.5 shrink-0', n.read ? 'text-muted-foreground' : 'text-primary')}>
