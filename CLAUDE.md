@@ -78,6 +78,8 @@ La navigation est déjà configurée dans `src/config/navigation.ts`. Ne pas mod
 
 ### 4. Design
 
+Le langage visuel et ses origines sont documentés dans `DESIGN.md`.
+
 Utiliser EXCLUSIVEMENT :
 - Les variables CSS définies dans `src/index.css` (hsl(var(--primary)), etc.)
 - Les composants shadcn/ui dans `src/components/ui/`

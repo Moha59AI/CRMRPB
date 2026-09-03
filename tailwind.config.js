@@ -21,6 +21,10 @@ export default {
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        // Surface en retrait : pose une zone sans avoir à la border.
+        surface: 'hsl(var(--surface))',
+        // Troisième niveau de texte, sous `muted-foreground`.
+        faint: 'hsl(var(--faint))',
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
@@ -75,7 +79,10 @@ export default {
           DEFAULT: 'hsl(var(--done))',
           soft: 'hsl(var(--done-soft))',
         },
-        border: 'hsl(var(--border))',
+        border: {
+          DEFAULT: 'hsl(var(--border))',
+          strong: 'hsl(var(--border-strong))',
+        },
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         chart: {
@@ -86,11 +93,14 @@ export default {
           5: 'hsl(var(--chart-5))',
         },
       },
+      // Les trois portées sont définies dans `index.css`, où elles peuvent
+      // changer de recette entre le thème clair et le thème sombre — ce
+      // qu'une valeur écrite ici ne saurait pas faire.
       boxShadow: {
-        'xs': '0 1px 2px 0 rgba(32, 35, 49, 0.04)',
-        'sm': '0 1px 3px 0 rgba(32, 35, 49, 0.06), 0 1px 2px -1px rgba(32, 35, 49, 0.04)',
-        'md': '0 2px 8px -2px rgba(32, 35, 49, 0.08), 0 1px 4px -2px rgba(32, 35, 49, 0.06)',
-        'lg': '0 4px 16px -4px rgba(32, 35, 49, 0.08), 0 2px 6px -2px rgba(32, 35, 49, 0.05)',
+        'xs': '0 1px 2px 0 hsl(218 30% 12% / 0.04)',
+        'sm': 'var(--shadow-1)',
+        'md': 'var(--shadow-2)',
+        'lg': 'var(--shadow-3)',
       },
       keyframes: {
         'accordion-down': {
