@@ -99,12 +99,14 @@ async function syncWorkspace(workspaceId: string): Promise<{
   const connection = await getGoogleConnection(workspaceId);
   const settings = (connection.settings ?? {}) as Record<string, unknown>;
   const session = await createGoogleAdsSession(workspaceId, settings);
+  const endDate = dateOnly(new Date().toISOString());
+  const startDate = dateOnly(new Date(Date.now() - 89 * 86_400_000).toISOString());
   const rows = await googleAdsSearchWithSession(session, `
     SELECT segments.date, campaign.id, campaign.name, campaign.status,
            metrics.impressions, metrics.clicks, metrics.cost_micros,
            metrics.conversions, metrics.conversions_value
     FROM campaign
-    WHERE segments.date DURING LAST_90_DAYS
+    WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'
       AND campaign.status != 'REMOVED'
     ORDER BY segments.date DESC
   `) as GoogleRow[];
