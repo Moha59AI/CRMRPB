@@ -1421,7 +1421,7 @@ export function CalendarPage() {
       />
 
       {/* Toolbar */}
-      <div className="border-b border-border px-6 py-3">
+      <div className="gutter-x border-b border-border py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Navigation */}
           <div className="flex items-center gap-2">

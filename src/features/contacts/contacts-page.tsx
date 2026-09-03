@@ -14,7 +14,7 @@ import {
   z,
 } from 'zod';
 import {
-  Search, Plus, MessageSquare, AlertTriangle, Loader2,
+  Search, Plus, MessageSquare, AlertTriangle, Loader2, Phone,
 } from 'lucide-react';
 import {
   useNavigate, useLocation,
@@ -26,6 +26,7 @@ import {
   ChampAdresse,
 } from '@/components/ChampAdresse';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
+import { useEstMobile } from '@/hooks/use-media-query';
 import {
   Input,
 } from '@/components/ui/input';
@@ -71,6 +72,8 @@ type ContactFormValues = z.infer<typeof contactSchema>;
 
 export function ContactsPage() {
   const navigate = useNavigate();
+  // Le tableau a sept colonnes : sur telephone, la liste le remplace.
+  const estMobile = useEstMobile();
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -108,7 +111,7 @@ export function ContactsPage() {
       />
 
       {/* Search bar */}
-      <div className="border-b border-border px-6 py-4">
+      <div className="gutter-x border-b border-border py-4">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -121,7 +124,7 @@ export function ContactsPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="defilement-contenu flex-1 overflow-y-auto scrollbar-thin">
         {isLoading && (
           <div className="p-6">
             <div className="space-y-3">
@@ -158,7 +161,15 @@ export function ContactsPage() {
           </div>
         )}
 
-        {!isLoading && !isError && contacts && contacts.length > 0 && (
+        {!isLoading && !isError && contacts && contacts.length > 0 && estMobile && (
+          <ListeMobileContacts
+            contacts={contacts}
+            compteurs={compteurs}
+            onOuvrir={(contact) => ouvrirClient(contact.id)}
+          />
+        )}
+
+        {!isLoading && !isError && contacts && contacts.length > 0 && !estMobile && (
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -188,6 +199,73 @@ export function ContactsPage() {
       {/* New contact dialog */}
       <CreateContactDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
+  );
+}
+
+/**
+ * Clients, en liste, sur téléphone.
+ *
+ * Sept colonnes ne tiennent pas sur 375 px : le tableau y devient une bande
+ * qu'on fait glisser de côté pour lire une seule ligne. La carte ne garde que
+ * ce qui sert à reconnaître quelqu'un — le nom, la ville, le nombre
+ * d'interventions — et met l'appel à un doigt, puisque c'est ce qu'on vient
+ * y faire.
+ */
+function ListeMobileContacts({
+  contacts, compteurs, onOuvrir,
+}: {
+  contacts: Contact[];
+  compteurs?: Map<string, number>;
+  onOuvrir: (contact: Contact) => void;
+}) {
+  return (
+    <ul className="divide-y divide-border">
+      {contacts.map((contact) => {
+        const nom = [contact.first_name, contact.last_name]
+          .filter(Boolean).join(' ') || 'Sans nom';
+        const interventions = compteurs?.get(contact.id) ?? 0;
+
+        return (
+          <li key={contact.id} className="flex items-stretch">
+            <button
+              type="button"
+              onClick={() => onOuvrir(contact)}
+              className="min-w-0 flex-1 px-4 py-3 text-left active:bg-muted/50"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                  {nom}
+                </span>
+                {/* Un client qui revient est le renseignement le plus utile
+                    de la ligne : il se voit sans etre cherche. */}
+                {interventions > 0 && (
+                  <Badge variant="secondary" className="shrink-0 rounded-full text-[10px]">
+                    {interventions} interv.
+                  </Badge>
+                )}
+              </div>
+
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {contact.city && <span className="truncate">{contact.city}</span>}
+                {contact.phone && <span className="tabular">{contact.phone}</span>}
+              </div>
+            </button>
+
+            {/* Appeler depuis la liste : c'est le geste du metier, il ne
+                devrait pas couter l'ouverture d'une fiche. */}
+            {contact.phone && (
+              <a
+                href={`tel:${contact.phone}`}
+                aria-label={`Appeler ${nom}`}
+                className="flex w-14 shrink-0 items-center justify-center border-l border-border text-primary active:bg-muted/50"
+              >
+                <Phone className="h-4 w-4" />
+              </a>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -299,7 +377,7 @@ function CreateContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reinitialiser(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Nouveau contact</DialogTitle>
           <DialogDescription>

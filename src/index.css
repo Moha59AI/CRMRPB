@@ -194,9 +194,16 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* iOS grossit le texte de lui-même quand on tourne le téléphone en
+       paysage. La mise en page changeait donc de taille à la rotation. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   body {
     @apply bg-background text-foreground;
+    /* Le rectangle gris qui clignote sous chaque appui trahit la page web.
+       Les états `:active` et `hover` du design le remplacent. */
+    -webkit-tap-highlight-color: transparent;
     font-feature-settings: 'cv11', 'ss01';
     font-variation-settings: 'opsz' 32;
     /*
@@ -222,6 +229,22 @@
 }
 
 @layer utilities {
+  /*
+   * Encoche et barre d'accueil.
+   *
+   * Installé sur l'écran d'accueil, le CRM occupe tout l'écran, horloge et
+   * trait d'accueil compris. Sans ces marges, l'en-tête passe sous l'heure et
+   * la barre d'onglets sous le trait — on vise un bouton, on ferme l'app.
+   *
+   * Les valeurs valent zéro partout ailleurs : rien à conditionner.
+   */
+  .safe-haut {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bas {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   /* Marge horizontale d'une page. À poser sur le conteneur, une fois. */
   .gutter-x {
     padding-left: var(--gutter-x);
@@ -233,6 +256,13 @@
   }
   .gutter-gap {
     gap: var(--gutter-gap);
+  }
+
+  /* Arrête le geste en fin de liste au lieu de le propager à la page —
+     sans quoi le CRM se met à rebondir sous le doigt comme un site. */
+  .defilement-contenu {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .scrollbar-thin {

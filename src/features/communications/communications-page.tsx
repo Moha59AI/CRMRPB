@@ -232,7 +232,7 @@ export function CommunicationsPage() {
       />
 
       {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-6 py-3">
+      <div className="flex flex-wrap items-center gap-2 gutter-x border-b border-border py-3">
         <Button size="sm" className="rounded-full" onClick={() => setCallOpen(true)}>
           <Phone className="mr-2 h-4 w-4" />
           Appeler
@@ -570,7 +570,7 @@ function CallDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Enregistrer un appel</DialogTitle>
           <DialogDescription>
@@ -744,7 +744,7 @@ function SmsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Envoyer un SMS</DialogTitle>
           <DialogDescription>
@@ -902,7 +902,7 @@ function EmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Envoyer un email</DialogTitle>
           <DialogDescription>
@@ -1043,7 +1043,7 @@ function NoteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Ajouter une note</DialogTitle>
           <DialogDescription>
@@ -1165,7 +1165,7 @@ function SmsTemplatesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-xl">
+      <DialogContent className="max-w-2xl sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Modèles SMS</DialogTitle>
           <DialogDescription>

@@ -141,6 +141,18 @@ export const navSections: NavSection[] = [
 export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
 
 /**
+ * Les quatre écrans de la barre du bas, sur téléphone.
+ *
+ * Ce sont ceux d'une journée de travail : ce qu'il y a à faire, qui rappeler,
+ * quoi traiter, et quand on passe. Le reste — marketing, facturation,
+ * réglages — se consulte assis, et reste dans le tiroir.
+ *
+ * Quatre, plus « Menu ». À cinq entrées sur un écran de 375 px, chaque cible
+ * fait encore 75 px de large ; à six, les intitulés se coupent.
+ */
+export const cheminsPouce: string[] = ['/today', '/relances', '/leads', '/calendar'];
+
+/**
  * Reglages, groupes par nature.
  *
  * Sept entrees a plat ne se lisent pas : on cherche « Assureurs » parmi

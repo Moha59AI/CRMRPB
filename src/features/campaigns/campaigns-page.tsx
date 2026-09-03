@@ -155,7 +155,7 @@ export function CampaignsPage() {
       />
 
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3 border-b border-border px-6 py-4">
+      <div className="flex flex-wrap items-end gap-3 gutter-x border-b border-border py-4">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Canal</Label>
           <Select value={channelFilter} onValueChange={setChannelFilter}>
@@ -684,7 +684,7 @@ function CreateCampaignDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Nouvelle campagne</DialogTitle>
           <DialogDescription>

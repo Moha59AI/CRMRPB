@@ -6,6 +6,7 @@ import { navSections, type NavSection } from '@/config/navigation';
 import { cheminAutorise } from '@/config/permissions';
 import { SelecteurTheme } from '@/components/SelecteurTheme';
 import { ClocheNotifications } from '@/components/ClocheNotifications';
+import { BarreOnglets } from '@/components/BarreOnglets';
 import { useTitrePage } from '@/hooks/use-titre-page';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
@@ -172,7 +173,8 @@ export function AppLayout() {
         {/* En-tete telephone : le menu complet vit dans un tiroir plutot que
             dans une barre du bas. Onze entrees reparties en cinq sections n'y
             tiendraient pas, et les tronquer ferait perdre le classement. */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3 md:hidden">
+        <header className="safe-haut shrink-0 border-b border-border bg-card md:hidden">
+          <div className="flex h-14 items-center gap-3 px-3">
           <Sheet open={tiroirOuvert} onOpenChange={setTiroirOuvert}>
             <SheetTrigger asChild>
               <Button
@@ -216,6 +218,7 @@ export function AppLayout() {
               {initials}
             </AvatarFallback>
           </Avatar>
+          </div>
         </header>
 
         {/* Une limite par module : un ecran qui plante ne doit pas emporter la
@@ -228,6 +231,11 @@ export function AppLayout() {
         >
           <Outlet />
         </ErrorBoundary>
+
+        <BarreOnglets
+          role={profile?.role ?? null}
+          onOuvrirMenu={() => setTiroirOuvert(true)}
+        />
       </main>
     </div>
   );
@@ -247,14 +255,14 @@ function TiroirNavigation({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-3 border-b border-border px-4">
+      <div className="safe-haut flex items-center gap-3 border-b border-border px-4 pb-3 pt-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
           <Car className="h-4 w-4 text-primary-foreground" />
         </div>
         <span className="truncate text-sm font-semibold text-foreground">{APP_NAME}</span>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-2">
+      <nav className="defilement-contenu flex-1 overflow-y-auto p-2">
         {sections.map((section, i) => (
           <div key={section.titre} className={cn(i > 0 && 'mt-4')}>
             <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
@@ -286,7 +294,7 @@ function TiroirNavigation({
         ))}
       </nav>
 
-      <div className="border-t border-border p-2">
+      <div className="safe-bas border-t border-border p-2">
         <SelecteurTheme reduit={false} />
         <div className="mt-1 flex items-center gap-2 rounded-lg p-2">
           <Avatar className="h-8 w-8 shrink-0">

@@ -219,7 +219,7 @@ export function WebhooksPage() {
 
       {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="rounded-xl">
+        <DialogContent className="sm:rounded-xl">
           <DialogHeader>
             <DialogTitle>Créer un webhook entrant</DialogTitle>
             <DialogDescription>
@@ -318,7 +318,7 @@ function WebhookEventsDialog({ endpoint, onClose }: { endpoint: WebhookEndpoint 
 
   return (
     <Dialog open={!!endpoint} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-2xl rounded-xl">
+      <DialogContent className="max-w-2xl sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Événements - {endpoint.name}</DialogTitle>
           <DialogDescription>

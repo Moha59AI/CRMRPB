@@ -308,7 +308,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       )}
 
       <AlertDialog open={fermetureDemandee} onOpenChange={setFermetureDemandee}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent className="sm:rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Modifications non enregistrées</AlertDialogTitle>
             <AlertDialogDescription>

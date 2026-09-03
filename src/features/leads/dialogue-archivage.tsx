@@ -72,7 +72,7 @@ export function DialogueArchivage({ ouvert, onOuvertChange }: DialogueArchivageP
 
   return (
     <Dialog open={ouvert} onOpenChange={onOuvertChange}>
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="sm:rounded-2xl sm:max-w-md">
         <DialogHeader>
           <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
             <Archive className="h-5 w-5 text-muted-foreground" />

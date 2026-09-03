@@ -105,7 +105,7 @@ export function DialogueResultatAppel({
 
   return (
     <Dialog open={ouvert} onOpenChange={onOuvertChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:rounded-2xl sm:max-w-md">
         <DialogHeader>
           <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
             <PhoneOff className="h-5 w-5 text-muted-foreground" />

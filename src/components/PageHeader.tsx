@@ -8,12 +8,20 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+    <div className="gutter-x flex flex-col gap-3 border-b border-border py-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:py-5">
+      <div className="min-w-0">
+        <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
+        {/*
+          La description explique l'écran à qui le découvre. Sur téléphone,
+          elle coûte une ligne en haut d'un écran qui en a peu, à quelqu'un qui
+          connaît déjà son outil — l'en-tête mangeait le tiers de la hauteur
+          avant que la première donnée apparaisse.
+        */}
+        {description && (
+          <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{description}</p>
+        )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
     </div>
   );
 }

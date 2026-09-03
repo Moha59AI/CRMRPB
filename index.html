@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` etend la page sous l'encoche et la barre
+    d'accueil de l'iPhone. Sans lui, iOS encadre l'application de bandes
+    blanches en mode installe, et `env(safe-area-inset-*)` vaut zero. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Relais Pare-Brise — CRM</title>
     <meta name="description" content="CRM de gestion des leads, interventions et clients Relais Pare-Brise." />
     <!-- Outil interne : rien a indexer ni a partager. -->

@@ -210,7 +210,7 @@ export function LeadsPage() {
       />
 
       {/* Toolbar: view toggle + filters */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-3">
+      <div className="flex flex-wrap items-center gap-3 gutter-x border-b border-border py-3">
         {/* View toggle */}
         <div className="hidden items-center rounded-lg bg-muted p-1 md:inline-flex">
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
@@ -861,7 +861,7 @@ function NewLeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl rounded-xl">
+      <DialogContent className="max-w-xl sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Nouveau lead</DialogTitle>
           <DialogDescription>Créer un lead manuellement</DialogDescription>

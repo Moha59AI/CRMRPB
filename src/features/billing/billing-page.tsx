@@ -660,7 +660,7 @@ function CreateInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose(); }}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Nouvelle facture</DialogTitle>
           <DialogDescription>

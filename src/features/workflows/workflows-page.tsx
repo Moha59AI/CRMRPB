@@ -550,7 +550,7 @@ function DeleteDialog({
 }) {
   return (
     <Dialog open={!!workflow} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="rounded-xl">
+      <DialogContent className="sm:rounded-xl">
         <DialogHeader>
           <DialogTitle>Supprimer le scénario</DialogTitle>
           <DialogDescription>

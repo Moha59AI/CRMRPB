@@ -182,7 +182,7 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
         />
       </div>
 
-      <header className="flex items-center justify-between border-b border-border px-6 py-3">
+      <header className="flex items-center justify-between gutter-x border-b border-border py-3">
         <div className="flex items-baseline gap-3">
           <span className="text-sm font-semibold">Session de relance</span>
           <span className="text-sm text-muted-foreground tabular">

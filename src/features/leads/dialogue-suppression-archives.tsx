@@ -55,7 +55,7 @@ export function DialogueSuppressionArchives({
 
   return (
     <AlertDialog open={ouvert} onOpenChange={onOuvertChange}>
-      <AlertDialogContent className="rounded-2xl">
+      <AlertDialogContent className="sm:rounded-2xl">
         <AlertDialogHeader>
           <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
             <Trash2 className="h-5 w-5 text-destructive" />

@@ -364,7 +364,7 @@ function DialogueAssureur({
 
   return (
     <Dialog open={ouvert} onOpenChange={preparer}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{assureur ? 'Modifier l’assureur' : 'Nouvel assureur'}</DialogTitle>
           <DialogDescription>
