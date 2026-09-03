@@ -156,11 +156,23 @@ export async function googleAdsSearchWithSession(
     `https://googleads.googleapis.com/${session.version}/customers/${session.customerId}/googleAds:searchStream`,
     { method: 'POST', headers, body: JSON.stringify({ query }) },
   );
-  const payload = await response.json();
+  const responseText = await response.text();
+  let payload: unknown = null;
+  try {
+    payload = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    // La reponse texte sera reprise ci-dessous sans masquer le statut HTTP.
+  }
   if (!response.ok) {
-    const apiError = payload?.error;
-    const failure = Array.isArray(apiError?.details)
-      ? apiError.details
+    const root = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : undefined;
+    const apiError = root?.error;
+    const apiErrorObject = apiError && typeof apiError === 'object'
+      ? apiError as Record<string, unknown>
+      : undefined;
+    const failure = Array.isArray(apiErrorObject?.details)
+      ? apiErrorObject.details
         .flatMap((item: Record<string, unknown>) => Array.isArray(item?.errors) ? item.errors : [])
         .find(Boolean) as Record<string, unknown> | undefined
       : undefined;
@@ -168,13 +180,15 @@ export async function googleAdsSearchWithSession(
       ? Object.values(failure.errorCode as Record<string, unknown>).find(Boolean)
       : undefined;
     const parts = [
-      typeof apiError === 'string' ? apiError : apiError?.message,
+      typeof apiError === 'string' ? apiError : apiErrorObject?.message,
+      typeof root?.message === 'string' ? root.message : undefined,
       typeof errorCode === 'string' ? errorCode : undefined,
       typeof failure?.message === 'string' ? failure.message : undefined,
     ].filter((part, index, values) => part && values.indexOf(part) === index);
+    const fallback = responseText.trim().slice(0, 1000) || response.statusText;
     const detail = parts.length
       ? parts.join(' — ')
-      : `Google Ads HTTP ${response.status}`;
+      : `Google Ads HTTP ${response.status}${fallback ? ` — ${fallback}` : ''}`;
     throw new Error(detail);
   }
 
