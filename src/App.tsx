@@ -1,5 +1,7 @@
 import './App.css';
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { surveillerVerrouPointeur } from '@/lib/verrou-pointeur';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { QueryProvider } from '@/app/query-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -117,6 +119,11 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Rattrape un verrou de clic laisse par Radix quand une couche modale se
+  // demonte pendant qu'une autre s'ouvre. Sans ce filet, la page cesse de
+  // repondre au clic et il faut recharger.
+  useEffect(() => surveillerVerrouPointeur(), []);
+
   return (
     <ErrorBoundary pleinEcran>
       {/* attribute="class" pilote la classe .dark attendue par tailwind.config.js.

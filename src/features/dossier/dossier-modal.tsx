@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -120,6 +120,22 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   // Fermer en perdant sa saisie est le defaut que ce brouillon doit eviter :
   // on demande, plutot que de fermer ou de refuser.
   const [fermetureDemandee, setFermetureDemandee] = useState(false);
+
+  /**
+   * Fermeture differee, demandee depuis le dialogue de confirmation.
+   *
+   * Naviguer directement depuis le bouton demonterait la fiche -- donc le
+   * dialogue avec elle -- pendant que Radix est en train de le fermer. Sa
+   * couche modale ne rendrait alors jamais les clics au reste de la page.
+   * On ferme d'abord, on navigue au rendu suivant.
+   */
+  const [fermerApresDialogue, setFermerApresDialogue] = useState(false);
+
+  useEffect(() => {
+    if (!fermerApresDialogue || fermetureDemandee) return;
+    setFermerApresDialogue(false);
+    fermer();
+  }, [fermerApresDialogue, fermetureDemandee, fermer]);
 
   const fermerAvecGarde = useCallback(() => {
     if (brouillon.estModifie) setFermetureDemandee(true);
@@ -352,7 +368,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
               onClick={() => {
                 brouillon.annuler();
                 setFermetureDemandee(false);
-                fermer();
+                setFermerApresDialogue(true);
               }}
             >
               Fermer sans enregistrer
@@ -365,7 +381,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
                   onSuccess: () => {
                     brouillon.vider();
                     toast.success('Fiche enregistrée');
-                    fermer();
+                    setFermerApresDialogue(true);
                   },
                 });
               }}

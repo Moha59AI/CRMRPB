@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -130,6 +130,25 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     if (pleinePage || !etat.background) navigate('/contacts');
     else navigate(-1);
   };
+
+  /**
+   * Fermeture differee, demandee depuis le dialogue de confirmation.
+   *
+   * Naviguer directement depuis le bouton demonterait la fiche -- donc le
+   * dialogue avec elle -- pendant que Radix est en train de le fermer. Sa
+   * couche modale ne rendrait alors jamais les clics au reste de la page.
+   * On ferme d'abord, on navigue au rendu suivant.
+   */
+  const [fermerApresDialogue, setFermerApresDialogue] = useState(false);
+
+  useEffect(() => {
+    if (!fermerApresDialogue || fermetureDemandee) return;
+    setFermerApresDialogue(false);
+    fermer();
+    // `fermer` est recree a chaque rendu : le declencheur est l'intention,
+    // pas l'identite de la fonction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fermerApresDialogue, fermetureDemandee]);
 
   // Depuis un client, on ouvre une intervention : la fiche dossier se
   // superpose a celle-ci, et Echap ramene ici.
@@ -326,7 +345,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
               onClick={() => {
                 brouillon.annuler();
                 setFermetureDemandee(false);
-                fermer();
+                setFermerApresDialogue(true);
               }}
             >
               Fermer sans enregistrer
@@ -335,7 +354,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
               className="rounded-full"
               onClick={() => {
                 setFermetureDemandee(false);
-                enregistrer(fermer);
+                enregistrer(() => setFermerApresDialogue(true));
               }}
             >
               Enregistrer et fermer
