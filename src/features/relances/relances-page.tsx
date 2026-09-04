@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { CheckCircle2, Search, Loader2, X, Play } from 'lucide-react';
+import {
+  CheckCircle2, Search, Loader2, X, Play, AlertTriangle,
+  CalendarClock, UserRoundSearch, FileText,
+} from 'lucide-react';
 import { DialogueResultatAppel, type ChoixResultat } from './components/dialogue-resultat-appel';
 import { resultatParCle } from './resultat-appel';
 import { toast } from 'sonner';
@@ -23,6 +26,7 @@ import {
   type Relance, type RelanceKind, type UrgencyLevel, type RelanceSort,
   type CompteursRelances,
 } from '@/services/relances-service';
+import { archiverLeadsSelectionnes } from '@/services/leads-service';
 
 const PAR_PAGE = 50;
 
@@ -51,7 +55,7 @@ export function RelancesPage() {
   const [filtre, setFiltre] = useState<CleFiltre>('toutes');
   const [recherche, setRecherche] = useState('');
   const [rechercheDifferee, setRechercheDifferee] = useState('');
-  const [tri, setTri] = useState<RelanceSort>('plus_recent');
+  const [tri, setTri] = useState<RelanceSort>('priorite');
   const [page, setPage] = useState(0);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [enCours, setEnCours] = useState<string | null>(null);
@@ -113,6 +117,26 @@ export function RelancesPage() {
   const traiter = useMutation({
     mutationFn: marquerRelanceTraitee,
     onSuccess: (_d, r) => { toast.success(`${r.titre} traité`); rafraichir(); },
+    onError: (e: Error) => toast.error(e.message),
+    onSettled: () => setEnCours(null),
+  });
+
+  const archiver = useMutation({
+    mutationFn: async (cibles: Relance[]) => {
+      const ids = [...new Set(
+        cibles
+          .filter(estRelanceLeadArchivable)
+          .map((r) => r.leadId as string),
+      )];
+      if (ids.length === 0) throw new Error('Aucun lead archivable dans cette sélection');
+      return archiverLeadsSelectionnes(ids);
+    },
+    onSuccess: (nombre) => {
+      setSelection(new Set());
+      rafraichir();
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success(`${nombre} lead${nombre > 1 ? 's' : ''} archivé${nombre > 1 ? 's' : ''}`);
+    },
     onError: (e: Error) => toast.error(e.message),
     onSettled: () => setEnCours(null),
   });
@@ -216,13 +240,16 @@ export function RelancesPage() {
     else toast.success(`${cibles.length} relance(s) reportée(s) à demain`);
   };
 
+  const relancesSelectionnees = relances.filter((r) => selection.has(r.id));
+  const nbLeadsSelectionnes = relancesSelectionnees.filter(estRelanceLeadArchivable).length;
+
   // La session travaille sur une file large, triee par priorite, independante
   // de la pagination de la liste : on ne veut pas s'arreter au bout de 50.
   const demarrerSession = async () => {
     setPreparationSession(true);
     try {
       const { relances: file } = await fetchRelances({
-        ...filtresRequete, sort: 'plus_recent', limit: 200, offset: 0,
+        ...filtresRequete, limit: 200, offset: 0,
       });
       if (file.length === 0) {
         toast.info('Aucune relance à traiter dans ce filtre');
@@ -259,8 +286,10 @@ export function RelancesPage() {
     <>
       <PageHeader
         title="Relances"
-        description="Tout ce qui attend une action de votre part, au même endroit."
+        description="La file d’actions commerciale, classée par priorité."
       />
+
+      <ResumeRelances compteurs={compteurs} filtre={filtre} onFiltrer={changerFiltre} />
 
       {/* Filtres compacts et cliquables, avec compteurs réels */}
       <div className="flex flex-wrap items-center gap-1 border-b border-border px-4 py-2">
@@ -347,6 +376,16 @@ export function RelancesPage() {
           <Button variant="outline" size="sm" className="h-7 rounded-full" onClick={reporterSelection}>
             Reporter à demain
           </Button>
+          {nbLeadsSelectionnes > 0 && (
+            <Button
+              variant="outline" size="sm"
+              className="h-7 rounded-full"
+              disabled={archiver.isPending}
+              onClick={() => archiver.mutate(relancesSelectionnees)}
+            >
+              Archiver {nbLeadsSelectionnes} lead{nbLeadsSelectionnes > 1 ? 's' : ''}
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="h-7 rounded-full"
             onClick={() => setSelection(new Set())}>
             Annuler
@@ -377,6 +416,7 @@ export function RelancesPage() {
                 onDemanderDocuments={demanderDocuments}
                 onOuvrir={ouvrir}
                 onReporter={(x) => lancer(x, reporter.mutate)}
+                onArchiver={(x) => lancer(x, (cible) => archiver.mutate([cible]))}
                 onTraiter={(x) => {
                   // Sur un lead, « traite » ne veut rien dire : reporter d'un
                   // jour le ramenait identique le lendemain, indefiniment.
@@ -424,6 +464,13 @@ export function RelancesPage() {
   );
 }
 
+function estRelanceLeadArchivable(relance: Relance): boolean {
+  return !!relance.leadId
+    && !relance.taskId
+    && !relance.appointmentId
+    && !relance.caseId;
+}
+
 function EtatVide({ filtre, recherche }: { filtre: CleFiltre; recherche: string }) {
   const message = recherche
     ? `Aucune relance ne correspond à « ${recherche} ».`
@@ -440,6 +487,67 @@ function EtatVide({ filtre, recherche }: { filtre: CleFiltre; recherche: string 
         {recherche ? 'Aucun résultat' : 'Rien à relancer'}
       </h2>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">{message}</p>
+    </div>
+  );
+}
+
+function ResumeRelances({
+  compteurs, filtre, onFiltrer,
+}: {
+  compteurs?: CompteursRelances;
+  filtre: CleFiltre;
+  onFiltrer: (filtre: CleFiltre) => void;
+}) {
+  const cartes: {
+    cle: CleFiltre; label: string; valeur: number; aide: string;
+    icone: typeof AlertTriangle; style: string;
+  }[] = [
+    {
+      cle: 'urgent', label: 'En retard', valeur: compteurs?.urgent ?? 0,
+      aide: 'À résorber en premier', icone: AlertTriangle,
+      style: 'text-urgent bg-urgent-soft',
+    },
+    {
+      cle: 'due', label: "Aujourd’hui", valeur: compteurs?.due ?? 0,
+      aide: 'Échéances du jour', icone: CalendarClock,
+      style: 'text-due bg-due-soft',
+    },
+    {
+      cle: 'nouveau', label: 'Jamais appelés', valeur: compteurs?.nouveau ?? 0,
+      aide: 'À contacter sans attendre', icone: UserRoundSearch,
+      style: 'text-primary bg-primary/10',
+    },
+    {
+      cle: 'documents', label: 'Documents', valeur: compteurs?.documents ?? 0,
+      aide: 'Dossiers à débloquer', icone: FileText,
+      style: 'text-muted-foreground bg-muted',
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3 lg:grid-cols-4">
+      {cartes.map(({ cle, label, valeur, aide, icone: Icone, style }) => (
+        <button
+          key={cle}
+          type="button"
+          onClick={() => onFiltrer(cle)}
+          className={cn(
+            'flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+            filtre === cle ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40',
+          )}
+        >
+          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', style)}>
+            <Icone className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="flex items-baseline gap-2">
+              <span className="text-xl font-semibold tabular text-foreground">{valeur}</span>
+              <span className="truncate text-sm font-medium text-foreground">{label}</span>
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">{aide}</span>
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

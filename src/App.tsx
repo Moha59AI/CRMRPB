@@ -2,6 +2,8 @@ import './App.css';
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { surveillerVerrouPointeur } from '@/lib/verrou-pointeur';
+import { installerSondeBlocage } from '@/lib/sonde-blocage';
+import { BancListe, BancFiche } from '@/features/diag/banc-fiche';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { QueryProvider } from '@/app/query-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -63,6 +65,9 @@ function AppRoutes() {
               trouve. Les acces se creent desormais par invitation. */}
           <Route path="/signup" element={<Navigate to="/login" replace />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          {/* TEMPORAIRE — banc d'essai du blocage, developpement uniquement */}
+          <Route path="/diag-fiche" element={<BancListe />} />
+          <Route path="/diag-fiche/:id" element={<BancFiche pleinePage />} />
           {/* Cible du lien de reinitialisation : publique, puisque la session
               de recuperation n'est ouverte qu'a l'arrivee. */}
           <Route path="/update-password" element={<UpdatePasswordPage />} />
@@ -112,6 +117,8 @@ function AppRoutes() {
         <Routes>
           <Route path="/interventions/:leadId" element={<DossierModal />} />
           <Route path="/clients/:contactId" element={<ClientModal />} />
+          {/* TEMPORAIRE — banc d'essai */}
+          <Route path="/diag-fiche/:id" element={<BancFiche />} />
         </Routes>
       )}
     </>
@@ -123,6 +130,12 @@ export default function App() {
   // demonte pendant qu'une autre s'ouvre. Sans ce filet, la page cesse de
   // repondre au clic et il faut recharger.
   useEffect(() => surveillerVerrouPointeur(), []);
+
+  // TEMPORAIRE — sonde de diagnostic du blocage au clic. A retirer.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    return installerSondeBlocage();
+  }, []);
 
   return (
     <ErrorBoundary pleinEcran>

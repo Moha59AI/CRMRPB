@@ -1,7 +1,7 @@
 // Contacts et vehicules
 
 import { supabase } from '@/lib/supabase';
-import type { Contact, Vehicle, Lead } from '@/types';
+import type { Contact, Vehicle, Lead, Communication, Note, Task } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchContacts(params: { search?: string }): Promise<Contact[]> {
@@ -15,20 +15,21 @@ export async function fetchContacts(params: { search?: string }): Promise<Contac
   return (data as Contact[]) ?? [];
 }
 
-export async function createContact(contact: Partial<Contact>): Promise<{ error: string | null; contact: Contact | null }> {
+export async function createContact(contact: Partial<Contact>): Promise<Contact> {
   const wsId = await getWorkspaceId();
   const { data, error } = await supabase
     .from('contacts')
     .insert({ ...contact, workspace_id: wsId })
     .select('*')
     .maybeSingle();
-  if (error) return { error: error.message, contact: null };
-  return { error: null, contact: data as Contact };
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Le contact n'a pas été créé");
+  return data as Contact;
 }
 
-export async function updateContact(id: string, updates: Partial<Contact>): Promise<{ error: string | null }> {
+export async function updateContact(id: string, updates: Partial<Contact>): Promise<void> {
   const { error } = await supabase.from('contacts').update(updates).eq('id', id);
-  return { error: error?.message ?? null };
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchVehiclesForContact(contactId: string): Promise<Vehicle[]> {
@@ -52,18 +53,28 @@ export { fetchInsurers } from '@/services/insurers-service';
  * Un client est une personne, un lead une intervention : c'est cette colonne
  * qui rend le modele lisible dans la liste.
  */
-export async function fetchCompteursInterventions(): Promise<Map<string, number>> {
+export interface ResumeClientListe {
+  nbInterventions: number;
+  derniereIntervention: string | null;
+}
+
+export async function fetchResumesClients(): Promise<Map<string, ResumeClientListe>> {
   const { data, error } = await supabase
     .from('v_clients')
-    .select('id, nb_interventions');
+    .select('id, nb_interventions, derniere_intervention');
 
   if (error) throw new Error(error.message);
 
-  const compteurs = new Map<string, number>();
-  for (const l of (data ?? []) as { id: string; nb_interventions: number }[]) {
-    compteurs.set(l.id, Number(l.nb_interventions));
+  const resumes = new Map<string, ResumeClientListe>();
+  for (const l of (data ?? []) as {
+    id: string; nb_interventions: number; derniere_intervention: string | null;
+  }[]) {
+    resumes.set(l.id, {
+      nbInterventions: Number(l.nb_interventions),
+      derniereIntervention: l.derniere_intervention,
+    });
   }
-  return compteurs;
+  return resumes;
 }
 
 export async function fetchContactById(id: string): Promise<Contact | null> {
@@ -101,6 +112,48 @@ export async function fetchInterventionsClient(contactId: string): Promise<Lead[
   return (data ?? []) as Lead[];
 }
 
+export interface SuiviClient {
+  communications: Communication[];
+  notes: Note[];
+  taches: Task[];
+}
+
+/**
+ * Historique de relation, même quand les anciennes lignes n'ont pas reçu de
+ * `contact_id`. Les communications et notes créées depuis un dossier portent
+ * surtout le `lead_id`; limiter la fiche au seul contact masquerait donc la
+ * majorité des appels passés au client.
+ */
+export async function fetchSuiviClient(
+  contactId: string,
+  leadIds: string[],
+): Promise<SuiviClient> {
+  async function charger<T>(table: 'communications' | 'notes' | 'tasks'): Promise<T[]> {
+    const direct = supabase.from(table).select('*').eq('contact_id', contactId);
+    const parLead = leadIds.length > 0
+      ? supabase.from(table).select('*').in('lead_id', leadIds)
+      : Promise.resolve({ data: [], error: null });
+
+    const [a, b] = await Promise.all([direct, parLead]);
+    if (a.error) throw new Error(a.error.message);
+    if (b.error) throw new Error(b.error.message);
+
+    const uniques = new Map<string, T>();
+    for (const ligne of [...(a.data ?? []), ...(b.data ?? [])] as (T & { id: string })[]) {
+      uniques.set(ligne.id, ligne);
+    }
+    return [...uniques.values()];
+  }
+
+  const [communications, notes, taches] = await Promise.all([
+    charger<Communication>('communications'),
+    charger<Note>('notes'),
+    charger<Task>('tasks'),
+  ]);
+
+  return { communications, notes, taches };
+}
+
 /**
  * Ouvre une nouvelle intervention pour un client existant.
  *
@@ -114,7 +167,7 @@ export async function fetchInterventionsClient(contactId: string): Promise<Lead[
  */
 export async function creerInterventionPourClient(
   contact: Contact,
-): Promise<{ error: string | null; lead: Lead | null }> {
+): Promise<Lead> {
   const wsId = await getWorkspaceId();
 
   const { data, error } = await supabase
@@ -139,7 +192,7 @@ export async function creerInterventionPourClient(
     .select('*')
     .single();
 
-  if (error) return { error: error.message, lead: null };
-  return { error: null, lead: data as Lead };
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("L'intervention n'a pas été créée");
+  return data as Lead;
 }
-

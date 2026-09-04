@@ -20,11 +20,14 @@ test('la synchronisation demande requete mot-cle appareil et rentabilite a Googl
   assert.match(sync, /segments\.device/);
   assert.match(sync, /metrics\.cost_micros/);
   assert.match(sync, /google_ads_search_terms_daily/);
+  assert.doesNotMatch(sync, /segments\.search_term_targeting_status/);
+  assert.match(sync, /searchTermsByKey/);
 });
 
 test('la page separe les termes saisis des mots-cles declencheurs', async () => {
   const page = await read('src/features/marketing/marketing-page.tsx');
-  assert.match(page, /Termes de recherche \(/);
-  assert.match(page, /Mots-clés \(/);
-  assert.match(page, /Exporter les termes filtrés/);
+  assert.match(page, /Requêtes saisies \(/);
+  assert.match(page, /Mots-clés déclencheurs \(/);
+  assert.match(page, /Exporter la vue/);
+  assert.match(page, /useState<AnalysisView>\('attention'\)/);
 });

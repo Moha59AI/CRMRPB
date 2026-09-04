@@ -49,8 +49,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  createContact, fetchContacts, fetchCompteursInterventions,
+  createContact, fetchContacts, fetchResumesClients,
 } from '@/services/contacts-service';
+import type { ResumeClientListe } from '@/services/contacts-service';
 import {
   toast,
 } from 'sonner';
@@ -92,9 +93,9 @@ export function ContactsPage() {
 
   // Un client est une personne, un lead une intervention : ce compteur rend le
   // modele lisible sans ouvrir chaque fiche.
-  const { data: compteurs } = useQuery({
-    queryKey: ['compteurs-interventions'],
-    queryFn: fetchCompteursInterventions,
+  const { data: resumes } = useQuery({
+    queryKey: ['resumes-clients'],
+    queryFn: fetchResumesClients,
   });
 
   return (
@@ -105,7 +106,7 @@ export function ContactsPage() {
         action={
           <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Nouveau contact
+            Nouveau client
           </Button>
         }
       />
@@ -150,13 +151,13 @@ export function ContactsPage() {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
               <MessageSquare className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <h3 className="text-sm font-semibold text-foreground">Aucun contact pour le moment</h3>
+            <h3 className="text-sm font-semibold text-foreground">Aucun client pour le moment</h3>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Ajoutez votre premier contact pour commencer à suivre vos clients et leurs véhicules.
+              Ajoutez votre premier client pour commencer à suivre ses interventions et ses véhicules.
             </p>
             <Button className="mt-4 rounded-full" onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Nouveau contact
+              Nouveau client
             </Button>
           </div>
         )}
@@ -164,7 +165,7 @@ export function ContactsPage() {
         {!isLoading && !isError && contacts && contacts.length > 0 && estMobile && (
           <ListeMobileContacts
             contacts={contacts}
-            compteurs={compteurs}
+            resumes={resumes}
             onOuvrir={(contact) => ouvrirClient(contact.id)}
           />
         )}
@@ -178,7 +179,7 @@ export function ContactsPage() {
                 <TableHead className="text-xs">Email</TableHead>
                 <TableHead className="text-xs">Ville</TableHead>
                 <TableHead className="text-xs">Interventions</TableHead>
-                <TableHead className="text-xs">Consentement SMS</TableHead>
+                <TableHead className="text-xs">Dernière intervention</TableHead>
                 <TableHead className="text-xs">Date de création</TableHead>
               </TableRow>
             </TableHeader>
@@ -187,7 +188,7 @@ export function ContactsPage() {
                 <ContactRow
                   key={contact.id}
                   contact={contact}
-                  interventions={compteurs?.get(contact.id) ?? 0}
+                  resume={resumes?.get(contact.id)}
                   onOpen={() => ouvrirClient(contact.id)}
                 />
               ))}
@@ -212,10 +213,10 @@ export function ContactsPage() {
  * y faire.
  */
 function ListeMobileContacts({
-  contacts, compteurs, onOuvrir,
+  contacts, resumes, onOuvrir,
 }: {
   contacts: Contact[];
-  compteurs?: Map<string, number>;
+  resumes?: Map<string, ResumeClientListe>;
   onOuvrir: (contact: Contact) => void;
 }) {
   return (
@@ -223,7 +224,8 @@ function ListeMobileContacts({
       {contacts.map((contact) => {
         const nom = [contact.first_name, contact.last_name]
           .filter(Boolean).join(' ') || 'Sans nom';
-        const interventions = compteurs?.get(contact.id) ?? 0;
+        const resume = resumes?.get(contact.id);
+        const interventions = resume?.nbInterventions ?? 0;
 
         return (
           <li key={contact.id} className="flex items-stretch">
@@ -248,6 +250,9 @@ function ListeMobileContacts({
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {contact.city && <span className="truncate">{contact.city}</span>}
                 {contact.phone && <span className="tabular">{contact.phone}</span>}
+                {resume?.derniereIntervention && (
+                  <span>Dernière intervention {formatDateCourte(resume.derniereIntervention)}</span>
+                )}
               </div>
             </button>
 
@@ -270,9 +275,10 @@ function ListeMobileContacts({
 }
 
 // ============ CONTACT ROW ============
-function ContactRow({ contact, interventions, onOpen }: {
-  contact: Contact; interventions: number; onOpen: () => void;
+function ContactRow({ contact, resume, onOpen }: {
+  contact: Contact; resume?: ResumeClientListe; onOpen: () => void;
 }) {
+  const interventions = resume?.nbInterventions ?? 0;
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onOpen}>
       <TableCell className="text-sm font-medium text-foreground">
@@ -290,13 +296,10 @@ function ContactRow({ contact, interventions, onOpen }: {
           <span className="text-muted-foreground/50">—</span>
         )}
       </TableCell>
-      <TableCell>
-        <Badge
-          variant={contact.sms_consent ? 'secondary' : 'outline'}
-          className="rounded-full text-[10px]"
-        >
-          {contact.sms_consent ? 'Oui' : 'Non'}
-        </Badge>
+      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+        {resume?.derniereIntervention
+          ? formatDateCourte(resume.derniereIntervention)
+          : '—'}
       </TableCell>
       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
         {new Date(contact.created_at).toLocaleDateString('fr-FR', {
@@ -360,11 +363,7 @@ function CreateContactDialog({
         email_consent: false,
       });
     },
-    onSuccess: (res) => {
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Contact créé');
       reinitialiser();
@@ -379,9 +378,9 @@ function CreateContactDialog({
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reinitialiser(); }}>
       <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
-          <DialogTitle>Nouveau contact</DialogTitle>
+          <DialogTitle>Nouveau client</DialogTitle>
           <DialogDescription>
-            Ajoutez un contact à votre carnet d'adresses.
+            Créez sa fiche. Une intervention pourra ensuite lui être rattachée.
           </DialogDescription>
         </DialogHeader>
 
@@ -461,13 +460,19 @@ function CreateContactDialog({
               ) : (
                 <Plus className="mr-2 h-4 w-4" />
               )}
-              Créer le contact
+              Créer le client
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatDateCourte(date: string): string {
+  return new Date(date).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
 }
 
 function FormField({

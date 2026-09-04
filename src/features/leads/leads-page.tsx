@@ -4,18 +4,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
-  Archive, ArchiveRestore, Trash2,
+  Archive, ArchiveRestore, Trash2, Clock3, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { useAuth } from '@/features/auth/auth-context';
 import { peutSupprimer } from '@/config/permissions';
-import { DialogueArchivage } from './dialogue-archivage';
 import { DialogueSuppressionArchives } from './dialogue-suppression-archives';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { useEstMobile } from '@/hooks/use-media-query';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead, supprimerLead,
+  archiverLeadsSelectionnes, desarchiverLeadsSelectionnes,
 } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { LeadAddressFields } from './lead-address-fields';
@@ -95,9 +96,16 @@ export function LeadsPage() {
   // Les archives se consultent, elles ne se melangent pas a la file de
   // travail : c'est tout l'interet de les avoir sorties.
   const [voirArchives, setVoirArchives] = useState(false);
-  const [archivageOuvert, setArchivageOuvert] = useState(false);
+  const [voirAArchiver, setVoirAArchiver] = useState(false);
+  const [selectionArchives, setSelectionArchives] = useState<Set<string>>(new Set());
   const [suppressionOuverte, setSuppressionOuverte] = useState(false);
   const [aSupprimer, setASupprimer] = useState<Lead | null>(null);
+
+  // Une sélection faite sous un filtre ne doit jamais agir en silence sur des
+  // lignes devenues invisibles après un changement de recherche ou de vue.
+  useEffect(() => {
+    setSelectionArchives(new Set());
+  }, [search, sourceFilter, statusFilter, advisorFilter, voirArchives, voirAArchiver]);
 
   const suppressionUnitaire = useMutation({
     mutationFn: (id: string) => supprimerLead(id),
@@ -115,13 +123,14 @@ export function LeadsPage() {
 
   // Queries
   const { data: leads, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['leads', search, sourceFilter, statusFilter, advisorFilter, voirArchives],
+    queryKey: ['leads', search, sourceFilter, statusFilter, advisorFilter, voirArchives, voirAArchiver],
     queryFn: () => fetchLeads({
       search,
       source: sourceFilter,
       status: statusFilter,
       assignedUserId: advisorFilter,
       archives: voirArchives,
+      plusVieuxQueJours: voirAArchiver ? 2 : undefined,
     }),
   });
 
@@ -146,6 +155,24 @@ export function LeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
     },
     onError: (err: Error) => toast.error(messageErreurBase(err.message)),
+  });
+
+  const mutationArchives = useMutation({
+    mutationFn: (ids: string[]) => voirArchives
+      ? desarchiverLeadsSelectionnes(ids)
+      : archiverLeadsSelectionnes(ids),
+    onSuccess: (nombre) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
+      queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
+      setSelectionArchives(new Set());
+      toast.success(
+        voirArchives
+          ? `${nombre} lead${nombre > 1 ? 's' : ''} restauré${nombre > 1 ? 's' : ''}`
+          : `${nombre} lead${nombre > 1 ? 's' : ''} archivé${nombre > 1 ? 's' : ''}`,
+      );
+    },
+    onError: (e: Error) => toast.error(messageErreurBase(e.message)),
   });
 
   const seedMutation = useMutation({
@@ -176,6 +203,18 @@ export function LeadsPage() {
     setSourceFilter('all');
     setStatusFilter('all');
     setAdvisorFilter('all');
+  };
+
+  const afficherArchives = () => {
+    setVoirArchives((v) => !v);
+    setVoirAArchiver(false);
+    setSelectionArchives(new Set());
+  };
+
+  const afficherAArchiver = () => {
+    setVoirAArchiver((v) => !v);
+    setVoirArchives(false);
+    setSelectionArchives(new Set());
   };
 
   return (
@@ -226,7 +265,7 @@ export function LeadsPage() {
             variant={voirArchives ? 'default' : 'outline'}
             size="sm"
             className="rounded-full"
-            onClick={() => setVoirArchives((v) => !v)}
+            onClick={afficherArchives}
           >
             {voirArchives
               ? <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
@@ -234,14 +273,18 @@ export function LeadsPage() {
             {voirArchives ? 'Voir les actifs' : 'Archives'}
           </Button>
 
-          {!voirArchives ? (
+          {!voirArchives && (
             <Button
-              variant="outline" size="sm" className="rounded-full"
-              onClick={() => setArchivageOuvert(true)}
+              variant={voirAArchiver ? 'default' : 'outline'}
+              size="sm" className="rounded-full"
+              onClick={afficherAArchiver}
             >
-              Archiver les anciens
+              <Clock3 className="mr-1.5 h-3.5 w-3.5" />
+              {voirAArchiver ? 'Voir tous les actifs' : 'À archiver (+2 jours)'}
             </Button>
-          ) : peutSupprimer(profileCourant?.role ?? null) && (
+          )}
+
+          {voirArchives && peutSupprimer(profileCourant?.role ?? null) && (
             <Button
               variant="outline" size="sm"
               className="rounded-full text-destructive hover:text-destructive"
@@ -321,12 +364,28 @@ export function LeadsPage() {
         )}
 
         {!isLoading && !isError && leads && leads.length === 0 && (
-          <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
+          voirAArchiver ? (
+            <ArchiveEmptyState archives={false} />
+          ) : voirArchives ? (
+            <ArchiveEmptyState archives />
+          ) : (
+            <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
+          )
         )}
 
         {!isLoading && !isError && leads && leads.length > 0 && (
           <>
-            {estMobile && (
+            {(voirAArchiver || voirArchives) ? (
+              <GestionArchives
+                leads={leads}
+                archives={voirArchives}
+                selection={selectionArchives}
+                enCours={mutationArchives.isPending}
+                onSelection={setSelectionArchives}
+                onOuvrir={(lead) => ouvrirIntervention(lead.id)}
+                onValider={() => mutationArchives.mutate([...selectionArchives])}
+              />
+            ) : estMobile ? (
               <ListeMobile
                 leads={leads}
                 onOuvrir={(lead) => ouvrirIntervention(lead.id)}
@@ -334,8 +393,7 @@ export function LeadsPage() {
                   peutSupprimer(profileCourant?.role ?? null) ? setASupprimer : undefined
                 }
               />
-            )}
-            {!estMobile && view === 'table' && (
+            ) : view === 'table' ? (
               <LeadsTable
                 leads={leads}
                 advisorMap={advisorMap}
@@ -345,15 +403,13 @@ export function LeadsPage() {
                   peutSupprimer(profileCourant?.role ?? null) ? setASupprimer : undefined
                 }
               />
-            )}
-            {!estMobile && view === 'kanban' && (
+            ) : view === 'kanban' ? (
               <KanbanBoard
                 leads={leads}
                 onStatusChange={handleStatusChange}
                 onCardClick={(lead) => ouvrirIntervention(lead.id)}
               />
-            )}
-            {!estMobile && view === 'compact' && (
+            ) : (
               <CompactList
                 leads={leads}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
@@ -363,7 +419,6 @@ export function LeadsPage() {
         )}
       </div>
 
-      <DialogueArchivage ouvert={archivageOuvert} onOuvertChange={setArchivageOuvert} />
       <DialogueSuppressionArchives
         ouvert={suppressionOuverte} onOuvertChange={setSuppressionOuverte}
       />
@@ -396,6 +451,132 @@ export function LeadsPage() {
       />
     </div>
   );
+}
+
+function ArchiveEmptyState({ archives }: { archives: boolean }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center p-12 text-center">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-done-soft">
+        {archives
+          ? <Archive className="h-7 w-7 text-done" />
+          : <CheckCircleArchive />}
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">
+        {archives ? 'Aucune archive' : 'Aucun lead de plus de 2 jours'}
+      </h3>
+      <p className="mt-1 max-w-md text-sm text-muted-foreground">
+        {archives
+          ? 'Les leads archivés manuellement apparaîtront ici et pourront être restaurés.'
+          : 'La liste active est à jour. Les nouveaux leads apparaîtront ici dès qu’ils dépasseront 2 jours.'}
+      </p>
+    </div>
+  );
+}
+
+function CheckCircleArchive() {
+  return <ArchiveRestore className="h-7 w-7 text-done" />;
+}
+
+function GestionArchives({
+  leads, archives, selection, enCours, onSelection, onOuvrir, onValider,
+}: {
+  leads: Lead[];
+  archives: boolean;
+  selection: Set<string>;
+  enCours: boolean;
+  onSelection: (selection: Set<string>) => void;
+  onOuvrir: (lead: Lead) => void;
+  onValider: () => void;
+}) {
+  const toutSelectionne = leads.length > 0 && leads.every((lead) => selection.has(lead.id));
+  const basculer = (id: string, actif: boolean) => {
+    const copie = new Set(selection);
+    if (actif) copie.add(id); else copie.delete(id);
+    onSelection(copie);
+  };
+  const basculerTout = () => {
+    onSelection(toutSelectionne ? new Set() : new Set(leads.map((lead) => lead.id)));
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-3">
+        <Checkbox
+          checked={toutSelectionne}
+          onCheckedChange={basculerTout}
+          aria-label="Tout sélectionner"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-foreground">
+            {archives
+              ? `${leads.length} lead${leads.length > 1 ? 's' : ''} dans les archives`
+              : `${leads.length} lead${leads.length > 1 ? 's' : ''} arrivé${leads.length > 1 ? 's' : ''} il y a plus de 2 jours`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Cochez uniquement ceux que vous voulez {archives ? 'remettre dans le travail actif' : 'retirer des listes et des relances'}.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant={archives ? 'outline' : 'default'}
+          className="rounded-full"
+          disabled={selection.size === 0 || enCours}
+          onClick={onValider}
+        >
+          {enCours ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : archives ? (
+            <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
+          ) : (
+            <Archive className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {archives ? 'Restaurer' : 'Archiver'} {selection.size > 0 ? selection.size : ''}
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <ul className="divide-y divide-border">
+          {leads.map((lead) => (
+            <li key={lead.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40">
+              <Checkbox
+                checked={selection.has(lead.id)}
+                onCheckedChange={(v) => basculer(lead.id, v === true)}
+                aria-label={`Sélectionner ${leadName(lead)}`}
+              />
+              <button
+                type="button"
+                onClick={() => onOuvrir(lead)}
+                className="grid min-w-0 flex-1 gap-x-4 gap-y-1 text-left md:grid-cols-[minmax(180px,2fr)_minmax(120px,1fr)_minmax(130px,1fr)_auto] md:items-center"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-foreground">{leadName(lead)}</span>
+                  <span className="block truncate text-xs text-muted-foreground tabular">
+                    {lead.phone || 'Téléphone non renseigné'}
+                  </span>
+                </span>
+                <span className="hidden truncate text-sm text-muted-foreground md:block">
+                  {lead.city || 'Ville non renseignée'}
+                </span>
+                <span className="text-xs text-muted-foreground tabular">
+                  {archives && lead.archived_at
+                    ? `Archivé le ${formatDate(lead.archived_at)}`
+                    : `Reçu ${libelleAge(lead.arrive_le)}`}
+                </span>
+                <StatusBadge status={lead.status} className="w-fit shrink-0" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function libelleAge(date: string): string {
+  const jours = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000));
+  if (jours === 0) return "aujourd’hui";
+  if (jours === 1) return 'hier';
+  return `il y a ${jours} jours`;
 }
 
 // ============ VIEW TOGGLE BUTTON ============

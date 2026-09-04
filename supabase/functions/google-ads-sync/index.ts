@@ -10,7 +10,6 @@ type GoogleRow = {
     device?: string;
     keyword?: { info?: { text?: string; matchType?: string } };
     searchTermMatchType?: string;
-    searchTermTargetingStatus?: string;
   };
   campaign?: { id?: string; name?: string; status?: string };
   metrics?: {
@@ -151,7 +150,6 @@ async function syncWorkspace(workspaceId: string): Promise<{
            campaign.id, campaign.name, ad_group.id, ad_group.name,
            search_term_view.search_term, segments.keyword.info.text,
            segments.keyword.info.match_type, segments.search_term_match_type,
-           segments.search_term_targeting_status,
            metrics.impressions, metrics.clicks, metrics.cost_micros,
            metrics.conversions, metrics.conversions_value
     FROM search_term_view
@@ -159,7 +157,7 @@ async function syncWorkspace(workspaceId: string): Promise<{
     ORDER BY metrics.cost_micros DESC
   `) as GoogleRow[];
 
-  const searchTerms = searchTermRows
+  const rawSearchTerms = searchTermRows
     .filter((row) => (
       row.segments?.date && row.campaign?.id && row.adGroup?.id
       && row.searchTermView?.searchTerm
@@ -177,7 +175,7 @@ async function syncWorkspace(workspaceId: string): Promise<{
       keyword_text: row.segments?.keyword?.info?.text ?? '',
       keyword_match_type: row.segments?.keyword?.info?.matchType ?? null,
       search_term_match_type: row.segments?.searchTermMatchType ?? null,
-      targeting_status: row.segments?.searchTermTargetingStatus ?? null,
+      targeting_status: null,
       device: row.segments?.device ?? 'UNKNOWN',
       impressions: Number(row.metrics?.impressions ?? 0),
       clicks: Number(row.metrics?.clicks ?? 0),
@@ -187,6 +185,36 @@ async function syncWorkspace(workspaceId: string): Promise<{
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
+
+  // Google peut renvoyer plusieurs lignes qui partagent la cle d'upsert
+  // (notamment quand des dimensions internes non exposees different). Postgres
+  // refuse alors de mettre a jour deux fois la meme ligne dans une commande.
+  // On consolide donc les metriques avant l'ecriture sans perdre de volume.
+  const searchTermsByKey = new Map<string, (typeof rawSearchTerms)[number]>();
+  for (const row of rawSearchTerms) {
+    const key = JSON.stringify([
+      row.connection_id,
+      row.metric_date,
+      row.campaign_id,
+      row.ad_group_id,
+      row.search_term,
+      row.keyword_text,
+      row.device,
+    ]);
+    const existing = searchTermsByKey.get(key);
+    if (!existing) {
+      searchTermsByKey.set(key, { ...row });
+      continue;
+    }
+    existing.impressions += row.impressions;
+    existing.clicks += row.clicks;
+    existing.cost_micros += row.cost_micros;
+    existing.conversions += row.conversions;
+    existing.conversion_value += row.conversion_value;
+    existing.keyword_match_type ??= row.keyword_match_type;
+    existing.search_term_match_type ??= row.search_term_match_type;
+  }
+  const searchTerms = [...searchTermsByKey.values()];
 
   for (const batch of chunks(searchTerms, 500)) {
     const { error } = await adminClient.from('google_ads_search_terms_daily').upsert(batch, {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, PhoneOff, Check } from 'lucide-react';
+import { Loader2, PhoneOff, Check, CalendarClock } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -52,6 +52,7 @@ export function DialogueResultatAppel({
 }: DialogueResultatAppelProps) {
   const [choisi, setChoisi] = useState<Resultat | null>(null);
   const [heures, setHeures] = useState<number>(24);
+  const [datePersonnalisee, setDatePersonnalisee] = useState('');
   const [note, setNote] = useState('');
 
   // Chaque appel repart d'une ardoise vierge : garder le choix precedent
@@ -60,6 +61,7 @@ export function DialogueResultatAppel({
     if (ouvert) {
       setChoisi(null);
       setHeures(24);
+      setDatePersonnalisee('');
       setNote('');
     }
   }, [ouvert]);
@@ -68,10 +70,14 @@ export function DialogueResultatAppel({
     if (!choisi) return;
     onValider({
       cle: choisi.cle,
-      prochaineAction: choisi.demandeDelai ? dansNHeures(heures) : null,
+      prochaineAction: choisi.demandeDelai
+        ? datePersonnalisee
+          ? new Date(datePersonnalisee).toISOString()
+          : dansNHeures(heures)
+        : null,
       note: note.trim() || null,
     });
-  }, [choisi, heures, note, onValider]);
+  }, [choisi, heures, datePersonnalisee, note, onValider]);
 
   // Chiffres 1 a 7 pour choisir, Entree pour valider. Le mode session ne
   // quitte pas le clavier : un dialogue qui obligerait a prendre la souris
@@ -181,23 +187,40 @@ export function DialogueResultatAppel({
                   size="sm"
                   variant={heures === d.heures ? 'default' : 'outline'}
                   className="h-7 rounded-full text-xs"
-                  onClick={() => setHeures(d.heures)}
+                  onClick={() => { setHeures(d.heures); setDatePersonnalisee(''); }}
                 >
                   {d.label}
                 </Button>
               ))}
             </div>
+            <div className="relative pt-1">
+              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-[calc(50%-2px)] text-muted-foreground" />
+              <input
+                type="datetime-local"
+                value={datePersonnalisee}
+                min={dateLocalePourChamp(new Date())}
+                onChange={(e) => setDatePersonnalisee(e.target.value)}
+                aria-label="Date et heure personnalisées du rappel"
+                className="flex h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
           </div>
         )}
 
         {choisi && (
-          <Textarea
-            rows={2}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Ce qui s'est dit (facultatif)"
-            className="rounded-lg"
-          />
+          <div className="space-y-1.5">
+            <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Après validation : </span>
+              {choisi.effet}
+            </p>
+            <Textarea
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={placeholderNote(choisi.cle)}
+              className="rounded-lg"
+            />
+          </div>
         )}
 
         <div className="flex justify-end gap-2">
@@ -220,4 +243,18 @@ export function DialogueResultatAppel({
       </DialogContent>
     </Dialog>
   );
+}
+
+function dateLocalePourChamp(date: Date): string {
+  const decalage = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - decalage).toISOString().slice(0, 16);
+}
+
+function placeholderNote(cle: CleResultat): string {
+  if (cle === 'pas_interesse') return 'Pourquoi le client refuse ? Prix, délai, déjà équipé…';
+  if (cle === 'documents') return 'Quels documents manquent ?';
+  if (cle === 'rappeler') return 'Motif du rappel et disponibilité du client';
+  if (cle === 'rdv') return 'Lieu, créneau ou précision utile';
+  if (cle === 'faux_numero') return 'Précisez le problème rencontré';
+  return "Résumé utile de l'appel (facultatif)";
 }

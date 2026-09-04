@@ -3,7 +3,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, MapPin, Car, History, Wrench,
-  BellOff, ChevronRight, Plus, Loader2,
+  BellOff, ChevronRight, Plus, Loader2, CalendarClock, StickyNote,
+  Send, CheckCircle2, Clock3, AlertTriangle,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -29,12 +30,14 @@ import { LIBELLE_VITRAGE, formatDateTime, formatDate } from '@/features/leads/le
 import {
   fetchContactById, fetchSyntheseClient, fetchInterventionsClient,
   fetchVehiclesForContact, updateContact, creerInterventionPourClient,
+  fetchSuiviClient,
 } from '@/services/contacts-service';
+import { createNote } from '@/services/activity-service';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
-import type { Lead, Contact } from '@/types';
+import type { Lead, Contact, Communication, Note, Task } from '@/types';
 
-type OngletClient = 'apercu' | 'interventions' | 'vehicules';
+type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'vehicules';
 
 const LIBELLE_CHAMP_CLIENT: Partial<Record<keyof Contact, string>> = {
   first_name: 'Prénom', last_name: 'Nom', phone: 'Téléphone', email: 'Email',
@@ -45,6 +48,7 @@ const LIBELLE_CHAMP_CLIENT: Partial<Record<keyof Contact, string>> = {
 
 const ONGLETS: readonly OngletFiche<OngletClient>[] = [
   { cle: 'apercu', label: "Vue d'ensemble" },
+  { cle: 'suivi', label: 'Suivi & échanges' },
   { cle: 'interventions', label: 'Interventions' },
   { cle: 'vehicules', label: 'Véhicules' },
 ];
@@ -55,7 +59,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const location = useLocation();
   const [onglet, setOnglet] = useState<OngletClient>('apercu');
 
-  const { data: client, isLoading } = useQuery({
+  const { data: client, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['client', contactId],
     queryFn: () => fetchContactById(contactId as string),
     enabled: !!contactId,
@@ -75,6 +79,12 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     queryFn: () => fetchVehiclesForContact(contactId as string),
     enabled: !!contactId,
   });
+  const idsInterventions = (interventions ?? []).map((i) => i.id);
+  const { data: suivi, isLoading: suiviCharge } = useQuery({
+    queryKey: ['client-suivi', contactId, idsInterventions],
+    queryFn: () => fetchSuiviClient(contactId as string, idsInterventions),
+    enabled: !!contactId && interventions !== undefined,
+  });
 
   const queryClient = useQueryClient();
 
@@ -82,11 +92,11 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   useAvertirSiModifie(brouillon.estModifie);
 
   const [fermetureDemandee, setFermetureDemandee] = useState(false);
+  const [nouvelleNote, setNouvelleNote] = useState('');
 
   const majClient = useMutation({
     mutationFn: async (updates: Partial<Contact>) => {
-      const { error } = await updateContact(contactId as string, updates);
-      if (error) throw new Error(error);
+      await updateContact(contactId as string, updates);
     },
     onSuccess: () => {
       brouillon.vider();
@@ -101,17 +111,31 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   // central du modele, et il n'existait nulle part depuis la fiche client.
   const nouvelleIntervention = useMutation({
     mutationFn: () => creerInterventionPourClient(client as Contact),
-    onSuccess: (r) => {
-      if (r.error || !r.lead) {
-        toast.error(r.error ?? 'Création impossible');
-        return;
-      }
+    onSuccess: (lead) => {
       queryClient.invalidateQueries({ queryKey: ['client-interventions', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['client-synthese', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['resumes-clients'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Intervention créée');
-      navigate(`/interventions/${r.lead.id}`, { state: { background: fondDepuis(location) } });
+      navigate(`/interventions/${lead.id}`, { state: { background: fondDepuis(location) } });
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const ajouterNote = useMutation({
+    mutationFn: async () => {
+      const { error } = await createNote({
+        contact_id: contactId as string,
+        content: nouvelleNote.trim(),
+      });
+      if (error) throw new Error(error);
+    },
+    onSuccess: () => {
+      setNouvelleNote('');
+      queryClient.invalidateQueries({ queryKey: ['client-suivi', contactId] });
+      toast.success('Note ajoutée au suivi client');
+    },
+    onError: (e: Error) => toast.error(messageErreurBase(e.message)),
   });
 
   const enregistrer = (apres?: () => void) => {
@@ -163,6 +187,29 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const appeler = () => { if (client?.phone) window.location.href = `tel:${client.phone}`; };
   const sms = () => { if (client?.phone) window.location.href = `sms:${client.phone}`; };
   const email = () => { if (client?.email) window.location.href = `mailto:${client.email}`; };
+
+  if (isError || (!isLoading && !client)) {
+    return (
+      <FicheOverlay
+        entete={<h1 className="text-xl font-semibold">Fiche client indisponible</h1>}
+        onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
+        onFermer={fermer} pleinePage={pleinePage}
+      >
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <AlertTriangle className="mb-3 h-8 w-8 text-destructive" />
+          <p className="text-sm font-medium text-foreground">
+            {client === null ? 'Ce client est introuvable.' : 'Impossible de charger cette fiche.'}
+          </p>
+          <p className="mt-1 max-w-md text-sm text-muted-foreground">
+            {(error as Error | null)?.message ?? 'La fiche a peut-être été supprimée.'}
+          </p>
+          <Button variant="outline" className="mt-4 rounded-full" onClick={() => void refetch()}>
+            Réessayer
+          </Button>
+        </div>
+      </FicheOverlay>
+    );
+  }
 
   if (isLoading || !client) {
     return (
@@ -261,9 +308,23 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           interventions={interventions ?? []}
           onOuvrir={ouvrirIntervention}
         />
+      ) : onglet === 'suivi' ? (
+        <SuiviRelationClient
+          interventions={interventions ?? []}
+          communications={suivi?.communications ?? []}
+          notes={suivi?.notes ?? []}
+          taches={suivi?.taches ?? []}
+          chargement={suiviCharge}
+          nouvelleNote={nouvelleNote}
+          onNouvelleNote={setNouvelleNote}
+          onAjouterNote={() => ajouterNote.mutate()}
+          ajoutEnCours={ajouterNote.isPending}
+          onOuvrir={ouvrirIntervention}
+        />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
           <div className="min-w-0 space-y-6">
+            <PilotageClient interventions={interventions ?? []} onOuvrir={ouvrirIntervention} />
             {synthese && <Synthese synthese={synthese} />}
             {/* L'assureur du dernier dossier, avec sa procedure : c'est ce
                 qu'on cherche quand le client rappelle. */}
@@ -300,6 +361,13 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           </div>
 
           <div className="space-y-4">
+            <ActionsClient
+              telephone={fiche.phone}
+              email={fiche.email}
+              onAppeler={appeler}
+              onSms={sms}
+              onEmail={email}
+            />
             <CoordonneesClient client={fiche} onModifier={brouillon.modifier} />
             <ConsentementsClient client={fiche} onModifier={brouillon.modifier} />
 
@@ -363,6 +431,268 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
         </AlertDialogContent>
       </AlertDialog>
     </FicheOverlay>
+  );
+}
+
+const STATUTS_TERMINES = new Set<Lead['status']>(['lost', 'converted']);
+
+function PilotageClient({
+  interventions, onOuvrir,
+}: {
+  interventions: Lead[];
+  onOuvrir: (leadId: string) => void;
+}) {
+  const ouvertes = interventions.filter((i) => !STATUTS_TERMINES.has(i.status));
+  const avecEcheance = ouvertes
+    .filter((i) => i.next_action_at)
+    .sort((a, b) => (a.next_action_at as string).localeCompare(b.next_action_at as string));
+  const prochaine = avecEcheance[0] ?? ouvertes[0] ?? null;
+  const echeance = prochaine?.next_action_at ? new Date(prochaine.next_action_at) : null;
+  const enRetard = echeance ? echeance.getTime() < Date.now() : false;
+
+  if (!prochaine) {
+    return (
+      <section className="rounded-xl border border-done/30 bg-done-soft px-4 py-3">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-done" />
+          <div>
+            <p className="text-sm font-semibold text-done">Aucun dossier client en attente</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Toutes les interventions sont terminées ou classées.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className={cn(
+      'rounded-xl border px-4 py-3',
+      enRetard ? 'border-urgent/30 bg-urgent-soft' : 'border-primary/20 bg-primary/5',
+    )}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Dossier à piloter
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {prochaine.glass_type ? LIBELLE_VITRAGE[prochaine.glass_type] : 'Intervention'}
+            </span>
+            <StatusBadge status={prochaine.status} />
+          </div>
+          <p className={cn('mt-1 text-sm', enRetard ? 'font-medium text-urgent' : 'text-muted-foreground')}>
+            {echeance
+              ? `${enRetard ? 'Action en retard depuis le' : 'Prochaine action le'} ${formatDateTime(prochaine.next_action_at)}`
+              : 'Aucune échéance manuelle — la cadence du statut s’applique.'}
+          </p>
+          {ouvertes.length > 1 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {ouvertes.length} interventions sont encore ouvertes pour ce client.
+            </p>
+          )}
+        </div>
+        <Button size="sm" className="shrink-0 rounded-full" onClick={() => onOuvrir(prochaine.id)}>
+          Ouvrir le dossier
+          <ChevronRight className="ml-1.5 h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function ActionsClient({
+  telephone, email, onAppeler, onSms, onEmail,
+}: {
+  telephone: string | null;
+  email: string | null;
+  onAppeler: () => void;
+  onSms: () => void;
+  onEmail: () => void;
+}) {
+  return (
+    <section className="hidden rounded-xl border border-border bg-card p-4 sm:block">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Contacter le client
+      </h3>
+      <div className="grid grid-cols-3 gap-2">
+        <Button size="sm" className="rounded-full" onClick={onAppeler} disabled={!telephone}>
+          <Phone className="mr-1.5 h-3.5 w-3.5" />Appeler
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-full" onClick={onSms} disabled={!telephone}>
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />SMS
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-full" onClick={onEmail} disabled={!email}>
+          <Mail className="mr-1.5 h-3.5 w-3.5" />Email
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+interface EvenementClient {
+  id: string;
+  date: string;
+  icone: typeof Phone;
+  titre: string;
+  detail: string | null;
+  leadId: string | null;
+}
+
+const ICONE_COMMUNICATION: Record<string, typeof Phone> = {
+  call_outbound: Phone, call_inbound: Phone, call_missed: Phone,
+  sms_outbound: MessageSquare, sms_inbound: MessageSquare,
+  email_outbound: Mail, email_inbound: Mail, voicemail: Phone,
+};
+
+const LIBELLE_COMMUNICATION: Record<string, string> = {
+  call_outbound: 'Appel sortant', call_inbound: 'Appel entrant',
+  call_missed: 'Appel manqué', sms_outbound: 'SMS envoyé',
+  sms_inbound: 'SMS reçu', email_outbound: 'Email envoyé',
+  email_inbound: 'Email reçu', voicemail: 'Message vocal',
+};
+
+function SuiviRelationClient({
+  interventions, communications, notes, taches, chargement,
+  nouvelleNote, onNouvelleNote, onAjouterNote, ajoutEnCours, onOuvrir,
+}: {
+  interventions: Lead[];
+  communications: Communication[];
+  notes: Note[];
+  taches: Task[];
+  chargement: boolean;
+  nouvelleNote: string;
+  onNouvelleNote: (valeur: string) => void;
+  onAjouterNote: () => void;
+  ajoutEnCours: boolean;
+  onOuvrir: (leadId: string) => void;
+}) {
+  const evenements: EvenementClient[] = [
+    ...communications.map((c) => ({
+      id: `communication-${c.id}`,
+      date: c.created_at,
+      icone: ICONE_COMMUNICATION[c.type] ?? MessageSquare,
+      titre: LIBELLE_COMMUNICATION[c.type] ?? 'Échange',
+      detail: c.content,
+      leadId: c.lead_id,
+    })),
+    ...notes.map((n) => ({
+      id: `note-${n.id}`, date: n.created_at, icone: StickyNote,
+      titre: 'Note client', detail: n.content, leadId: n.lead_id,
+    })),
+    ...taches.map((t) => ({
+      id: `tache-${t.id}`, date: t.created_at, icone: CalendarClock,
+      titre: `Tâche — ${t.title}`,
+      detail: t.status === 'done'
+        ? 'Terminée'
+        : t.due_at ? `À faire le ${formatDateTime(t.due_at)}` : 'En attente',
+      leadId: t.lead_id,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+  const interventionsParId = new Map(interventions.map((i) => [i.id, i]));
+  const tachesOuvertes = taches.filter((t) => t.status === 'pending' || t.status === 'in_progress');
+  const prochaineTache = [...tachesOuvertes]
+    .filter((t) => t.due_at)
+    .sort((a, b) => (a.due_at as string).localeCompare(b.due_at as string))[0];
+
+  return (
+    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)]">
+      <section className="min-w-0">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Historique complet
+          </h3>
+          <span className="text-xs text-muted-foreground tabular">
+            {evenements.length} événement{evenements.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {chargement ? (
+          <div className="space-y-3">
+            {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+          </div>
+        ) : evenements.length === 0 ? (
+          <div className="rounded-xl border border-border py-12 text-center text-sm text-muted-foreground">
+            Aucun échange ni aucune tâche enregistré pour ce client.
+          </div>
+        ) : (
+          <ol className="border-l border-border pl-4">
+            {evenements.map((e) => {
+              const intervention = e.leadId ? interventionsParId.get(e.leadId) : null;
+              return (
+                <li key={e.id} className="relative pb-5 last:pb-0">
+                  <span className="absolute -left-[23px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-background">
+                    <e.icone className="h-2.5 w-2.5 text-muted-foreground" />
+                  </span>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <p className="text-sm font-medium text-foreground">{e.titre}</p>
+                    <time className="text-xs text-muted-foreground tabular">{formatDateTime(e.date)}</time>
+                  </div>
+                  {e.detail && <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">{e.detail}</p>}
+                  {intervention && (
+                    <button
+                      type="button"
+                      className="mt-1 text-xs text-primary hover:underline"
+                      onClick={() => onOuvrir(intervention.id)}
+                    >
+                      {intervention.glass_type ? LIBELLE_VITRAGE[intervention.glass_type] : 'Voir l’intervention'}
+                      {intervention.vehicle_registration ? ` · ${intervention.vehicle_registration}` : ''}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+
+      <aside className="space-y-4">
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Clock3 className="h-3.5 w-3.5" />À faire
+          </h3>
+          {tachesOuvertes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aucune tâche client en attente.</p>
+          ) : (
+            <>
+              <p className="text-2xl font-semibold tabular">{tachesOuvertes.length}</p>
+              <p className="text-xs text-muted-foreground">
+                tâche{tachesOuvertes.length > 1 ? 's' : ''} ouverte{tachesOuvertes.length > 1 ? 's' : ''}
+              </p>
+              {prochaineTache?.due_at && (
+                <p className="mt-3 border-t border-border pt-3 text-sm">
+                  Prochaine échéance : {formatDateTime(prochaineTache.due_at)}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ajouter une note client
+          </h3>
+          <Textarea
+            rows={5}
+            value={nouvelleNote}
+            onChange={(e) => onNouvelleNote(e.target.value)}
+            placeholder="Préférence, information durable, résumé d’appel…"
+            className="rounded-lg"
+          />
+          <Button
+            size="sm" className="mt-2 w-full rounded-full"
+            disabled={!nouvelleNote.trim() || ajoutEnCours}
+            onClick={onAjouterNote}
+          >
+            {ajoutEnCours
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <Send className="mr-1.5 h-3.5 w-3.5" />}
+            Ajouter au suivi
+          </Button>
+        </section>
+      </aside>
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Phone, MessageSquare, Clock, Check, SkipForward, X, Car, MapPin,
   History, CheckCircle2, Loader2, ExternalLink,
+  Archive,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import {
   reporterRelance, marquerRelanceTraitee, journaliserAction,
   enregistrerResultatAppel, type Relance,
 } from '@/services/relances-service';
+import { archiverLeadsSelectionnes } from '@/services/leads-service';
 import { DialogueResultatAppel, type ChoixResultat } from './dialogue-resultat-appel';
 import { resultatParCle } from '../resultat-appel';
 
@@ -26,6 +28,7 @@ const RACCOURCIS = [
   { touche: 'S', libelle: 'SMS' },
   { touche: 'R', libelle: 'Reporter' },
   { touche: 'T', libelle: 'Traité' },
+  { touche: 'V', libelle: 'Archiver' },
   { touche: 'F', libelle: 'Fiche' },
   { touche: '→', libelle: 'Passer' },
   { touche: 'Échap', libelle: 'Quitter' },
@@ -116,6 +119,20 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
     }
   }, [relance, occupe, suivant]);
 
+  const archiver = useCallback(async () => {
+    if (!relance?.leadId || relance.taskId || relance.appointmentId || relance.caseId || occupe) return;
+    setOccupe(true);
+    try {
+      await archiverLeadsSelectionnes([relance.leadId]);
+      toast.success(`${relance.titre} archivé`);
+      setTraitees((t) => t + 1);
+      suivant();
+    } catch (e) {
+      toast.error((e as Error).message);
+      setOccupe(false);
+    }
+  }, [relance, occupe, suivant]);
+
   const qualifier = useCallback(async (choix: ChoixResultat) => {
     if (!aQualifier?.leadId) return;
     setOccupe(true);
@@ -159,6 +176,7 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
         case 's': e.preventDefault(); envoyerSms(); break;
         case 'r': e.preventDefault(); void reporter(); break;
         case 't': e.preventDefault(); void traiter(); break;
+        case 'v': e.preventDefault(); void archiver(); break;
         case 'f':
           if (relance?.leadId) { e.preventDefault(); onOuvrirFiche(relance.leadId); }
           break;
@@ -168,7 +186,7 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [appeler, envoyerSms, reporter, traiter, suivant, onFermer, onOuvrirFiche, relance, aQualifier]);
+  }, [appeler, envoyerSms, reporter, traiter, archiver, suivant, onFermer, onOuvrirFiche, relance, aQualifier]);
 
   const progression = file.length > 0 ? Math.round((index / file.length) * 100) : 0;
 
@@ -266,6 +284,30 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
               </p>
             )}
 
+            <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 rounded-xl border border-border bg-card p-4 text-sm sm:grid-cols-3">
+              <Contexte label="Priorité" valeur={libellePriorite(relance.priority)} />
+              <Contexte
+                label="Échéance"
+                valeur={new Date(relance.dueAt).toLocaleString('fr-FR', {
+                  day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                })}
+              />
+              <Contexte label="Assurance" valeur={relance.insurance} />
+              <Contexte
+                label="Dernier contact"
+                valeur={relance.lastActionAt
+                  ? new Date(relance.lastActionAt).toLocaleString('fr-FR', {
+                    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })
+                  : null}
+              />
+              <Contexte
+                label="Tentatives"
+                valeur={relance.attemptCount > 0 ? String(relance.attemptCount) : 'Aucune'}
+              />
+              <Contexte label="Motif" valeur={relance.motif} />
+            </dl>
+
             <div className="mt-8 flex flex-wrap gap-2">
               <Button size="lg" className="rounded-full" onClick={appeler} disabled={!relance.phone}>
                 <Phone className="mr-2 h-4 w-4" />
@@ -288,6 +330,15 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
                 <Check className="mr-2 h-4 w-4" />
                 Traité
               </Button>
+              {relance.leadId && !relance.taskId && !relance.appointmentId && !relance.caseId && (
+                <Button
+                  size="lg" variant="outline" className="rounded-full"
+                  onClick={() => void archiver()} disabled={occupe}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archiver
+                </Button>
+              )}
               <Button size="lg" variant="ghost" className="rounded-full" onClick={suivant}>
                 <SkipForward className="mr-2 h-4 w-4" />
                 Passer
@@ -328,4 +379,20 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
 
     </div>
   );
+}
+
+function Contexte({ label, valeur }: { label: string; valeur: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate font-medium text-foreground">{valeur || '—'}</dd>
+    </div>
+  );
+}
+
+function libellePriorite(priorite: Relance['priority']): string {
+  if (priorite === 'urgent') return 'Urgente';
+  if (priorite === 'haute') return 'Haute';
+  if (priorite === 'faible') return 'Faible';
+  return 'Normale';
 }

@@ -36,6 +36,7 @@ const chartConfig = {
 
 const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 const integer = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+const decimal = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 const percent = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 1 });
 
 function normalized(value: string | null | undefined): string {
@@ -587,6 +588,7 @@ type KeywordSummary = {
   campaignName: string;
   adGroupName: string;
   searchTerms: Set<string>;
+  devices: Set<string>;
   impressions: number;
   clicks: number;
   spend: number;
@@ -602,11 +604,13 @@ function aggregateKeywords(terms: MarketingSearchTermRow[]): KeywordSummary[] {
       keywords.set(id, {
         id, keyword, matchType: term.keywordMatchType,
         campaignName: term.campaignName, adGroupName: term.adGroupName,
-        searchTerms: new Set(), impressions: 0, clicks: 0, spend: 0, conversions: 0,
+        searchTerms: new Set(), devices: new Set(),
+        impressions: 0, clicks: 0, spend: 0, conversions: 0,
       });
     }
     const row = keywords.get(id)!;
     row.searchTerms.add(term.searchTerm);
+    term.devices.forEach((device) => row.devices.add(device));
     row.impressions += term.impressions;
     row.clicks += term.clicks;
     row.spend += term.spend;
@@ -624,16 +628,6 @@ function matchTypeLabel(value: string | null): string {
   }
 }
 
-function targetingLabel(value: string | null): string {
-  switch (value) {
-    case 'ADDED': return 'Ajouté';
-    case 'EXCLUDED': return 'Exclu';
-    case 'ADDED_EXCLUDED': return 'Ajouté et exclu';
-    case 'NONE': return 'Non ciblé';
-    default: return value || '—';
-  }
-}
-
 function deviceLabel(value: string): string {
   switch (value) {
     case 'MOBILE': return 'Mobile';
@@ -644,11 +638,74 @@ function deviceLabel(value: string): string {
   }
 }
 
+type AnalysisView = 'all' | 'attention' | 'converting' | 'opportunities';
+type SearchSort = 'priority' | 'spend' | 'conversions' | 'cpa' | 'ctr';
+type SearchPerformance = { impressions: number; clicks: number; spend: number; conversions: number };
+
+function performanceSignal(row: SearchPerformance, averageCpa: number, alertSpend: number) {
+  if (row.conversions > 0) {
+    const cpa = row.spend / row.conversions;
+    if (averageCpa > 0 && cpa <= averageCpa) {
+      return { label: 'Rentable', className: 'border-success/30 bg-success/10 text-success' };
+    }
+    return { label: 'Convertit', className: 'border-primary/30 bg-primary/10 text-primary' };
+  }
+  if (row.spend >= alertSpend) {
+    return { label: 'À exclure ?', className: 'border-warning/40 bg-warning/10 text-warning-foreground' };
+  }
+  if (row.clicks >= 3) {
+    return { label: 'À surveiller', className: 'border-warning/30 bg-warning/5 text-warning-foreground' };
+  }
+  return { label: 'Exploration', className: 'border-border bg-muted/40 text-muted-foreground' };
+}
+
+function matchesAnalysis(
+  row: SearchPerformance,
+  matchType: string | null,
+  view: AnalysisView,
+  alertSpend: number,
+): boolean {
+  if (view === 'attention') return row.conversions === 0 && (row.spend >= alertSpend || row.clicks >= 3);
+  if (view === 'converting') return row.conversions > 0;
+  if (view === 'opportunities') return row.conversions > 0 && matchType !== 'EXACT';
+  return true;
+}
+
+function compareSearchPerformance(
+  a: SearchPerformance,
+  b: SearchPerformance,
+  sort: SearchSort,
+  alertSpend: number,
+): number {
+  if (sort === 'conversions') return b.conversions - a.conversions || b.spend - a.spend;
+  if (sort === 'cpa') {
+    const aCpa = a.conversions > 0 ? a.spend / a.conversions : Number.POSITIVE_INFINITY;
+    const bCpa = b.conversions > 0 ? b.spend / b.conversions : Number.POSITIVE_INFINITY;
+    return aCpa - bCpa || b.conversions - a.conversions;
+  }
+  if (sort === 'ctr') {
+    const aCtr = a.impressions > 0 ? a.clicks / a.impressions : 0;
+    const bCtr = b.impressions > 0 ? b.clicks / b.impressions : 0;
+    return bCtr - aCtr || b.clicks - a.clicks;
+  }
+  if (sort === 'priority') {
+    const aNeedsAttention = a.conversions === 0 && (a.spend >= alertSpend || a.clicks >= 3) ? 1 : 0;
+    const bNeedsAttention = b.conversions === 0 && (b.spend >= alertSpend || b.clicks >= 3) ? 1 : 0;
+    return bNeedsAttention - aNeedsAttention || b.spend - a.spend || b.conversions - a.conversions;
+  }
+  return b.spend - a.spend || b.clicks - a.clicks;
+}
+
 function SearchTermsSection({ terms, available }: {
   terms: MarketingSearchTermRow[];
   available: boolean;
 }) {
   const [filter, setFilter] = useState('');
+  const [analysisView, setAnalysisView] = useState<AnalysisView>('attention');
+  const [campaignFilter, setCampaignFilter] = useState('all');
+  const [deviceFilter, setDeviceFilter] = useState('all');
+  const [sort, setSort] = useState<SearchSort>('priority');
+
   if (!available) {
     return (
       <Alert>
@@ -662,36 +719,166 @@ function SearchTermsSection({ terms, available }: {
     );
   }
 
+  const totalSpend = terms.reduce((sum, term) => sum + term.spend, 0);
+  const totalClicks = terms.reduce((sum, term) => sum + term.clicks, 0);
+  const totalConversions = terms.reduce((sum, term) => sum + term.conversions, 0);
+  const averageCpa = totalConversions > 0 ? totalSpend / totalConversions : 0;
+  const alertSpend = Math.max(10, averageCpa > 0 ? averageCpa * 0.5 : 10);
+  const noConversionSpend = terms
+    .filter((term) => term.conversions === 0)
+    .reduce((sum, term) => sum + term.spend, 0);
+  const attentionTerms = terms
+    .filter((term) => matchesAnalysis(term, term.keywordMatchType, 'attention', alertSpend))
+    .sort((a, b) => b.spend - a.spend);
+  const opportunityTerms = terms
+    .filter((term) => matchesAnalysis(term, term.keywordMatchType, 'opportunities', alertSpend))
+    .sort((a, b) => b.conversions - a.conversions || a.spend / a.conversions - b.spend / b.conversions);
+  const campaigns = [...new Set(terms.map((term) => term.campaignName))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const devices = [...new Set(terms.flatMap((term) => term.devices))].sort();
   const needle = normalized(filter);
-  const filteredTerms = terms.filter((term) => normalized([
-    term.searchTerm, term.keywordText, term.campaignName, term.adGroupName,
-  ].filter(Boolean).join(' ')).includes(needle));
-  const keywords = aggregateKeywords(terms).filter((keyword) => normalized([
-    keyword.keyword, keyword.campaignName, keyword.adGroupName,
-  ].join(' ')).includes(needle));
+  const termRows = terms
+    .filter((term) => normalized([
+      term.searchTerm, term.keywordText, term.campaignName, term.adGroupName,
+    ].filter(Boolean).join(' ')).includes(needle))
+    .filter((term) => campaignFilter === 'all' || term.campaignName === campaignFilter)
+    .filter((term) => deviceFilter === 'all' || term.devices.includes(deviceFilter))
+    .filter((term) => matchesAnalysis(term, term.keywordMatchType, analysisView, alertSpend))
+    .sort((a, b) => compareSearchPerformance(a, b, sort, alertSpend));
+  const keywordRows = aggregateKeywords(terms)
+    .filter((keyword) => normalized([
+      keyword.keyword, keyword.campaignName, keyword.adGroupName,
+    ].join(' ')).includes(needle))
+    .filter((keyword) => campaignFilter === 'all' || keyword.campaignName === campaignFilter)
+    .filter((keyword) => deviceFilter === 'all' || keyword.devices.has(deviceFilter))
+    .filter((keyword) => matchesAnalysis(keyword, keyword.matchType, analysisView, alertSpend))
+    .sort((a, b) => compareSearchPerformance(a, b, sort, alertSpend));
 
   return (
     <Card className="overflow-hidden rounded-xl">
-      <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold">Mots-clés et termes de recherche</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Ce que l'internaute a tapé, le mot-clé déclencheur et leur rentabilité Google Ads.
-          </p>
+      <div className="border-b border-border p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Analyse des recherches Google</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              La vue par défaut remonte le budget qui mérite une décision, puis sépare requêtes saisies et mots-clés déclencheurs.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full shrink-0 rounded-full lg:w-auto"
+            onClick={() => exportSearchTerms(termRows)}
+            disabled={!termRows.length}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Exporter la vue
+          </Button>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Budget analysé</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{euro.format(totalSpend)}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{integer.format(totalClicks)} clics · {integer.format(terms.length)} requêtes</p>
+          </div>
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sans conversion</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{euro.format(noConversionSpend)}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{ratio(noConversionSpend, totalSpend)} du budget · {attentionTerms.length} priorités</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Taux de conversion</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{ratio(totalConversions, totalClicks)}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{decimal.format(totalConversions)} conversions Google</p>
+          </div>
+          <div className="rounded-lg border border-success/30 bg-success/5 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CPA moyen</p>
+            <p className="mt-2 text-xl font-semibold tabular-nums">{cost(totalSpend, totalConversions)}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{opportunityTerms.length} requêtes à tester en exact</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
+            <div className="flex items-center gap-2">
+              <TriangleAlert className="h-4 w-4 text-warning" />
+              <p className="text-xs font-semibold">À couper ou exclure en priorité</p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {attentionTerms.slice(0, 3).map((term) => (
+                <div key={term.id} className="flex items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{term.searchTerm}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{term.campaignName} · {term.clicks} clics</p>
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums">{euro.format(term.spend)}</span>
+                </div>
+              ))}
+              {!attentionTerms.length && <p className="text-xs text-muted-foreground">Aucune dépense préoccupante sur la période.</p>}
+            </div>
+          </div>
+          <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-success" />
+              <p className="text-xs font-semibold">À développer en mot-clé exact</p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {opportunityTerms.slice(0, 3).map((term) => (
+                <div key={term.id} className="flex items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{term.searchTerm}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">Déclenché par {term.keywordText || 'ciblage automatique'}</p>
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums">{decimal.format(term.conversions)} conv.</span>
+                </div>
+              ))}
+              {!opportunityTerms.length && <p className="text-xs text-muted-foreground">Aucune opportunité suffisamment confirmée.</p>}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_220px_170px_170px]">
           <Input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Rechercher un terme, mot-clé…"
-            className="min-w-0 flex-1 sm:w-[260px]"
+            placeholder="Rechercher une requête, un mot-clé…"
           />
-          <Button variant="outline" size="icon" className="shrink-0 rounded-full" onClick={() => exportSearchTerms(filteredTerms)}>
-            <Download className="h-4 w-4" />
-            <span className="sr-only">Exporter les termes filtrés</span>
-          </Button>
+          <Select value={analysisView} onValueChange={(value) => setAnalysisView(value as AnalysisView)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="attention">À surveiller</SelectItem>
+              <SelectItem value="converting">Convertisseurs</SelectItem>
+              <SelectItem value="opportunities">Opportunités exactes</SelectItem>
+              <SelectItem value="all">Toutes les données</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+            <SelectTrigger><SelectValue placeholder="Toutes les campagnes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les campagnes</SelectItem>
+              {campaigns.map((campaign) => <SelectItem key={campaign} value={campaign}>{campaign}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={deviceFilter} onValueChange={setDeviceFilter}>
+            <SelectTrigger><SelectValue placeholder="Tous les appareils" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les appareils</SelectItem>
+              {devices.map((device) => <SelectItem key={device} value={device}>{deviceLabel(device)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(value) => setSort(value as SearchSort)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="priority">Priorité d'action</SelectItem>
+              <SelectItem value="spend">Dépenses</SelectItem>
+              <SelectItem value="conversions">Conversions</SelectItem>
+              <SelectItem value="cpa">Meilleur CPA</SelectItem>
+              <SelectItem value="ctr">Meilleur CTR</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
+
       {!terms.length ? (
         <div className="p-10 text-center text-sm text-muted-foreground">
           Aucun terme communiqué par Google sur cette période. Google masque aussi les requêtes à très faible volume.
@@ -700,8 +887,8 @@ function SearchTermsSection({ terms, available }: {
         <Tabs defaultValue="terms" className="w-full">
           <div className="border-b border-border px-5 pt-4">
             <TabsList>
-              <TabsTrigger value="terms">Termes de recherche ({filteredTerms.length})</TabsTrigger>
-              <TabsTrigger value="keywords">Mots-clés ({keywords.length})</TabsTrigger>
+              <TabsTrigger value="terms">Requêtes saisies ({termRows.length})</TabsTrigger>
+              <TabsTrigger value="keywords">Mots-clés déclencheurs ({keywordRows.length})</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="terms" className="m-0">
@@ -709,46 +896,57 @@ function SearchTermsSection({ terms, available }: {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="min-w-[230px]">Terme recherché</TableHead>
-                    <TableHead className="min-w-[190px]">Mot-clé déclencheur</TableHead>
-                    <TableHead className="min-w-[220px]">Campagne / groupe</TableHead>
-                    <TableHead>Appareil</TableHead>
-                    <TableHead className="text-right">Impr.</TableHead>
-                    <TableHead className="text-right">Clics</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">Coût</TableHead>
-                    <TableHead className="text-right">CPC</TableHead>
-                    <TableHead className="text-right">Conv.</TableHead>
-                    <TableHead className="text-right">Coût / conv.</TableHead>
+                    <TableHead className="min-w-[260px]">Recherche et décision</TableHead>
+                    <TableHead className="min-w-[210px]">Déclenchement</TableHead>
+                    <TableHead className="min-w-[220px]">Contexte</TableHead>
+                    <TableHead className="min-w-[130px] text-right">Trafic</TableHead>
+                    <TableHead className="min-w-[130px] text-right">Dépense</TableHead>
+                    <TableHead className="min-w-[140px] text-right">Résultat</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTerms.slice(0, 100).map((term) => (
-                    <TableRow key={term.id} className={term.spend > 0 && term.conversions === 0 ? 'bg-warning/5' : undefined}>
-                      <TableCell>
-                        <p className="font-medium">{term.searchTerm}</p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{targetingLabel(term.targetingStatus)}</p>
-                      </TableCell>
-                      <TableCell>
-                        <p>{term.keywordText || 'Automatique / non communiqué'}</p>
-                        <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">
-                          {matchTypeLabel(term.keywordMatchType)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-xs font-medium">{term.campaignName}</p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{term.adGroupName}</p>
-                      </TableCell>
-                      <TableCell className="text-xs">{term.devices.map(deviceLabel).join(', ')}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(term.impressions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(term.clicks)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{ratio(term.clicks, term.impressions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{euro.format(term.spend)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{cost(term.spend, term.clicks)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(term.conversions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{cost(term.spend, term.conversions)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {termRows.slice(0, 100).map((term) => {
+                    const signal = performanceSignal(term, averageCpa, alertSpend);
+                    return (
+                      <TableRow key={term.id} className={term.conversions === 0 && term.spend >= alertSpend ? 'bg-warning/5' : undefined}>
+                        <TableCell>
+                          <p className="font-medium">{term.searchTerm}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <Badge variant="outline" className={`rounded-full text-[10px] ${signal.className}`}>{signal.label}</Badge>
+                            {term.searchTermMatchType && (
+                              <Badge variant="secondary" className="rounded-full text-[10px]">Recherche {matchTypeLabel(term.searchTermMatchType)}</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs">{term.keywordText || 'Automatique / non communiqué'}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">Correspondance {matchTypeLabel(term.keywordMatchType).toLowerCase()}</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs font-medium">{term.campaignName}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{term.adGroupName}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{term.devices.map(deviceLabel).join(', ')}</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{integer.format(term.clicks)} clics</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">{integer.format(term.impressions)} impr. · {ratio(term.clicks, term.impressions)} CTR</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{euro.format(term.spend)}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">{cost(term.spend, term.clicks)} / clic</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{decimal.format(term.conversions)} conv.</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                            {ratio(term.conversions, term.clicks)} · {cost(term.spend, term.conversions)} / conv.
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {!termRows.length && (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Aucune requête pour ces filtres.</TableCell></TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -758,47 +956,61 @@ function SearchTermsSection({ terms, available }: {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="min-w-[230px]">Mot-clé</TableHead>
-                    <TableHead className="min-w-[220px]">Campagne / groupe</TableHead>
-                    <TableHead className="text-right">Termes</TableHead>
-                    <TableHead className="text-right">Impr.</TableHead>
-                    <TableHead className="text-right">Clics</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">Coût</TableHead>
-                    <TableHead className="text-right">CPC</TableHead>
-                    <TableHead className="text-right">Conv.</TableHead>
-                    <TableHead className="text-right">Coût / conv.</TableHead>
+                    <TableHead className="min-w-[250px]">Mot-clé et décision</TableHead>
+                    <TableHead className="min-w-[230px]">Contexte</TableHead>
+                    <TableHead className="min-w-[130px] text-right">Couverture</TableHead>
+                    <TableHead className="min-w-[130px] text-right">Trafic</TableHead>
+                    <TableHead className="min-w-[130px] text-right">Dépense</TableHead>
+                    <TableHead className="min-w-[140px] text-right">Résultat</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {keywords.slice(0, 100).map((keyword) => (
-                    <TableRow key={keyword.id}>
-                      <TableCell>
-                        <p className="font-medium">{keyword.keyword}</p>
-                        <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">
-                          {matchTypeLabel(keyword.matchType)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-xs font-medium">{keyword.campaignName}</p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">{keyword.adGroupName}</p>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(keyword.searchTerms.size)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(keyword.impressions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(keyword.clicks)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{ratio(keyword.clicks, keyword.impressions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{euro.format(keyword.spend)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{cost(keyword.spend, keyword.clicks)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{integer.format(keyword.conversions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{cost(keyword.spend, keyword.conversions)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {keywordRows.slice(0, 100).map((keyword) => {
+                    const signal = performanceSignal(keyword, averageCpa, alertSpend);
+                    return (
+                      <TableRow key={keyword.id} className={keyword.conversions === 0 && keyword.spend >= alertSpend ? 'bg-warning/5' : undefined}>
+                        <TableCell>
+                          <p className="font-medium">{keyword.keyword}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <Badge variant="outline" className={`rounded-full text-[10px] ${signal.className}`}>{signal.label}</Badge>
+                            <Badge variant="secondary" className="rounded-full text-[10px]">{matchTypeLabel(keyword.matchType)}</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs font-medium">{keyword.campaignName}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{keyword.adGroupName}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">{[...keyword.devices].map(deviceLabel).join(', ')}</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{integer.format(keyword.searchTerms.size)} requêtes</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">couverture observée</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{integer.format(keyword.clicks)} clics</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">{integer.format(keyword.impressions)} impr. · {ratio(keyword.clicks, keyword.impressions)} CTR</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{euro.format(keyword.spend)}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">{cost(keyword.spend, keyword.clicks)} / clic</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <p className="font-medium tabular-nums">{decimal.format(keyword.conversions)} conv.</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                            {ratio(keyword.conversions, keyword.clicks)} · {cost(keyword.spend, keyword.conversions)} / conv.
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {!keywordRows.length && (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Aucun mot-clé pour ces filtres.</TableCell></TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
           </TabsContent>
           <div className="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
-            Les lignes orange ont dépensé sans conversion Google sur la période. Maximum 100 lignes affichées par onglet ; l'export campagne reste disponible en haut.
+            Les recommandations sont des aides à la décision : aucune exclusion ni modification Google Ads n'est appliquée automatiquement. Maximum 100 lignes visibles ; l'export reprend toute la vue filtrée.
           </div>
         </Tabs>
       )}

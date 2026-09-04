@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import {
   Phone, MessageSquare, Clock, Check, FileText, CalendarClock,
-  ListTodo, Sparkles, ExternalLink, Car, MapPin,
+  ListTodo, Sparkles, ExternalLink, Car, MapPin, Archive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -109,6 +109,7 @@ interface RelanceRowProps {
   onSms: (r: Relance) => void;
   onDemanderDocuments: (r: Relance) => void;
   onReporter: (r: Relance) => void;
+  onArchiver: (r: Relance) => void;
   onTraiter: (r: Relance) => void;
   onOuvrir: (r: Relance) => void;
 }
@@ -116,6 +117,7 @@ interface RelanceRowProps {
 export const RelanceRow = memo(function RelanceRow({
   relance, selectionnee, enCours, onSelection,
   onAppeler, onSms, onDemanderDocuments, onReporter, onTraiter, onOuvrir,
+  onArchiver,
 }: RelanceRowProps) {
   const Icone = ICONE[relance.kind];
   const actions = ACTIONS_PAR_TYPE[relance.kind];
@@ -186,6 +188,9 @@ export const RelanceRow = memo(function RelanceRow({
               <span className="truncate">{relance.city}</span>
             </span>
           )}
+          {relance.insurance && (
+            <span className="hidden truncate xl:inline">{relance.insurance}</span>
+          )}
         </div>
       </button>
 
@@ -195,7 +200,14 @@ export const RelanceRow = memo(function RelanceRow({
           <Icone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="truncate text-sm text-foreground">{relance.motif}</span>
         </div>
-        {derniere && <p className="truncate text-xs text-muted-foreground">{derniere}</p>}
+        {(derniere || relance.attemptCount > 0) && (
+          <p className="truncate text-xs text-muted-foreground">
+            {derniere ?? 'Aucun échange récent'}
+            {relance.attemptCount > 0 && (
+              <span> · {relance.attemptCount} tentative{relance.attemptCount > 1 ? 's' : ''}</span>
+            )}
+          </p>
+        )}
       </div>
 
       <span className={cn('hidden shrink-0 text-xs font-medium tabular md:inline',
@@ -240,6 +252,13 @@ export const RelanceRow = memo(function RelanceRow({
           <Clock className="h-3.5 w-3.5" />
           <span className="sr-only">Reporter à demain</span>
         </Button>
+        {relance.leadId && !relance.taskId && !relance.appointmentId && !relance.caseId && (
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full"
+            onClick={() => onArchiver(relance)} title="Archiver ce lead">
+            <Archive className="h-3.5 w-3.5" />
+            <span className="sr-only">Archiver {relance.titre}</span>
+          </Button>
+        )}
         <Button variant="ghost" size="icon"
           className="h-7 w-7 rounded-full text-done hover:bg-done-soft hover:text-done"
           onClick={() => onTraiter(relance)} title="Marquer comme traité">

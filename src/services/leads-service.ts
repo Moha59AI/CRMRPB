@@ -11,6 +11,8 @@ export async function fetchLeads(params: {
   assignedUserId?: string;
   /** Sans valeur, les archives sont exclues : c'est le point de l'archivage. */
   archives?: boolean;
+  /** Affiche uniquement les leads arrivés avant ce nombre de jours. */
+  plusVieuxQueJours?: number;
 }): Promise<Lead[]> {
   let query = supabase
     .from('leads')
@@ -22,6 +24,11 @@ export async function fetchLeads(params: {
   query = params.archives
     ? query.not('archived_at', 'is', null)
     : query.is('archived_at', null);
+
+  if (params.plusVieuxQueJours !== undefined) {
+    const limite = new Date(Date.now() - params.plusVieuxQueJours * 86_400_000).toISOString();
+    query = query.lt('arrive_le', limite);
+  }
 
   if (params.search) {
     const s = params.search.trim();
@@ -215,6 +222,40 @@ export async function desarchiverLead(leadId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Archive uniquement les lignes explicitement cochées par l'utilisateur. */
+export async function archiverLeadsSelectionnes(leadIds: string[]): Promise<number> {
+  if (leadIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('leads')
+    .update({ archived_at: new Date().toISOString() })
+    .in('id', leadIds)
+    .is('archived_at', null)
+    .select('id');
+  if (error) throw new Error(error.message);
+  const nombre = data?.length ?? 0;
+  if (nombre !== leadIds.length) {
+    throw new Error(`${nombre} lead(s) archivé(s) sur ${leadIds.length}. Actualisez la liste avant de réessayer.`);
+  }
+  return nombre;
+}
+
+/** Restaure uniquement les archives explicitement cochées. */
+export async function desarchiverLeadsSelectionnes(leadIds: string[]): Promise<number> {
+  if (leadIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('leads')
+    .update({ archived_at: null })
+    .in('id', leadIds)
+    .not('archived_at', 'is', null)
+    .select('id');
+  if (error) throw new Error(error.message);
+  const nombre = data?.length ?? 0;
+  if (nombre !== leadIds.length) {
+    throw new Error(`${nombre} lead(s) restauré(s) sur ${leadIds.length}. Actualisez la liste avant de réessayer.`);
+  }
+  return nombre;
+}
+
 // ============ SUPPRESSION ============
 //
 // Archiver est reversible, supprimer ne l'est pas. Les notes et les taches
@@ -251,4 +292,3 @@ export async function supprimerLead(leadId: string): Promise<void> {
   const { error } = await supabase.rpc('supprimer_lead', { p_lead: leadId });
   if (error) throw new Error(error.message);
 }
-

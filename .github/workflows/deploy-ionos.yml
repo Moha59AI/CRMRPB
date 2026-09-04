@@ -1,0 +1,69 @@
+name: Deployer le CRM sur IONOS
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-ionos
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verifier-construire-deployer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+    steps:
+      - name: Recuperer le projet
+        uses: actions/checkout@v6
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Verifier le CRM
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test
+
+      - name: Construire la version IONOS
+        run: npm run build
+
+      - name: Installer le client SFTP
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lftp
+
+      - name: Synchroniser uniquement les fichiers modifies
+        env:
+          IONOS_SFTP_SERVER: ${{ secrets.IONOS_SFTP_SERVER }}
+          IONOS_SFTP_USERNAME: ${{ secrets.IONOS_SFTP_USERNAME }}
+          IONOS_SFTP_PASSWORD: ${{ secrets.IONOS_SFTP_PASSWORD }}
+        run: |
+          test -n "$IONOS_SFTP_SERVER"
+          test -n "$IONOS_SFTP_USERNAME"
+          test -n "$IONOS_SFTP_PASSWORD"
+
+          lftp -u "$IONOS_SFTP_USERNAME","$IONOS_SFTP_PASSWORD" \
+            "sftp://$IONOS_SFTP_SERVER:22" <<'LFTP_COMMANDS'
+          set cmd:fail-exit yes
+          set net:max-retries 2
+          set net:timeout 20
+          set sftp:auto-confirm yes
+          mirror --reverse --parallel=4 --verbose \
+            ./dist/ /CRMRPB-main/dist/
+          bye
+          LFTP_COMMANDS
