@@ -141,6 +141,32 @@ seule source de vérité.
 
 **Unique** : (connection_id, metric_date, campaign_id)
 
+### google_ads_search_terms_daily
+Mesures Google Ads quotidiennes au niveau de la requête réellement tapée.
+Google masque certains termes à faible volume pour protéger la confidentialité :
+la somme de cette table peut donc être inférieure aux statistiques campagne.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| connection_id | uuid → integration_connections | Connexion Google utilisée |
+| customer_id | text | Numéro client Google Ads |
+| metric_date | date | Jour du rapport |
+| campaign_id, campaign_name | text | Campagne Google |
+| ad_group_id, ad_group_name | text | Groupe d'annonces |
+| search_term | text | Requête saisie par l'internaute |
+| keyword_text | text | Mot-clé déclencheur, vide si Google ne le fournit pas |
+| keyword_match_type | text | Type de correspondance du mot-clé |
+| search_term_match_type | text | Relation entre requête et mot-clé |
+| targeting_status | text | Déjà ajouté, exclu ou non ciblé |
+| device | text | Appareil attribué par Google |
+| impressions, clicks | bigint | Volumes Google Ads |
+| cost_micros | bigint | Dépense en millionièmes de devise |
+| conversions, conversion_value | numeric | Conversions Google Ads |
+| synced_at | timestamptz | Dernière lecture de Google |
+
+**Unique** : (connexion, jour, campagne, groupe, requête, mot-clé, appareil)
+
 ### google_ads_oauth_states
 États OAuth à usage unique, valides dix minutes. Seul leur condensat SHA-256 est
 stocké. Aucune politique RLS n'autorise le navigateur à lire ou écrire cette
@@ -228,6 +254,10 @@ Journal d'audit des actions administratives.
 - INSERT/UPDATE/DELETE : admin uniquement
 
 ### google_ads_daily_metrics
+- SELECT : admin, responsable et conseiller du workspace
+- INSERT/UPDATE/DELETE : administrateur uniquement (les imports ordinaires passent par la service role)
+
+### google_ads_search_terms_daily
 - SELECT : admin, responsable et conseiller du workspace
 - INSERT/UPDATE/DELETE : administrateur uniquement (les imports ordinaires passent par la service role)
 

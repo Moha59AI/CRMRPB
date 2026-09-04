@@ -5,7 +5,13 @@ import {
 } from '../_shared/google-ads.ts';
 
 type GoogleRow = {
-  segments?: { date?: string };
+  segments?: {
+    date?: string;
+    device?: string;
+    keyword?: { info?: { text?: string; matchType?: string } };
+    searchTermMatchType?: string;
+    searchTermTargetingStatus?: string;
+  };
   campaign?: { id?: string; name?: string; status?: string };
   metrics?: {
     impressions?: string | number;
@@ -15,6 +21,7 @@ type GoogleRow = {
     conversionsValue?: string | number;
   };
   clickView?: { gclid?: string };
+  searchTermView?: { searchTerm?: string };
   adGroup?: { id?: string; name?: string };
   adGroupAd?: { ad?: { id?: string } };
 };
@@ -94,13 +101,15 @@ async function enrichClickAttribution(
 
 async function syncWorkspace(workspaceId: string): Promise<{
   campaigns: number;
+  searchTerms: number;
   enrichedLeads: number;
 }> {
   const connection = await getGoogleConnection(workspaceId);
   const settings = (connection.settings ?? {}) as Record<string, unknown>;
   const session = await createGoogleAdsSession(workspaceId, settings);
   const endDate = dateOnly(new Date().toISOString());
-  const startDate = dateOnly(new Date(Date.now() - 89 * 86_400_000).toISOString());
+  const startDate = dateOnly(new Date(Date.now() - 179 * 86_400_000).toISOString());
+  const searchTermStartDate = dateOnly(new Date(Date.now() - 89 * 86_400_000).toISOString());
   const rows = await googleAdsSearchWithSession(session, `
     SELECT segments.date, campaign.id, campaign.name, campaign.status,
            metrics.impressions, metrics.clicks, metrics.cost_micros,
@@ -137,6 +146,55 @@ async function syncWorkspace(workspaceId: string): Promise<{
     if (error) throw new Error(error.message);
   }
 
+  const searchTermRows = await googleAdsSearchWithSession(session, `
+    SELECT segments.date, segments.device,
+           campaign.id, campaign.name, ad_group.id, ad_group.name,
+           search_term_view.search_term, segments.keyword.info.text,
+           segments.keyword.info.match_type, segments.search_term_match_type,
+           segments.search_term_targeting_status,
+           metrics.impressions, metrics.clicks, metrics.cost_micros,
+           metrics.conversions, metrics.conversions_value
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${searchTermStartDate}' AND '${endDate}'
+    ORDER BY metrics.cost_micros DESC
+  `) as GoogleRow[];
+
+  const searchTerms = searchTermRows
+    .filter((row) => (
+      row.segments?.date && row.campaign?.id && row.adGroup?.id
+      && row.searchTermView?.searchTerm
+    ))
+    .map((row) => ({
+      workspace_id: workspaceId,
+      connection_id: connection.id,
+      customer_id: cleanCustomerId(String(settings.customer_id ?? '')),
+      metric_date: row.segments?.date,
+      campaign_id: row.campaign?.id,
+      campaign_name: row.campaign?.name ?? `Campagne ${row.campaign?.id}`,
+      ad_group_id: row.adGroup?.id,
+      ad_group_name: row.adGroup?.name ?? `Groupe ${row.adGroup?.id}`,
+      search_term: row.searchTermView?.searchTerm,
+      keyword_text: row.segments?.keyword?.info?.text ?? '',
+      keyword_match_type: row.segments?.keyword?.info?.matchType ?? null,
+      search_term_match_type: row.segments?.searchTermMatchType ?? null,
+      targeting_status: row.segments?.searchTermTargetingStatus ?? null,
+      device: row.segments?.device ?? 'UNKNOWN',
+      impressions: Number(row.metrics?.impressions ?? 0),
+      clicks: Number(row.metrics?.clicks ?? 0),
+      cost_micros: Number(row.metrics?.costMicros ?? 0),
+      conversions: Number(row.metrics?.conversions ?? 0),
+      conversion_value: Number(row.metrics?.conversionsValue ?? 0),
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+
+  for (const batch of chunks(searchTerms, 500)) {
+    const { error } = await adminClient.from('google_ads_search_terms_daily').upsert(batch, {
+      onConflict: 'connection_id,metric_date,campaign_id,ad_group_id,search_term,keyword_text,device',
+    });
+    if (error) throw new Error(error.message);
+  }
+
   const enrichedLeads = await enrichClickAttribution(workspaceId, session);
   const { error: updateError } = await adminClient
     .from('integration_connections')
@@ -148,7 +206,7 @@ async function syncWorkspace(workspaceId: string): Promise<{
     .eq('id', connection.id);
   if (updateError) throw new Error(updateError.message);
 
-  return { campaigns: metrics.length, enrichedLeads };
+  return { campaigns: metrics.length, searchTerms: searchTerms.length, enrichedLeads };
 }
 
 Deno.serve(async (req: Request) => {

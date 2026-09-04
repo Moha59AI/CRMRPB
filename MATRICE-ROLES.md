@@ -56,6 +56,7 @@ est une trace, pas un brouillon.
 | `workflows` | LCMS | LCM | L | — | — |
 | `workflow_runs` | L | L | L | — | — |
 | `google_ads_daily_metrics` | LCMS | L | L | — | — |
+| `google_ads_search_terms_daily` | LCMS | L | L | — | — |
 
 Un scénario peut envoyer des SMS en masse et appeler des API externes : sa
 suppression reste à l'administrateur.
