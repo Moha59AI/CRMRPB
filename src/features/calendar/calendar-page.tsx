@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   XCircle,
   Trash2,
+  CircleAlert,
 } from 'lucide-react';
 import {
   format,
@@ -39,10 +40,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { CarteInterventions } from './carte-interventions';
 import { ChampAdresse } from '@/components/ChampAdresse';
+import type { AdresseNormalisee } from '@/services/adresse-service';
 import {
   fetchInterventionsCarte, compterInterventionsNonLocalisees, leadsDInterventions,
 } from '@/services/interventions-carte-service';
-import { localiserLeadsManquants, type Avancement } from '@/services/geocodage-lot';
+import {
+  localiserLeadsManquants, localiserRendezVousManquants, type Avancement,
+} from '@/services/geocodage-lot';
+import { chercherConflits, journeeDe, type ConflitRendezVous } from '@/services/disponibilite-service';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -895,13 +900,22 @@ function CreateAppointmentDialog({
       assigned_user_id: values.assigned_user_id || null,
       case_id: values.linkType === 'case' && values.caseId ? values.caseId : null,
       lead_id: values.linkType === 'lead' && values.leadId ? values.leadId : null,
-    });
+
+      // Coordonnées du lieu du rendez-vous. Sans elles, la carte devrait
+      // emprunter celles du client — un autre endroit dès que l'intervention
+      // n'a pas lieu à son domicile.
+      latitude: lieu?.latitude ?? null,
+      longitude: lieu?.longitude ?? null,
+      citycode: lieu?.citycode ?? null,
+      geo_precision: lieu?.geo_precision ?? null,
+    } as Partial<Appointment>);
   }
 
   function handleOpenChange(v: boolean) {
     if (!v) {
       form.reset();
       setAdresseReprise(false);
+      setLieu(null);
     }
     onOpenChange(v);
   }
@@ -912,6 +926,53 @@ function CreateAppointmentDialog({
   // Signale que l'adresse ne vient pas d'une saisie : elle a ete reprise de la
   // fiche du lead, et reste modifiable.
   const [adresseReprise, setAdresseReprise] = useState(false);
+
+  /**
+   * Lieu retenu, avec ses coordonnees.
+   *
+   * Une adresse tapee a la main ne porte pas de point : seule une suggestion
+   * choisie dans la Base Adresse Nationale, ou reprise d'un lead deja
+   * localise, permet de placer le rendez-vous sur la carte. Retomber sur les
+   * coordonnees du client enverrait le technicien a une autre adresse que
+   * celle affichee.
+   */
+  const [lieu, setLieu] = useState<AdresseNormalisee | null>(null);
+
+  // ---- Disponibilite de l'intervenant ----
+  const date = form.watch('date');
+  const heureDebut = form.watch('startTime');
+  const heureFin = form.watch('endTime');
+  const intervenant = form.watch('assigned_user_id');
+
+  const creneau = useMemo(() => {
+    if (!date || !heureDebut || !heureFin) return null;
+    const debut = new Date(`${date}T${heureDebut}`);
+    const fin = new Date(`${date}T${heureFin}`);
+    if (Number.isNaN(debut.getTime()) || Number.isNaN(fin.getTime())) return null;
+    if (fin <= debut) return null;
+    return { debut: debut.toISOString(), fin: fin.toISOString() };
+  }, [date, heureDebut, heureFin]);
+
+  const conflitsQuery = useQuery<ConflitRendezVous[], Error>({
+    queryKey: ['conflits', creneau?.debut, creneau?.fin, intervenant],
+    queryFn: () => chercherConflits({
+      debut: creneau!.debut,
+      fin: creneau!.fin,
+      assignedUserId: intervenant,
+    }),
+    enabled: open && Boolean(creneau) && Boolean(intervenant),
+  });
+
+  const journeeQuery = useQuery<ConflitRendezVous[], Error>({
+    queryKey: ['journee', date, intervenant],
+    queryFn: () => journeeDe({ date, assignedUserId: intervenant }),
+    enabled: open && Boolean(date) && Boolean(intervenant),
+  });
+
+  const conflits = conflitsQuery.data ?? [];
+  const journee = (journeeQuery.data ?? []).filter(
+    (r) => !conflits.some((c) => c.id === r.id),
+  );
 
   /**
    * Choisir un lead remplit l'adresse et le titre.
@@ -932,6 +993,18 @@ function CreateAppointmentDialog({
     if (adresse && !form.getValues('address')?.trim()) {
       form.setValue('address', adresse);
       setAdresseReprise(true);
+
+      // On reprend aussi le point : c'est la meme adresse, deja localisee sur
+      // la fiche. Sans lui, le rendez-vous naitrait sans position.
+      setLieu({
+        address: adresseDifferente ? lead.intervention_address : lead.address,
+        postal_code: adresseDifferente ? lead.intervention_postal_code : lead.postal_code,
+        city: adresseDifferente ? lead.intervention_city : lead.city,
+        citycode: (adresseDifferente ? lead.intervention_citycode : lead.citycode) ?? null,
+        latitude: (adresseDifferente ? lead.intervention_latitude : lead.latitude) ?? null,
+        longitude: (adresseDifferente ? lead.intervention_longitude : lead.longitude) ?? null,
+        geo_precision: (adresseDifferente ? lead.intervention_geo_precision : lead.geo_precision) ?? null,
+      });
     }
 
     if (!form.getValues('title')?.trim()) {
@@ -1124,11 +1197,21 @@ function CreateAppointmentDialog({
               id="appt-addr"
               label="Adresse de l'intervention"
               valeur={form.watch('address') ?? ''}
-              onValeurChange={(v) => form.setValue('address', v)}
-              onChoisir={(a) => form.setValue(
-                'address',
-                [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
-              )}
+              onValeurChange={(v) => {
+                form.setValue('address', v);
+                // Une saisie libre ne correspond plus au point choisi : le
+                // conserver placerait le rendez-vous à l'adresse précédente.
+                setLieu(null);
+                setAdresseReprise(false);
+              }}
+              onChoisir={(a) => {
+                form.setValue(
+                  'address',
+                  [a.address, a.postal_code, a.city].filter(Boolean).join(' '),
+                );
+                setLieu(a);
+                setAdresseReprise(false);
+              }}
               placeholder="Numéro, rue, ville…"
             />
             {adresseReprise && (
@@ -1137,7 +1220,59 @@ function CreateAppointmentDialog({
                 lieu ailleurs.
               </p>
             )}
+            {form.watch('address')?.trim() && lieu?.latitude == null && (
+              <p className="text-xs text-due">
+                Adresse non localisée : choisissez une suggestion pour que ce
+                rendez-vous apparaisse sur la carte.
+              </p>
+            )}
+            {lieu?.geo_precision === 'approximatif' && (
+              <p className="text-xs text-muted-foreground">
+                Position au centre de la commune, pas au numéro — aucun
+                itinéraire ne sera proposé.
+              </p>
+            )}
           </div>
+
+          {/* Disponibilité — n'empêche pas d'enregistrer. Deux rendez-vous
+              simultanés peuvent être légitimes (un appel pendant qu'un
+              collègue roule, deux poseurs le même matin) : c'est à la
+              personne qui planifie de trancher, mais en le sachant. */}
+          {conflits.length > 0 && (
+            <div className="rounded-xl border border-due/30 bg-due-soft px-3 py-2.5">
+              <p className="flex items-center gap-1.5 text-sm font-medium text-due">
+                <CircleAlert className="h-4 w-4 shrink-0" />
+                {conflits.length === 1
+                  ? 'Un rendez-vous occupe déjà ce créneau'
+                  : `${conflits.length} rendez-vous occupent déjà ce créneau`}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {conflits.map((c) => (
+                  <li key={c.id} className="text-xs text-due">
+                    {formatTime(c.debut)}–{formatTime(c.fin)} · {c.titre}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-due/80">
+                Vous pouvez enregistrer quand même si c'est voulu.
+              </p>
+            </div>
+          )}
+
+          {conflits.length === 0 && journee.length > 0 && (
+            <div className="rounded-xl border border-border bg-muted/40 px-3 py-2.5">
+              <p className="text-xs font-medium text-foreground">
+                Déjà prévu ce jour-là
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {journee.map((r) => (
+                  <li key={r.id} className="text-xs text-muted-foreground">
+                    {formatTime(r.debut)}–{formatTime(r.fin)} · {r.titre}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
@@ -1152,7 +1287,7 @@ function CreateAppointmentDialog({
               ) : (
                 <>
                   <Plus className="h-4 w-4" />
-                  Créer le rendez-vous
+                  {conflits.length > 0 ? 'Créer malgré le conflit' : 'Créer le rendez-vous'}
                 </>
               )}
             </Button>
@@ -1239,6 +1374,8 @@ export function CalendarPage() {
     enabled: view === 'carte',
   });
 
+  const carte = carteQuery.data;
+
   const { data: nonLocalisees } = useQuery({
     queryKey: ['interventions-non-localisees', rangeStart.toISOString(), rangeEnd.toISOString()],
     queryFn: () => compterInterventionsNonLocalisees({
@@ -1252,13 +1389,31 @@ export function CalendarPage() {
 
   const localisation = useMutation({
     mutationFn: async () => {
+      const periode = { debut: rangeStart.toISOString(), fin: rangeEnd.toISOString() };
+
       // Perimetre volontairement etroit : geocoder tout le carnet ferait des
       // centaines d'appels pour des points que personne n'ira voir.
-      const ids = await leadsDInterventions({
-        debut: rangeStart.toISOString(),
-        fin: rangeEnd.toISOString(),
+      const ids = await leadsDInterventions(periode);
+      const parLead = await localiserLeadsManquants({
+        idsLimites: ids,
+        onAvancement: setAvancement,
       });
-      return localiserLeadsManquants({ idsLimites: ids, onAvancement: setAvancement });
+
+      // Les rendez-vous qui portent leur propre adresse echappent a la reprise
+      // des leads : leur point ne peut venir que de cette adresse-la.
+      const parRendezVous = await localiserRendezVousManquants({
+        ...periode,
+        onAvancement: (a) => setAvancement({
+          ...a,
+          traites: parLead.traites + a.traites,
+          total: parLead.total + a.total,
+        }),
+      });
+
+      return {
+        localises: parLead.localises + parRendezVous.localises,
+        introuvables: parLead.introuvables + parRendezVous.introuvables,
+      };
     },
     onSuccess: (r) => {
       setAvancement(null);
@@ -1546,7 +1701,8 @@ export function CalendarPage() {
         ) : view === 'carte' ? (
           <div className="h-[calc(100vh-16rem)] min-h-[420px]">
             <CarteInterventions
-              interventions={carteQuery.data ?? []}
+              interventions={carte?.interventions ?? []}
+              tronque={carte?.tronque ?? false}
               onOuvrirLead={ouvrirIntervention}
               nonLocalisees={nonLocalisees ?? 0}
               onLocaliser={() => localisation.mutate()}

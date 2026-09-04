@@ -7,10 +7,19 @@
 // L'adresse vient du rendez-vous quand elle y est saisie, sinon de la fiche
 // du lead. Un rendez-vous peut avoir lieu ailleurs qu'a l'adresse du client --
 // sur son lieu de travail, chez un concessionnaire.
+//
+// Regle sur les coordonnees : un rendez-vous qui porte sa propre adresse
+// n'emprunte jamais les coordonnees du lead. Elles decrivent un autre lieu.
+// L'infobulle annoncerait une adresse et le lien « Itineraire » enverrait le
+// technicien ailleurs. Un point faux est plus dangereux qu'une absence de
+// point : il ne se signale pas.
 
 import { supabase } from '@/lib/supabase';
 import { getWorkspaceId } from '@/services/workspace';
 import type { AppointmentStatus } from '@/types';
+
+/** Plafond de chargement. Depasse, la carte le dit au lieu de rogner en silence. */
+export const PLAFOND_CARTE = 300;
 
 export interface InterventionCarte {
   appointment_id: string;
@@ -31,6 +40,19 @@ export interface InterventionCarte {
   latitude: number | null;
   longitude: number | null;
   geo_precision: 'exact' | 'approximatif' | null;
+
+  /**
+   * Vrai quand le lieu vient du rendez-vous lui-meme, pas de la fiche du
+   * lead. Sert a expliquer pourquoi un point manque : c'est l'adresse du
+   * rendez-vous qui reste a localiser, pas celle du client.
+   */
+  lieu_propre: boolean;
+}
+
+export interface ResultatCarte {
+  interventions: InterventionCarte[];
+  /** Vrai si la periode contient plus d'interventions que le plafond. */
+  tronque: boolean;
 }
 
 interface LigneJointe {
@@ -42,6 +64,9 @@ interface LigneJointe {
   status: AppointmentStatus;
   assigned_user_id: string | null;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  geo_precision: 'exact' | 'approximatif' | null;
   leads: {
     first_name: string | null;
     last_name: string | null;
@@ -65,15 +90,62 @@ interface LigneJointe {
 const CHAMPS_LEAD =
   'first_name, last_name, phone, vehicle_registration, address, city, postal_code, latitude, longitude, geo_precision, intervention_address, intervention_city, intervention_postal_code, intervention_latitude, intervention_longitude, intervention_geo_precision';
 
+/** Le lieu retenu pour une intervention, adresse et coordonnees coherentes. */
+function lieuDe(r: LigneJointe) {
+  const l = r.leads;
+
+  // 1. Le rendez-vous porte son propre lieu.
+  if (r.address) {
+    return {
+      adresse: r.address,
+      ville: null as string | null,
+      code_postal: null as string | null,
+      // Ses coordonnees, ou aucune. Jamais celles du lead : autre endroit.
+      latitude: r.latitude,
+      longitude: r.longitude,
+      geo_precision: r.latitude != null ? r.geo_precision : null,
+      lieu_propre: true,
+    };
+  }
+
+  // 2. Le lead declare une adresse d'intervention distincte de son domicile.
+  const adresseIntervention = Boolean(
+    l?.intervention_address || l?.intervention_city || l?.intervention_postal_code,
+  );
+  if (adresseIntervention) {
+    return {
+      adresse: l?.intervention_address ?? null,
+      ville: l?.intervention_city ?? null,
+      code_postal: l?.intervention_postal_code ?? null,
+      latitude: l?.intervention_latitude ?? null,
+      longitude: l?.intervention_longitude ?? null,
+      geo_precision: l?.intervention_geo_precision ?? null,
+      lieu_propre: false,
+    };
+  }
+
+  // 3. A defaut, le domicile du lead.
+  return {
+    adresse: l?.address ?? null,
+    ville: l?.city ?? null,
+    code_postal: l?.postal_code ?? null,
+    latitude: l?.latitude ?? null,
+    longitude: l?.longitude ?? null,
+    geo_precision: l?.geo_precision ?? null,
+    lieu_propre: false,
+  };
+}
+
 export async function fetchInterventionsCarte(params: {
   debut: string;
   fin: string;
   assignedUserId?: string;
-}): Promise<InterventionCarte[]> {
+}): Promise<ResultatCarte> {
   let requete = supabase
     .from('appointments')
     .select(
-      `id, lead_id, title, start_time, end_time, status, assigned_user_id, address,
+      `id, lead_id, title, start_time, end_time, status, assigned_user_id,
+       address, latitude, longitude, geo_precision,
        leads(${CHAMPS_LEAD})`,
     )
     .eq('type', 'intervention')
@@ -85,14 +157,16 @@ export async function fetchInterventionsCarte(params: {
     requete = requete.eq('assigned_user_id', params.assignedUserId);
   }
 
-  const { data, error } = await requete.limit(300);
+  // Une ligne de plus que le plafond : sa presence signale la troncature.
+  const { data, error } = await requete.limit(PLAFOND_CARTE + 1);
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as unknown as LigneJointe[]).map((r) => {
+  const lignes = (data ?? []) as unknown as LigneJointe[];
+  const tronque = lignes.length > PLAFOND_CARTE;
+
+  const interventions = lignes.slice(0, PLAFOND_CARTE).map((r) => {
     const nom = [r.leads?.first_name, r.leads?.last_name].filter(Boolean).join(' ');
-    const adresseDifferente = Boolean(
-      r.leads?.intervention_address || r.leads?.intervention_city || r.leads?.intervention_postal_code,
-    );
+    const lieu = lieuDe(r);
 
     return {
       appointment_id: r.id,
@@ -107,16 +181,11 @@ export async function fetchInterventionsCarte(params: {
       telephone: r.leads?.phone ?? null,
       immatriculation: r.leads?.vehicle_registration ?? null,
 
-      // L'adresse du rendez-vous prime : elle a ete saisie pour ce
-      // deplacement-la. Les coordonnees, elles, ne peuvent venir que du lead.
-      adresse: r.address ?? (adresseDifferente ? r.leads?.intervention_address : r.leads?.address) ?? null,
-      ville: (adresseDifferente ? r.leads?.intervention_city : r.leads?.city) ?? null,
-      code_postal: (adresseDifferente ? r.leads?.intervention_postal_code : r.leads?.postal_code) ?? null,
-      latitude: (adresseDifferente ? r.leads?.intervention_latitude : r.leads?.latitude) ?? null,
-      longitude: (adresseDifferente ? r.leads?.intervention_longitude : r.leads?.longitude) ?? null,
-      geo_precision: (adresseDifferente ? r.leads?.intervention_geo_precision : r.leads?.geo_precision) ?? null,
+      ...lieu,
     };
   });
+
+  return { interventions, tronque };
 }
 
 /**
@@ -129,6 +198,17 @@ export async function compterInterventionsNonLocalisees(params: {
   debut: string;
   fin: string;
 }): Promise<number> {
+  const [parLead, parRendezVous] = await Promise.all([
+    compterLeadsDInterventionsNonLocalises(params),
+    compterRendezVousNonLocalises(params),
+  ]);
+  return parLead + parRendezVous;
+}
+
+async function compterLeadsDInterventionsNonLocalises(params: {
+  debut: string;
+  fin: string;
+}): Promise<number> {
   const ids = await leadsDInterventions(params);
   if (ids.length === 0) return 0;
 
@@ -138,6 +218,32 @@ export async function compterInterventionsNonLocalisees(params: {
     .in('id', ids)
     .is('latitude', null)
     .or('address.not.is.null,city.not.is.null');
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * Rendez-vous dont l'adresse propre n'a pas encore ete localisee.
+ *
+ * Ceux-la ne peuvent pas etre rattrapes en geocodant les leads : c'est
+ * l'adresse du rendez-vous qui manque de coordonnees.
+ */
+export async function compterRendezVousNonLocalises(params: {
+  debut: string;
+  fin: string;
+}): Promise<number> {
+  const workspaceId = await getWorkspaceId();
+
+  const { count, error } = await supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId)
+    .eq('type', 'intervention')
+    .gte('start_time', params.debut)
+    .lte('start_time', params.fin)
+    .not('address', 'is', null)
+    .is('latitude', null);
 
   if (error) throw new Error(error.message);
   return count ?? 0;
@@ -157,7 +263,10 @@ export async function leadsDInterventions(params: {
     .gte('start_time', params.debut)
     .lte('start_time', params.fin)
     .not('lead_id', 'is', null)
-    .limit(300);
+    // Un rendez-vous qui porte sa propre adresse ne sera pas localise en
+    // geocodant son lead : ses coordonnees viennent d'ailleurs.
+    .is('address', null)
+    .limit(PLAFOND_CARTE);
 
   if (error) throw new Error(error.message);
 

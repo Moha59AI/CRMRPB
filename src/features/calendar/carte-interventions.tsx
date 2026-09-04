@@ -130,11 +130,16 @@ interface CarteInterventionsProps {
   onLocaliser?: () => void;
   localisationEnCours?: boolean;
   avancement?: { traites: number; total: number } | null;
+  /**
+   * La période dépasse le plafond de chargement. Se dit, plutôt que de
+   * laisser croire que la tournée affichée est complète.
+   */
+  tronque?: boolean;
 }
 
 export function CarteInterventions({
   interventions, onOuvrirLead, nonLocalisees = 0,
-  onLocaliser, localisationEnCours, avancement,
+  onLocaliser, localisationEnCours, avancement, tronque = false,
 }: CarteInterventionsProps) {
   const [listeOuverte, setListeOuverte] = useState(false);
 
@@ -202,6 +207,18 @@ export function CarteInterventions({
             </p>
           )}
         </div>
+
+        {tronque && (
+          <div className="pointer-events-auto max-w-xs rounded-xl border border-due/30 bg-due-soft/95 px-3 py-2 shadow-sm backdrop-blur">
+            <p className="flex items-start gap-1.5 text-xs font-medium text-due">
+              <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Période trop large : seules les {interventions.length} premières
+                interventions sont chargées. Resserrez la période pour voir la suite.
+              </span>
+            </p>
+          </div>
+        )}
 
         {sansPoint.length > 0 && (
           <div className="pointer-events-auto max-w-xs rounded-xl border border-due/30 bg-due-soft/95 px-3 py-2 shadow-sm backdrop-blur">
@@ -373,6 +390,8 @@ function ListeNonLocalisees({
           <p className="text-sm font-semibold text-foreground">Non localisées</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Sans adresse exploitable, ou adresse introuvable dans le référentiel.
+            Une adresse propre au rendez-vous n'emprunte jamais la position du
+            client : elle désigne un autre lieu.
           </p>
         </div>
         <Button
@@ -402,6 +421,11 @@ function ListeNonLocalisees({
               <span className="block truncate text-xs text-muted-foreground">
                 {jourEtHeure(i.debut)} · {i.adresse ?? 'Aucune adresse'}
               </span>
+              {i.lieu_propre && (
+                <span className="mt-0.5 block text-[11px] text-due">
+                  Adresse propre au rendez-vous, à localiser
+                </span>
+              )}
             </span>
           </button>
         ))}

@@ -351,6 +351,15 @@ export interface Appointment {
   address: string | null;
   type: AppointmentType;
   status: AppointmentStatus;
+  /**
+   * Coordonnées du lieu du rendez-vous, distinctes de celles du lead :
+   * une intervention peut avoir lieu ailleurs qu'au domicile du client.
+   * `null` = non localisé, le rendez-vous n'apparaît pas sur la carte.
+   */
+  citycode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  geo_precision: 'exact' | 'approximatif' | null;
   created_at: string;
   updated_at: string;
 }

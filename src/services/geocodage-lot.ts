@@ -145,6 +145,105 @@ export async function localiserLeadsManquants(
   return { ...etat, interrompu: false };
 }
 
+interface RendezVousALocaliser {
+  id: string;
+  address: string | null;
+}
+
+/**
+ * Localise les rendez-vous qui portent leur propre adresse sans coordonnees.
+ *
+ * Ceux-la echappent a la reprise des leads : l'intervention a lieu ailleurs
+ * qu'au domicile du client, donc geocoder le lead ne leur donnerait pas de
+ * point. Tant qu'ils n'en ont pas, la carte les compte comme non localises
+ * plutot que de leur preter les coordonnees du client -- ce qui enverrait le
+ * technicien a la mauvaise adresse.
+ */
+export async function localiserRendezVousManquants(
+  params: {
+    debut: string;
+    fin: string;
+    onAvancement?: (a: Avancement) => void;
+    signal?: AbortSignal;
+  },
+): Promise<ResultatLocalisation> {
+  const workspaceId = await getWorkspaceId();
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, address')
+    .eq('workspace_id', workspaceId)
+    .eq('type', 'intervention')
+    .gte('start_time', params.debut)
+    .lte('start_time', params.fin)
+    .not('address', 'is', null)
+    .is('latitude', null);
+
+  if (error) throw new Error(error.message);
+
+  const candidats = ((data ?? []) as RendezVousALocaliser[]).filter(
+    (r) => (r.address ?? '').trim().length >= 3,
+  );
+
+  const etat: Avancement = {
+    traites: 0, total: candidats.length, localises: 0, introuvables: 0,
+  };
+  params.onAvancement?.({ ...etat });
+
+  for (let i = 0; i < candidats.length; i += LOT) {
+    if (params.signal?.aborted) return { ...etat, interrompu: true };
+
+    const lot = candidats.slice(i, i + LOT);
+
+    await Promise.all(
+      lot.map(async (rdv) => {
+        try {
+          const [meilleure] = await rechercherAdresse((rdv.address ?? '').trim(), {
+            limite: 1,
+            signal: params.signal,
+          });
+
+          if (!meilleure || meilleure.latitude == null) {
+            etat.introuvables += 1;
+            return;
+          }
+
+          // On ne reecrit pas l'adresse : elle a ete saisie pour ce
+          // deplacement-la, la reprise sert seulement a poser le point.
+          const { error: erreurMaj } = await supabase
+            .from('appointments')
+            .update({
+              latitude: meilleure.latitude,
+              longitude: meilleure.longitude,
+              citycode: meilleure.citycode,
+              geo_precision: precisionDe(meilleure),
+            })
+            .eq('id', rdv.id);
+
+          if (erreurMaj) {
+            etat.introuvables += 1;
+            return;
+          }
+
+          etat.localises += 1;
+        } catch {
+          etat.introuvables += 1;
+        } finally {
+          etat.traites += 1;
+        }
+      }),
+    );
+
+    params.onAvancement?.({ ...etat });
+
+    if (i + LOT < candidats.length) {
+      await new Promise((r) => setTimeout(r, PAUSE_MS));
+    }
+  }
+
+  return { ...etat, interrompu: false };
+}
+
 /** Combien de leads restent a localiser, pour proposer la reprise a bon escient. */
 export async function compterLeadsNonLocalises(): Promise<number> {
   const workspaceId = await getWorkspaceId();
