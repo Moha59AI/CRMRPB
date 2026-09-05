@@ -64,6 +64,6 @@ jobs:
           set net:timeout 20
           set sftp:auto-confirm yes
           mirror --reverse --parallel=4 --verbose \
-            ./dist/ /CRMRPB-main/dist/
+            ./dist/ /dist/
           bye
           LFTP_COMMANDS
