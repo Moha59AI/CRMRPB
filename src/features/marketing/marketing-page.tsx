@@ -31,6 +31,7 @@ import {
 const chartConfig = {
   clicks: { label: 'Clics', color: 'hsl(var(--chart-2))' },
   leads: { label: 'Leads', color: 'hsl(var(--chart-1))' },
+  transformedLeads: { label: 'Dossiers Glass', color: 'hsl(var(--chart-4))' },
   interventions: { label: 'Interventions', color: 'hsl(var(--chart-3))' },
 } satisfies ChartConfig;
 
@@ -66,7 +67,7 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
   const headers = [
     'Campagne', 'ID', 'Statut', 'Dépenses', 'Impressions', 'Clics', 'CTR', 'CPC',
     'Conversions Google', 'Leads CRM', 'Taux clic vers lead', 'CPL', 'Qualifiés',
-    'Rendez-vous', 'Interventions', 'Coût par intervention',
+    'Rendez-vous', 'Dossiers Glass', 'Interventions', 'Coût par intervention',
   ];
   const rows = campaigns.map((campaign) => [
     campaign.name,
@@ -83,6 +84,7 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
     campaign.leads > 0 ? (campaign.spend / campaign.leads).toFixed(2).replace('.', ',') : '',
     campaign.qualifiedLeads,
     campaign.appointments,
+    campaign.transformedLeads,
     campaign.interventions,
     campaign.interventions > 0 ? (campaign.spend / campaign.interventions).toFixed(2).replace('.', ',') : '',
   ]);
@@ -227,7 +229,7 @@ export function MarketingPage() {
                 </span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
                 <Kpi
                   icon={CircleDollarSign}
                   label="Dépenses"
@@ -264,6 +266,13 @@ export function MarketingPage() {
                   trend={previous ? variation(totals.appointments, previous.appointments) : undefined}
                 />
                 <Kpi
+                  icon={Target}
+                  label="Dossiers Glass"
+                  value={integer.format(totals.transformedLeads)}
+                  detail={`${cost(totals.spend, totals.transformedLeads)} / transformation · ${ratio(totals.transformedLeads, totals.leads)} des leads`}
+                  trend={previous ? variation(totals.transformedLeads, previous.transformedLeads) : undefined}
+                />
+                <Kpi
                   icon={Wrench}
                   label="Interventions"
                   value={integer.format(totals.interventions)}
@@ -297,6 +306,7 @@ export function MarketingPage() {
                       <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => new Date(`${value}T12:00:00`).toLocaleDateString('fr-FR')} />} />
                       <Area dataKey="clicks" type="monotone" fill="url(#fillClicks)" stroke="var(--color-clicks)" strokeWidth={2} />
                       <Area dataKey="leads" type="monotone" fill="transparent" stroke="var(--color-leads)" strokeWidth={2} />
+                      <Area dataKey="transformedLeads" type="monotone" fill="transparent" stroke="var(--color-transformedLeads)" strokeWidth={2} />
                       <Area dataKey="interventions" type="monotone" fill="transparent" stroke="var(--color-interventions)" strokeWidth={2} />
                     </AreaChart>
                   </ChartContainer>
@@ -310,6 +320,7 @@ export function MarketingPage() {
                     <FunnelStep label="Leads reçus" value={totals.leads} reference={totals.clicks} color="bg-primary" />
                     <FunnelStep label="Leads qualifiés" value={totals.qualifiedLeads} reference={totals.clicks} color="bg-primary" />
                     <FunnelStep label="Rendez-vous" value={totals.appointments} reference={totals.clicks} color="bg-due" />
+                    <FunnelStep label="Dossiers Glass créés" value={totals.transformedLeads} reference={totals.clicks} color="bg-upcoming" />
                     <FunnelStep label="Interventions réalisées" value={totals.interventions} reference={totals.clicks} color="bg-done" />
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-2 text-xs">
@@ -409,6 +420,7 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
             <TableHead className="text-right">CPL</TableHead>
             <TableHead className="text-right">Qualifiés</TableHead>
             <TableHead className="text-right">RDV</TableHead>
+            <TableHead className="text-right">Dossiers Glass</TableHead>
             <TableHead className="text-right">Interv.</TableHead>
             <TableHead className="text-right">Coût / interv.</TableHead>
           </TableRow>
@@ -443,6 +455,7 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
                 <TableCell className="text-right tabular-nums">{cost(campaign.spend, campaign.leads)}</TableCell>
                 <TableCell className="text-right tabular-nums">{integer.format(campaign.qualifiedLeads)}</TableCell>
                 <TableCell className="text-right tabular-nums">{integer.format(campaign.appointments)}</TableCell>
+                <TableCell className="text-right tabular-nums font-medium">{integer.format(campaign.transformedLeads)}</TableCell>
                 <TableCell className="text-right tabular-nums font-medium">{integer.format(campaign.interventions)}</TableCell>
                 <TableCell className="text-right tabular-nums">{cost(campaign.spend, campaign.interventions)}</TableCell>
               </TableRow>

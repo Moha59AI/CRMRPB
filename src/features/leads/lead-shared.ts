@@ -26,6 +26,7 @@ export const statusLabels: Record<string, string> = {
 
 export const sourceLabels: Record<string, string> = {
   meta: 'Meta',
+  google_ads: 'Google Ads',
   webhook: 'Webhook',
   manual: 'Manuel',
   import: 'Import',
@@ -57,6 +58,7 @@ export const statusSelectOptions: { value: LeadStatus; label: string }[] = kanba
 
 export const sourceSelectOptions: { value: LeadSource; label: string }[] = [
   { value: 'meta', label: 'Meta' },
+  { value: 'google_ads', label: 'Google Ads' },
   { value: 'webhook', label: 'Webhook' },
   { value: 'manual', label: 'Manuel' },
   { value: 'import', label: 'Import' },

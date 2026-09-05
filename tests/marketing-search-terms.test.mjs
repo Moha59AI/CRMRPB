@@ -31,3 +31,27 @@ test('la page separe les termes saisis des mots-cles declencheurs', async () => 
   assert.match(page, /Exporter la vue/);
   assert.match(page, /useState<AnalysisView>\('attention'\)/);
 });
+
+test('l historique Onify est dedoublonne et distingue les dossiers Glass', async () => {
+  const migration = await read('supabase/migrations/20260904170000_import_onify_google_history.sql');
+  const service = await read('src/features/marketing/marketing-service.ts');
+  const page = await read('src/features/marketing/marketing-page.tsx');
+
+  assert.match(migration, /leads_onify_lead_id_unique/);
+  assert.equal((migration.match(/^\s*\('\d{4}',/gm) ?? []).length, 19);
+  assert.equal((migration.match(/'\d{4}', '[A-Z0-9-]+ ·/g) ?? []).length, 6);
+  assert.match(migration, /when glass_dossier_id is not null then 'converted'/);
+  assert.match(service, /transformedLeads/);
+  assert.match(page, /Dossiers Glass/);
+});
+
+test('les leads Onify attribues a Google ont une source Google Ads visible', async () => {
+  const migration = await read('supabase/migrations/20260905090000_google_ads_lead_source.sql');
+  const types = await read('src/types/index.ts');
+  const shared = await read('src/features/leads/lead-shared.ts');
+
+  assert.match(migration, /source in \('meta', 'google_ads', 'webhook', 'manual', 'import'\)/);
+  assert.match(migration, /set source = 'google_ads'/);
+  assert.match(types, /LeadSource = 'meta' \| 'google_ads'/);
+  assert.match(shared, /google_ads: 'Google Ads'/);
+});

@@ -81,6 +81,8 @@ Prospects reçus depuis Meta et autres sources.
 | utm_content | text | |
 | utm_term | text | |
 | raw_payload | jsonb | Payload brut reçu |
+| raw_payload.onify_lead_id | text | Identifiant Onify des imports historiques, dédoublonné par espace |
+| source | text | Origine principale : `meta`, `google_ads`, `webhook`, `manual` ou `import` |
 | received_at | timestamptz | |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |

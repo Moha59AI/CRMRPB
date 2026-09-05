@@ -9,7 +9,7 @@ export type WebhookProcessingStatus = 'pending' | 'processing' | 'processed' | '
 export type GlassType =
   | 'pare_brise' | 'lunette_arriere' | 'glace_laterale' | 'impact' | 'autre';
 
-export type LeadSource = 'meta' | 'webhook' | 'manual' | 'import';
+export type LeadSource = 'meta' | 'google_ads' | 'webhook' | 'manual' | 'import';
 export type LeadStatus =
   | 'new' | 'to_call' | 'calling' | 'nrp' | 'interested'
   | 'documents_requested' | 'documents_received' | 'appointment_scheduled'

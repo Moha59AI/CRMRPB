@@ -9,6 +9,7 @@ export interface MarketingTotals {
   interventions: number;
   googleConversions: number;
   qualifiedLeads: number;
+  transformedLeads: number;
   pendingLeads: number;
   lostLeads: number;
 }
@@ -26,6 +27,7 @@ export interface MarketingDay {
   leads: number;
   appointments: number;
   interventions: number;
+  transformedLeads: number;
   spend: number;
 }
 
@@ -133,6 +135,7 @@ const emptyTotals = (): MarketingTotals => ({
   interventions: 0,
   googleConversions: 0,
   qualifiedLeads: 0,
+  transformedLeads: 0,
   pendingLeads: 0,
   lostLeads: 0,
 });
@@ -213,7 +216,7 @@ function aggregatePeriod(
     if (!timeline.has(date)) {
       timeline.set(date, {
         date, impressions: 0, clicks: 0, leads: 0,
-        appointments: 0, interventions: 0, spend: 0,
+        appointments: 0, interventions: 0, transformedLeads: 0, spend: 0,
       });
     }
     return timeline.get(date)!;
@@ -250,6 +253,7 @@ function aggregatePeriod(
     const campaign = ensureCampaign(attributed.id, attributed.name);
     campaign.leads++;
     if (qualifiedStatuses.has(lead.status)) campaign.qualifiedLeads++;
+    if (lead.status === 'converted') campaign.transformedLeads++;
     if (pendingStatuses.has(lead.status)) campaign.pendingLeads++;
     if (lead.status === 'lost') campaign.lostLeads++;
     if (appointmentLeadIds.has(lead.id)) campaign.appointments++;
@@ -259,6 +263,7 @@ function aggregatePeriod(
     day.leads++;
     if (appointmentLeadIds.has(lead.id)) day.appointments++;
     if (interventionLeadIds.has(lead.id)) day.interventions++;
+    if (lead.status === 'converted') day.transformedLeads++;
   }
 
   const campaignRows = [...campaigns.values()]
@@ -272,6 +277,7 @@ function aggregatePeriod(
     interventions: sum.interventions + campaign.interventions,
     googleConversions: sum.googleConversions + campaign.googleConversions,
     qualifiedLeads: sum.qualifiedLeads + campaign.qualifiedLeads,
+    transformedLeads: sum.transformedLeads + campaign.transformedLeads,
     pendingLeads: sum.pendingLeads + campaign.pendingLeads,
     lostLeads: sum.lostLeads + campaign.lostLeads,
   }), emptyTotals());

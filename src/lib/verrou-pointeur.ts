@@ -24,7 +24,10 @@ const COUCHES_OUVERTES = [
   '[data-state="open"][role="alertdialog"]',
   '[data-state="open"][role="menu"]',
   '[data-state="open"][role="listbox"]',
-  '[data-radix-popper-content-wrapper]',
+  // Le wrapper Popper peut rester dans le DOM apres la fermeture de son
+  // contenu. Le compter directement maintenait alors le verrou pour toujours.
+  // Seul un contenu encore explicitement ouvert justifie `pointer-events:none`.
+  '[data-radix-popper-content-wrapper] [data-state="open"]',
 ].join(', ');
 
 /**
