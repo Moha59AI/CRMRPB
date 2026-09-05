@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ChevronRight, Phone, MessageSquare, FileText, User,
-  CalendarPlus, Car, MapPin, Shield, AlertTriangle, Check, Clock, Loader2,
+  ChevronRight, Phone, FileText, User,
+  CalendarPlus, Car, MapPin, Shield, AlertTriangle, Check, Clock, Loader2, PhoneMissed,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { LIBELLE_CHAMP_LEAD } from '@/features/leads/lead-shared';
 import { fetchProfiles } from '@/services/profiles-service';
+import { fetchReglagesEntreprise } from '@/services/admin-service';
 import { createCommunication } from '@/services/activity-service';
+import { enregistrerResultatAppel } from '@/services/relances-service';
+import { messageNrp } from '@/features/relances/message-nrp';
 import { DossierContenu } from './dossier-contenu';
 import { ONGLETS, type OngletDossier, type EtatOuvertureDossier, fondDepuis } from './dossier-constants';
 import type { Lead, LeadStatus } from '@/types';
@@ -55,6 +58,14 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   const { data: profiles } = useQuery({
     queryKey: ['profiles'],
     queryFn: fetchProfiles,
+  });
+
+  // Numero de rappel place dans le SMS « sans reponse ». Absent des reglages,
+  // le message se rabat sur « repondez OUI » plutot que d'inventer un numero.
+  const { data: reglages } = useQuery({
+    queryKey: ['reglages-entreprise'],
+    queryFn: fetchReglagesEntreprise,
+    staleTime: 5 * 60_000,
   });
 
   const liste = etat.liste ?? [];
@@ -158,10 +169,44 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     journaliser('call_outbound', 'Appel depuis la fiche');
   };
 
-  const envoyerSms = () => {
+  /**
+   * Passage en statut NRP : c'est `enregistrerResultatAppel` qui fait foi, pas
+   * la mutation de la fiche. Elle seule remet `next_action_at` a null. Une
+   * date de rappel laissee par une decision precedente primerait sinon sur la
+   * cadence NRP, et le lead remonterait en tete de file alors qu'on vient
+   * justement de ne pas le joindre.
+   */
+  const marquerNrp = useMutation({
+    mutationFn: () => enregistrerResultatAppel({
+      leadId: leadId as string,
+      statut: 'nrp',
+      prochaineAction: null,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
+      queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
+      toast.success('Sans réponse — rappel programmé selon la cadence NRP');
+    },
+    onError: (e: Error) => toast.error(messageErreurBase(e.message)),
+  });
+
+  /**
+   * « Ne répond pas » : on previent le client par SMS et on marque le lead.
+   *
+   * Les deux vont ensemble. Marquer sans prevenir laisse le client sans
+   * nouvelles apres un appel manque ; prevenir sans marquer le fait revenir
+   * en tete de file comme s'il n'avait jamais ete appele.
+   */
+  const signalerNrp = () => {
     if (!lead?.phone) return;
-    window.location.href = `sms:${lead.phone}`;
-    journaliser('sms_outbound', 'SMS depuis la fiche');
+
+    const message = messageNrp(lead, { telephone: reglages?.telephone });
+
+    window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
+    journaliser('sms_outbound', message);
+    marquerNrp.mutate();
   };
 
   const demanderDocuments = () => {
@@ -264,8 +309,8 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
           <Phone className="mr-1.5 h-3.5 w-3.5" />Appeler
         </Button>
         <Button size="sm" variant="outline" className="rounded-full"
-          onClick={envoyerSms} disabled={!lead.phone}>
-          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />SMS
+          onClick={signalerNrp} disabled={!lead.phone || marquerNrp.isPending}>
+          <PhoneMissed className="mr-1.5 h-3.5 w-3.5" />NRP
         </Button>
         <Button size="sm" variant="outline" className="rounded-full"
           onClick={demanderDocuments} disabled={!lead.phone}>
@@ -333,7 +378,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       actionsMobile={
         <>
           <ActionMobile icone={Phone} label="Appeler" onClick={appeler} desactive={!lead.phone} />
-          <ActionMobile icone={MessageSquare} label="SMS" onClick={envoyerSms} desactive={!lead.phone} />
+          <ActionMobile icone={PhoneMissed} label="NRP" onClick={signalerNrp} desactive={!lead.phone || marquerNrp.isPending} />
           <ActionMobile icone={FileText} label="Documents" onClick={demanderDocuments} desactive={!lead.phone} />
         </>
       }
