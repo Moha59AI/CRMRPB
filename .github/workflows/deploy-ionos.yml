@@ -63,7 +63,14 @@ jobs:
           set net:max-retries 2
           set net:timeout 20
           set sftp:auto-confirm yes
+          # IONOS presente une racine differente au compte SFTP et au domaine.
+          # Les trois cibles sont limitees aux dossiers dist deja utilises :
+          # aucun fichier source ni autre espace Web n'est touche.
           mirror --reverse --parallel=4 --verbose \
             ./dist/ /dist/
+          mirror --reverse --parallel=4 --verbose \
+            ./dist/ /CRMRPB-main/dist/
+          mirror --reverse --parallel=4 --verbose \
+            ./dist/ /CRMRPB-main/CRMRPB-main/dist/
           bye
           LFTP_COMMANDS
