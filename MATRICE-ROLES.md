@@ -29,6 +29,8 @@ Function doit s'y conformer.
 | `insurers` | LCMS | LCMS | L | — | L |
 | `windscreen_cases` | LCMS | LCMS | LCM | **LM** (les siens) | L |
 | `case_documents` | LCMS | LCMS | LCM | LC (les siens) | L |
+| `client_document_requests` | LCMS | LCMS | LCM | — | L |
+| `client_document_items` | LCMS | LCMS | LCM | — | L |
 
 Le technicien voit les coordonnées du client de ses interventions : sans le
 téléphone, il ne peut ni prévenir d'un retard ni se faire ouvrir un portail.
@@ -117,6 +119,8 @@ Karim » sans requête privilégiée. Seul l'administrateur y écrit.
 | `meta-store-secrets`, `meta-subscribe-leads`, `meta-sync-forms`, `meta-test-connection` | Administrateur — vérifié dans la fonction |
 | `meta-lead-webhook`, `inbound-webhook` | Public, protégées par signature ou clé d'endpoint |
 | `meta-process-queue` | `service_role` uniquement (cron) |
+| `create_client_document_request` | Administrateur, responsable, conseiller |
+| `client-documents` | Public avec jeton privé valide ; aucune lecture anonyme directe des tables ou du bucket |
 
 ---
 

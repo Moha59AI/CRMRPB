@@ -27,6 +27,7 @@ import {
   type CompteursRelances,
 } from '@/services/relances-service';
 import { archiverLeadsSelectionnes } from '@/services/leads-service';
+import { createClientDocumentRequest } from '@/services/client-documents-service';
 
 const PAR_PAGE = 50;
 
@@ -193,17 +194,26 @@ export function RelancesPage() {
       .catch((e: Error) => toast.error(e.message));
   };
 
-  const demanderDocuments = (r: Relance) => {
+  const demanderDocuments = async (r: Relance) => {
     if (!r.phone) {
       toast.error('Aucun téléphone sur cette fiche');
       return;
     }
-    const prenom = r.titre.split(' ')[0];
-    const message = `Bonjour ${prenom}, il nous manque encore vos documents pour avancer sur votre dossier pare-brise. Relais Pare-Brise`;
-    window.location.href = `sms:${r.phone}?body=${encodeURIComponent(message)}`;
-    journaliserAction(r, 'sms_outbound', message)
-      .then(rafraichir)
-      .catch((e: Error) => toast.error(e.message));
+    if (!r.leadId) {
+      toast.error('Cette relance n’a pas de lead associé');
+      return;
+    }
+    try {
+      const request = await createClientDocumentRequest(r.leadId);
+      const prenom = r.titre.split(' ')[0];
+      const message = `Bonjour ${prenom}, il nous manque encore vos documents pour avancer sur votre dossier pare-brise. Déposez-les ici : ${request.url} — Relais Pare-Brise`;
+      window.location.href = `sms:${r.phone}?body=${encodeURIComponent(message)}`;
+      await journaliserAction(r, 'sms_outbound', message);
+      rafraichir();
+      queryClient.invalidateQueries({ queryKey: ['client-document-request', r.leadId] });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
 
   // La liste transmise permet d'enchainer les dossiers sans revenir ici, et

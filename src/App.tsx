@@ -39,6 +39,7 @@ import { IntegrationsListPage } from '@/features/integrations/integrations-list-
 import { MetaSettingsPage } from '@/features/integrations/meta/meta-settings-page';
 import { GoogleAdsSettingsPage } from '@/features/integrations/google/google-ads-settings-page';
 import { WebhooksPage } from '@/features/webhooks/webhooks-page';
+import { ClientDocumentsPage } from '@/features/client-documents/client-documents-page';
 
 /**
  * Routage avec location d'arriere-plan.
@@ -71,6 +72,7 @@ function AppRoutes() {
           {/* Cible du lien de reinitialisation : publique, puisque la session
               de recuperation n'est ouverte qu'a l'arrivee. */}
           <Route path="/update-password" element={<UpdatePasswordPage />} />
+          <Route path="/documents" element={<ClientDocumentsPage />} />
 
           {/* Protected routes */}
           <Route

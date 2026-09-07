@@ -34,10 +34,11 @@ import {
 } from '@/services/contacts-service';
 import { createNote } from '@/services/activity-service';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
+import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { Lead, Contact, Communication, Note, Task } from '@/types';
 
-type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'vehicules';
+type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'documents' | 'vehicules';
 
 const LIBELLE_CHAMP_CLIENT: Partial<Record<keyof Contact, string>> = {
   first_name: 'Prénom', last_name: 'Nom', phone: 'Téléphone', email: 'Email',
@@ -50,6 +51,7 @@ const ONGLETS: readonly OngletFiche<OngletClient>[] = [
   { cle: 'apercu', label: "Vue d'ensemble" },
   { cle: 'suivi', label: 'Suivi & échanges' },
   { cle: 'interventions', label: 'Interventions' },
+  { cle: 'documents', label: 'Documents' },
   { cle: 'vehicules', label: 'Véhicules' },
 ];
 
@@ -303,6 +305,8 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     >
       {onglet === 'vehicules' ? (
         <ListeVehicules vehicules={vehicules ?? []} />
+      ) : onglet === 'documents' ? (
+        <ClientDocumentHistory interventions={interventions ?? []} />
       ) : onglet === 'interventions' ? (
         <ListeInterventions
           interventions={interventions ?? []}

@@ -26,6 +26,7 @@ import { fetchReglagesEntreprise } from '@/services/admin-service';
 import { createCommunication } from '@/services/activity-service';
 import { enregistrerResultatAppel } from '@/services/relances-service';
 import { messageNrp } from '@/features/relances/message-nrp';
+import { createClientDocumentRequest } from '@/services/client-documents-service';
 import { DossierContenu } from './dossier-contenu';
 import { ONGLETS, type OngletDossier, type EtatOuvertureDossier, fondDepuis } from './dossier-constants';
 import type { Lead, LeadStatus } from '@/types';
@@ -209,13 +210,19 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     marquerNrp.mutate();
   };
 
-  const demanderDocuments = () => {
+  const demanderDocuments = async () => {
     if (!lead?.phone) return;
-    const prenom = lead.first_name?.trim() ?? '';
-    const message = `Bonjour ${prenom}, pour avancer sur votre dossier pare-brise il nous manque votre carte grise et votre attestation d'assurance. Merci de nous les envoyer. Relais Pare-Brise`;
-    window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
-    journaliser('sms_outbound', message);
-    majLead.mutate({ status: 'documents_requested' });
+    try {
+      const request = await createClientDocumentRequest(lead.id);
+      const prenom = lead.first_name?.trim() ?? '';
+      const message = `Bonjour${prenom ? ` ${prenom}` : ''}, pour avancer sur votre dossier pare-brise, déposez votre carte grise et votre attestation d’assurance ici : ${request.url} — Relais Pare-Brise`;
+      window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
+      journaliser('sms_outbound', message);
+      majLead.mutate({ status: 'documents_requested' });
+      queryClient.invalidateQueries({ queryKey: ['client-document-request', lead.id] });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
 
   const reporterRelance = () => {

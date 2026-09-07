@@ -90,6 +90,41 @@ Prospects reçus depuis Meta et autres sources.
 **Index** : workspace_id, status, source, phone, email, vehicle_registration, created_at
 **Unique** : meta_lead_id (partial, WHERE NOT NULL)
 
+### client_document_requests
+Liens privés créés depuis une fiche lead pour collecter les pièces du client.
+Le jeton complet n'est jamais stocké : seule son empreinte SHA-256 reste en base.
+Un nouveau lien révoque la demande ouverte précédente.
+Le portail est provisoirement servi dans `/documents` sur le domaine du CRM,
+afin de conserver `client.relaisparebrise.fr` chez Onify sans interruption.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| lead_id | uuid → leads | Dossier commercial concerné |
+| case_id | uuid → windscreen_cases | Dossier vitrage s'il existe déjà |
+| token_hash | text UNIQUE | Empreinte du lien secret |
+| status | text | open, complete, revoked, expired |
+| expires_at | timestamptz | Expiration à 30 jours |
+| last_opened_at, submitted_at, revoked_at | timestamptz | Suivi du parcours client |
+
+### client_document_items
+Pièces demandées et fichiers privés déposés dans le bucket Storage
+`client-documents`. Le chemin commence toujours par le workspace puis la
+demande, afin que la politique Storage cloisonne les aperçus des collaborateurs.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| request_id | uuid → client_document_requests | |
+| document_type, label | text | Nature et libellé de la pièce |
+| required | boolean | Conditionne la complétude de la demande |
+| status | text | requested, uploaded, validated, rejected |
+| storage_path | text | Chemin privé, jamais une URL publique |
+| original_name, mime_type, size_bytes | text/text/bigint | Métadonnées contrôlées |
+| uploaded_at, validated_at | timestamptz | Suivi du traitement |
+| rejection_reason | text | Motif visible par le client |
+| notification_email_sent_at, notification_email_error | timestamptz/text | Trace l'alerte email sans transmettre de donnée client au fournisseur |
+
 ### postal_code_cities
 Référentiel local des couples code postal/commune de France.
 Il sert à compléter la ville lorsqu'un formulaire ne transmet que le code
@@ -286,6 +321,12 @@ Journal d'audit des actions administratives.
 - SELECT : tous les utilisateurs authentifiés
 - INSERT/UPDATE/DELETE : administrateur uniquement
 
+### client_document_requests / client_document_items
+- SELECT : administrateur, responsable, conseiller et comptable du workspace
+- INSERT/UPDATE : administrateur, responsable et conseiller
+- DELETE : administrateur et responsable
+- Aucun accès anonyme direct ; le portail public passe par l'Edge Function et un jeton à forte entropie
+
 ## Fonctions SQL
 
 ### upsert_lead_from_webhook()
@@ -293,3 +334,8 @@ SECURITY DEFINER — insère ou met à jour un lead depuis un webhook. Vérifie 
 
 ### update_updated_at_column()
 Trigger automatique pour `updated_at` sur toutes les tables avec timestamps.
+
+### create_client_document_request()
+SECURITY DEFINER — vérifie le rôle et le workspace, révoque l'ancien lien
+incomplet, crée une demande avec les pièces par défaut et ne retourne le jeton
+secret qu'une seule fois au collaborateur qui prépare le SMS.

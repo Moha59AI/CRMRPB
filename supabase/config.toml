@@ -36,3 +36,6 @@ verify_jwt = true
 
 [functions.google-ads-sync]
 verify_jwt = false
+
+[functions.client-documents]
+verify_jwt = false

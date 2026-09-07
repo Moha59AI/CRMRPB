@@ -20,6 +20,7 @@ import type { Lead, Profile } from '@/types';
 import type { AnalyseDoublon } from '@/services/leads-service';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
+import { DocumentsClientPanel } from './documents-client-panel';
 
 interface EvenementTimeline {
   cle: string;
@@ -130,6 +131,10 @@ export function DossierContenu({
         <Timeline evenements={timeline} chargement={chargeComms} complet />
       </div>
     );
+  }
+
+  if (onglet === 'documents') {
+    return <DocumentsClientPanel lead={lead} />;
   }
 
   if (onglet !== 'apercu') {
@@ -362,7 +367,7 @@ function Timeline({
 }
 
 /**
- * Les onglets Documents, Assurance et Facturation s'appuient sur
+ * Les onglets Assurance et Facturation s'appuient sur
  * `windscreen_cases` et `invoices`, qui ne sont alimentés qu'une fois le
  * dossier cree. Ils sont annonces comme tels plutot que d'afficher un vide
  * sans explication.
@@ -377,7 +382,7 @@ function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
       <h3 className="text-base font-semibold">{libelle}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
         Cette section s’active à la création du dossier vitrage. Tant que le lead
-        n’est pas converti, il n’y a ni document, ni déclaration, ni facture à afficher.
+        n’est pas converti, il n’y a ni déclaration, ni facture à afficher.
       </p>
     </div>
   );
