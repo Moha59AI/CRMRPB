@@ -15,7 +15,7 @@
  * reseau manque au chargement.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const COQUILLE = `coquille-${VERSION}`;
 
 /*
@@ -97,6 +97,44 @@ self.addEventListener('fetch', (e) => {
     const reponse = await fetch(req);
     if (reponse.ok && reponse.type === 'basic') cache.put(req, reponse.clone());
     return reponse;
+  })());
+});
+
+/*
+ * Push serveur : ce chemin reste actif quand tous les onglets sont fermes.
+ * Le serveur envoie volontairement un texte generique : une notification peut
+ * apparaitre sur un ecran verrouille et ne doit jamais reveler un nom ou un
+ * numero de client.
+ */
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    let payload = {};
+    try {
+      payload = e.data ? e.data.json() : {};
+    } catch {
+      payload = {};
+    }
+
+    const fenetres = await self.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true,
+    });
+
+    // Au premier plan, la cloche temps reel suffit. Le test force l'affichage
+    // afin que l'utilisateur sache immediatement que son appareil fonctionne.
+    const crmVisible = fenetres.some((client) => client.visibilityState === 'visible');
+    if (crmVisible && !payload.force) return;
+
+    await self.registration.showNotification(
+      payload.title || 'Nouvelle notification CRM',
+      {
+        body: payload.body || 'Ouvrez le CRM pour consulter la nouvelle information.',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: payload.tag || 'crm-notification',
+        data: { lien: payload.link || '/today' },
+      },
+    );
   })());
 });
 

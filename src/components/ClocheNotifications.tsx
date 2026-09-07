@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, BellRing, Check, TrendingUp, BellOff, Volume2 } from 'lucide-react';
+import {
+  Bell, BellRing, Check, TrendingUp, BellOff, Volume2, Loader2, Smartphone,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -14,7 +16,8 @@ import {
 } from '@/services/notifications-service';
 import type { Notification } from '@/types';
 import {
-  etatAlertes, demanderAlertes, afficherAlerte, type EtatAlertes,
+  etatAlertes, demanderAlertes, afficherAlerte, testerAlertes, verifierAlertes,
+  type EtatAlertes,
 } from '@/lib/alertes';
 
 /**
@@ -46,6 +49,11 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   const navigate = useNavigate();
   const [ouvert, setOuvert] = useState(false);
   const [alertes, setAlertes] = useState<EtatAlertes>(() => etatAlertes());
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    verifierAlertes().then(setAlertes);
+  }, [profile?.id]);
 
   /*
    * Nombre d'arrivées depuis le chargement.
@@ -105,7 +113,7 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
 
       // L'onglet est au premier plan : la pastille suffit, une alerte
       // par-dessus serait redondante.
-      if (document.visibilityState !== 'visible') {
+      if (document.visibilityState !== 'visible' && alertes !== 'autorisee') {
         afficherAlerte({
           titre: n.title, corps: n.body, lien: n.link, etiquette: n.id,
         });
@@ -118,7 +126,7 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
         window.clearTimeout(minuteurRafraichissement.current);
       }
     };
-  }, [profile?.id, queryClient]);
+  }, [profile?.id, queryClient, alertes]);
 
   // Le clic sur une alerte systeme demande au service worker de reveiller
   // l'onglet ; c'est lui qui nous transmet la destination. Naviguer par le
@@ -284,21 +292,40 @@ function BandeauAlertes({
 }: { etat: EtatAlertes; onChange: (e: EtatAlertes) => void }) {
   if (etat === 'indisponible') return null;
 
+  if (etat === 'installation_requise') {
+    return (
+      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-3 py-2">
+        <Smartphone className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+        <p className="text-xs leading-snug text-muted-foreground">
+          Sur iPhone, ajoutez d’abord le CRM à l’écran d’accueil, ouvrez-le
+          depuis son icône puis activez les notifications ici.
+        </p>
+      </div>
+    );
+  }
+
+  if (etat === 'activation') {
+    return (
+      <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Vérification de cet appareil…
+      </div>
+    );
+  }
+
   if (etat === 'autorisee') {
     return (
       <div className="flex items-center justify-between gap-2 border-b border-border bg-done-soft/40 px-3 py-2">
         <span className="flex items-center gap-1.5 text-xs text-done">
           <Volume2 className="h-3 w-3" />
-          Alertes système activées
+          Push actif sur cet appareil
         </span>
         <button
           type="button"
           className="text-xs text-muted-foreground hover:text-foreground"
-          onClick={() => afficherAlerte({
-            titre: 'Essai',
-            corps: "Voilà à quoi ressemblera l'arrivée d'un lead.",
-            etiquette: 'essai',
-          })}
+          onClick={async () => {
+            if (!(await testerAlertes())) onChange('erreur');
+          }}
         >
           Tester
         </button>
@@ -319,15 +346,37 @@ function BandeauAlertes({
     );
   }
 
+  if (etat === 'erreur') {
+    return (
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-destructive/5 px-3 py-2">
+        <span className="text-xs text-destructive">Activation incomplète sur cet appareil</span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 rounded-full text-xs"
+          onClick={async () => {
+            onChange('activation');
+            onChange(await demanderAlertes());
+          }}
+        >
+          Réessayer
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-3 py-2">
       <span className="text-xs text-muted-foreground">
-        Être alerté même hors du CRM
+        Recevoir les alertes même CRM fermé
       </span>
       <Button
         size="sm"
         className="h-6 rounded-full text-xs"
-        onClick={async () => onChange(await demanderAlertes())}
+        onClick={async () => {
+          onChange('activation');
+          onChange(await demanderAlertes());
+        }}
       >
         Activer
       </Button>

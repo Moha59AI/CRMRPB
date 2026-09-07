@@ -262,13 +262,27 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
   }).eq('id', request.lead_id).eq('workspace_id', request.workspace_id);
 
   if (complete && request.status !== 'complete') {
-    await admin.from('notifications').insert({
-      workspace_id: request.workspace_id,
-      title: 'Documents client reçus',
-      body: 'Toutes les pièces obligatoires ont été déposées.',
-      type: 'documents_received',
-      link: `/interventions/${request.lead_id}`,
-    });
+    const { data: recipients, error: recipientsError } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('workspace_id', request.workspace_id)
+      .in('role', ['admin', 'manager', 'advisor']);
+    if (recipientsError) throw recipientsError;
+
+    const notificationRows = (recipients ?? []).map((recipient) => ({
+        workspace_id: request.workspace_id,
+        user_id: recipient.id,
+        title: 'Documents client reçus',
+        body: 'Toutes les pièces obligatoires ont été déposées.',
+        type: 'documents_received',
+        link: `/interventions/${request.lead_id}`,
+      }));
+    if (notificationRows.length > 0) {
+      const { error: notificationError } = await admin
+        .from('notifications')
+        .insert(notificationRows);
+      if (notificationError) throw notificationError;
+    }
   }
 
   return json({ success: true, complete });

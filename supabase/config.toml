@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.client-documents]
 verify_jwt = false
+
+[functions.web-push]
+verify_jwt = false
