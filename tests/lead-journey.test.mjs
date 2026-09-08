@@ -71,3 +71,15 @@ test('les resultats d appel utilisent le meme vocabulaire', async () => {
   assert.match(sms, /messageNrp\(lead/);
   assert.match(sms, /journaliserAction\(relance, 'sms_outbound', message\)/);
 });
+
+test('le journal SMS des relances renseigne le workspace requis par RLS', async () => {
+  const relancesService = await read('src/services/relances-service.ts');
+
+  assert.match(relancesService, /import \{ createCommunication, createNote \} from '@\/services\/activity-service'/);
+  assert.match(relancesService, /const \{ error \} = await createCommunication\(\{/);
+  assert.doesNotMatch(
+    relancesService,
+    /supabase\.from\('communications'\)\.insert\(\{/,
+    'la journalisation ne doit pas contourner le service qui ajoute workspace_id',
+  );
+});

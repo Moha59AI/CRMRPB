@@ -10,7 +10,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { LeadStatus } from '@/types';
-import { createNote } from '@/services/activity-service';
+import { createCommunication, createNote } from '@/services/activity-service';
 
 export type UrgencyLevel = 'urgent' | 'due' | 'upcoming';
 export type PriorityLevel = 'urgent' | 'haute' | 'normale' | 'faible';
@@ -233,7 +233,11 @@ export async function journaliserAction(
 ): Promise<void> {
   if (!relance.leadId) return;
 
-  const { error } = await supabase.from('communications').insert({
+  // Toutes les communications doivent passer par le service central : il
+  // renseigne le workspace et l'utilisateur attendus par les politiques RLS.
+  // Une insertion directe fonctionne visuellement jusqu'au premier envoi,
+  // puis Supabase refuse la ligne car workspace_id est obligatoire.
+  const { error } = await createCommunication({
     lead_id: relance.leadId,
     type,
     direction: 'outbound',
@@ -241,7 +245,7 @@ export async function journaliserAction(
     content: contenu,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(error);
 }
 
 /**
@@ -289,4 +293,3 @@ export async function enregistrerResultatAppel(params: {
     }
   }
 }
-
