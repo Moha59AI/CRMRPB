@@ -217,7 +217,10 @@ export function MarketingPage() {
           )}
 
           {data && totals && (
-            <>
+            <div
+              key={`${days}-${data.lastSyncedAt ?? 'crm'}`}
+              className="space-y-5 animate-marketing-dashboard"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
                   Mise à jour automatique toutes les 15 minutes · écran rafraîchi chaque minute
@@ -229,7 +232,7 @@ export function MarketingPage() {
                 </span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+              <div className="marketing-kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
                 <Kpi
                   icon={CircleDollarSign}
                   label="Dépenses"
@@ -282,7 +285,7 @@ export function MarketingPage() {
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-                <Card className="rounded-xl p-5">
+                <Card className="marketing-card marketing-chart-card rounded-xl p-5">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Performance dans le temps</h2>
@@ -304,15 +307,15 @@ export function MarketingPage() {
                       <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={28} tickFormatter={(value) => new Date(`${value}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} />
                       <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
                       <ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => new Date(`${value}T12:00:00`).toLocaleDateString('fr-FR')} />} />
-                      <Area dataKey="clicks" type="monotone" fill="url(#fillClicks)" stroke="var(--color-clicks)" strokeWidth={2} />
-                      <Area dataKey="leads" type="monotone" fill="transparent" stroke="var(--color-leads)" strokeWidth={2} />
-                      <Area dataKey="transformedLeads" type="monotone" fill="transparent" stroke="var(--color-transformedLeads)" strokeWidth={2} />
-                      <Area dataKey="interventions" type="monotone" fill="transparent" stroke="var(--color-interventions)" strokeWidth={2} />
+                      <Area dataKey="clicks" type="monotone" fill="url(#fillClicks)" stroke="var(--color-clicks)" strokeWidth={2} animationDuration={850} />
+                      <Area dataKey="leads" type="monotone" fill="transparent" stroke="var(--color-leads)" strokeWidth={2} animationDuration={900} />
+                      <Area dataKey="transformedLeads" type="monotone" fill="transparent" stroke="var(--color-transformedLeads)" strokeWidth={2} animationDuration={950} />
+                      <Area dataKey="interventions" type="monotone" fill="transparent" stroke="var(--color-interventions)" strokeWidth={2} animationDuration={1000} />
                     </AreaChart>
                   </ChartContainer>
                 </Card>
 
-                <Card className="rounded-xl p-5">
+                <Card className="marketing-card rounded-xl p-5">
                   <h2 className="text-sm font-semibold">Entonnoir de conversion</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Chaque étape est issue des données réelles du CRM</p>
                   <div className="mt-6 space-y-5">
@@ -341,7 +344,7 @@ export function MarketingPage() {
                 <MediaBuyingSignals data={data} />
               </div>
 
-              <Card className="overflow-hidden rounded-xl">
+              <Card className="marketing-card overflow-hidden rounded-xl">
                 <div className="border-b border-border p-5">
                   <h2 className="text-sm font-semibold">Résultat par campagne</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Les coûts viennent de Google Ads ; les leads, rendez-vous et interventions viennent du CRM.</p>
@@ -354,7 +357,7 @@ export function MarketingPage() {
               </Card>
 
               <SearchTermsSection terms={data.searchTerms} available={data.searchTermsAvailable} />
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -370,10 +373,12 @@ function Kpi({ icon: Icon, label, value, detail, trend }: {
   trend?: string;
 }) {
   return (
-    <Card className="rounded-xl p-4">
+    <Card className="marketing-kpi rounded-xl p-4">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className="h-4 w-4 text-primary" />
+        <span className="marketing-kpi-icon rounded-lg bg-primary/10 p-1.5 text-primary">
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
       <p className="mt-3 text-2xl font-semibold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
@@ -396,7 +401,7 @@ function FunnelStep({ label, value, reference, color }: {
         <span className="tabular-nums text-muted-foreground">{integer.format(value)} · {ratio(value, reference)}</span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
+        <div className={`animate-marketing-bar h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
       </div>
     </div>
   );
@@ -431,7 +436,7 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
             return (
               <TableRow
                 key={campaign.id}
-                className={campaign.spend > 0 && campaign.leads === 0 ? 'bg-warning/5' : undefined}
+                className={`marketing-table-row ${campaign.spend > 0 && campaign.leads === 0 ? 'bg-warning/5' : ''}`}
               >
                 <TableCell>
                   <div className="max-w-[300px]">
@@ -476,7 +481,7 @@ function AttributionCard({ data }: { data: MarketingDashboardData }) {
     { label: 'Campagne inconnue', value: data.attribution.unresolved, color: 'bg-destructive' },
   ];
   return (
-    <Card className="rounded-xl p-5">
+    <Card className="marketing-card rounded-xl p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Qualité d'attribution</h2>
@@ -494,7 +499,7 @@ function AttributionCard({ data }: { data: MarketingDashboardData }) {
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div className={`h-full rounded-full ${row.color}`} style={{ width: total ? `${row.value / total * 100}%` : '0%' }} />
+              <div className={`animate-marketing-bar h-full rounded-full ${row.color}`} style={{ width: total ? `${row.value / total * 100}%` : '0%' }} />
             </div>
           </div>
         ))}
@@ -556,7 +561,7 @@ function MediaBuyingSignals({ data }: { data: MarketingDashboardData }) {
   }
 
   return (
-    <Card className="rounded-xl p-5">
+    <Card className="marketing-card rounded-xl p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Lecture media buying</h2>
@@ -568,7 +573,7 @@ function MediaBuyingSignals({ data }: { data: MarketingDashboardData }) {
         {signals.length ? signals.slice(0, 5).map((signal) => (
           <div
             key={`${signal.title}-${signal.detail}`}
-            className={`rounded-lg border p-3 ${
+            className={`marketing-signal rounded-lg border p-3 ${
               signal.tone === 'warning' ? 'border-warning/30 bg-warning/5'
                 : signal.tone === 'success' ? 'border-success/30 bg-success/5'
                   : 'border-border bg-muted/30'
@@ -767,7 +772,7 @@ function SearchTermsSection({ terms, available }: {
     .sort((a, b) => compareSearchPerformance(a, b, sort, alertSpend));
 
   return (
-    <Card className="overflow-hidden rounded-xl">
+    <Card className="marketing-card overflow-hidden rounded-xl">
       <div className="border-b border-border p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -904,7 +909,7 @@ function SearchTermsSection({ terms, available }: {
               <TabsTrigger value="keywords">Mots-clés déclencheurs ({keywordRows.length})</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="terms" className="m-0">
+          <TabsContent value="terms" className="m-0 animate-marketing-tab">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -921,7 +926,7 @@ function SearchTermsSection({ terms, available }: {
                   {termRows.slice(0, 100).map((term) => {
                     const signal = performanceSignal(term, averageCpa, alertSpend);
                     return (
-                      <TableRow key={term.id} className={term.conversions === 0 && term.spend >= alertSpend ? 'bg-warning/5' : undefined}>
+                      <TableRow key={term.id} className={`marketing-table-row ${term.conversions === 0 && term.spend >= alertSpend ? 'bg-warning/5' : ''}`}>
                         <TableCell>
                           <p className="font-medium">{term.searchTerm}</p>
                           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -964,7 +969,7 @@ function SearchTermsSection({ terms, available }: {
               </Table>
             </div>
           </TabsContent>
-          <TabsContent value="keywords" className="m-0">
+          <TabsContent value="keywords" className="m-0 animate-marketing-tab">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -981,7 +986,7 @@ function SearchTermsSection({ terms, available }: {
                   {keywordRows.slice(0, 100).map((keyword) => {
                     const signal = performanceSignal(keyword, averageCpa, alertSpend);
                     return (
-                      <TableRow key={keyword.id} className={keyword.conversions === 0 && keyword.spend >= alertSpend ? 'bg-warning/5' : undefined}>
+                      <TableRow key={keyword.id} className={`marketing-table-row ${keyword.conversions === 0 && keyword.spend >= alertSpend ? 'bg-warning/5' : ''}`}>
                         <TableCell>
                           <p className="font-medium">{keyword.keyword}</p>
                           <div className="mt-1.5 flex flex-wrap gap-1">

@@ -295,6 +295,124 @@
     to { opacity: 1; transform: translateX(0); }
   }
 
+  /* Mouvement commun a tout le CRM. L'entree donne un repere au changement
+     d'ecran ; les surfaces et lignes reagissent sans deplacer leur contenu. */
+  .app-route-transition {
+    animation: app-route-in 280ms var(--ease-out) both;
+  }
+  @keyframes app-route-in {
+    from { opacity: 0; transform: translateY(5px) scale(0.998); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .app-card-motion {
+    transition: border-color var(--motion-base) var(--ease-out),
+      box-shadow var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+  }
+  .app-row-motion {
+    transition: background-color var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-fast) var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .app-card-motion:hover {
+      border-color: hsl(var(--border-strong));
+      box-shadow: var(--shadow-2);
+    }
+    .app-row-motion:hover {
+      box-shadow: inset 3px 0 0 hsl(var(--primary) / 0.32);
+    }
+  }
+
+  /* La page Marketing se lit de haut en bas : les données apparaissent dans
+     cet ordre au lieu de surgir toutes ensemble. Les mouvements restent courts
+     pour ne pas ralentir l'analyse quotidienne. */
+  .animate-marketing-dashboard {
+    animation: marketing-dashboard 360ms var(--ease-out) both;
+  }
+  @keyframes marketing-dashboard {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .marketing-kpi {
+    opacity: 0;
+    animation: marketing-kpi 480ms var(--ease-out) forwards;
+    transition: transform var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-fast) var(--ease-out),
+      border-color var(--motion-fast) var(--ease-out);
+  }
+  .marketing-kpi-grid > :nth-child(1) { animation-delay: 40ms; }
+  .marketing-kpi-grid > :nth-child(2) { animation-delay: 80ms; }
+  .marketing-kpi-grid > :nth-child(3) { animation-delay: 120ms; }
+  .marketing-kpi-grid > :nth-child(4) { animation-delay: 160ms; }
+  .marketing-kpi-grid > :nth-child(5) { animation-delay: 200ms; }
+  .marketing-kpi-grid > :nth-child(6) { animation-delay: 240ms; }
+  .marketing-kpi-grid > :nth-child(7) { animation-delay: 280ms; }
+  @keyframes marketing-kpi {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .marketing-kpi:hover {
+    transform: translateY(-3px);
+    border-color: hsl(var(--primary) / 0.24);
+    box-shadow: var(--shadow-2);
+  }
+  .marketing-kpi-icon {
+    transition: transform var(--motion-base) var(--ease-out),
+      background-color var(--motion-fast) var(--ease-out);
+  }
+  .marketing-kpi:hover .marketing-kpi-icon {
+    transform: rotate(-5deg) scale(1.08);
+    background-color: hsl(var(--primary) / 0.14);
+  }
+
+  .marketing-card {
+    transition: transform var(--motion-base) var(--ease-out),
+      box-shadow var(--motion-base) var(--ease-out),
+      border-color var(--motion-base) var(--ease-out);
+  }
+  .marketing-card:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--border-strong));
+    box-shadow: var(--shadow-2);
+  }
+  .marketing-chart-card {
+    animation: marketing-chart 560ms 120ms var(--ease-out) both;
+  }
+  @keyframes marketing-chart {
+    from { opacity: 0; clip-path: inset(0 7% 0 0); }
+    to { opacity: 1; clip-path: inset(0); }
+  }
+
+  .animate-marketing-bar {
+    transform-origin: left center;
+    animation: marketing-bar 720ms 140ms var(--ease-out) both;
+  }
+  @keyframes marketing-bar {
+    from { transform: scaleX(0); opacity: 0.45; }
+    to { transform: scaleX(1); opacity: 1; }
+  }
+
+  .marketing-signal {
+    transition: transform var(--motion-fast) var(--ease-out),
+      border-color var(--motion-fast) var(--ease-out);
+  }
+  .marketing-signal:hover {
+    transform: translateX(3px);
+  }
+  .marketing-table-row {
+    transition: background-color var(--motion-fast) var(--ease-out);
+  }
+  .animate-marketing-tab {
+    animation: marketing-tab 260ms var(--ease-out) both;
+  }
+  @keyframes marketing-tab {
+    from { opacity: 0; transform: translateX(5px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
   /*
    * Arrivée d'une notification.
    *

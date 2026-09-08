@@ -163,14 +163,18 @@ export function CarteInterventions({
   }
 
   return (
-    <div className="relative h-full w-full">
-      <MapContainer
-        center={CENTRE_FRANCE}
-        zoom={6}
-        scrollWheelZoom
-        className="h-full w-full"
-        maxZoom={19}
-      >
+    <div className="flex h-full min-h-0 w-full gap-3">
+      {/* `isolate` enferme les z-index 400/500 de Leaflet dans la carte. Sans
+          ce contexte, ses couches passaient devant la fiche ouverte depuis un
+          marqueur et interceptaient encore les clics. */}
+      <div className="relative isolate z-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-border">
+        <MapContainer
+          center={CENTRE_FRANCE}
+          zoom={6}
+          scrollWheelZoom
+          className="h-full w-full"
+          maxZoom={19}
+        >
         <TileLayer
           url={FOND_IGN}
           attribution='&copy; <a href="https://www.ign.fr/">IGN</a> — Géoplateforme'
@@ -194,7 +198,7 @@ export function CarteInterventions({
             </Popup>
           </Marker>
         ))}
-      </MapContainer>
+        </MapContainer>
 
       <div className="pointer-events-none absolute left-4 top-4 z-[400] flex flex-col gap-2">
         <div className="pointer-events-auto rounded-xl border border-border bg-card/95 px-3 py-2 shadow-sm backdrop-blur">
@@ -275,14 +279,68 @@ export function CarteInterventions({
         </p>
       </div>
 
-      {listeOuverte && (
-        <ListeNonLocalisees
-          interventions={sansPoint}
-          onOuvrirLead={onOuvrirLead}
-          onFermer={() => setListeOuverte(false)}
-        />
-      )}
+        {listeOuverte && (
+          <ListeNonLocalisees
+            interventions={sansPoint}
+            onOuvrirLead={onOuvrirLead}
+            onFermer={() => setListeOuverte(false)}
+          />
+        )}
+      </div>
+
+      <ProgrammeCarte interventions={interventions} onOuvrirLead={onOuvrirLead} />
     </div>
+  );
+}
+
+/** La carte n'est plus un cul-de-sac : la tournée reste actionnable à côté. */
+function ProgrammeCarte({
+  interventions, onOuvrirLead,
+}: {
+  interventions: InterventionCarte[];
+  onOuvrirLead: (leadId: string) => void;
+}) {
+  return (
+    <aside className="hidden w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card xl:flex">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">Programme de la semaine</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {interventions.length} intervention{interventions.length > 1 ? 's' : ''}, dans l'ordre
+        </p>
+      </div>
+      <div className="defilement-contenu flex-1 divide-y divide-border overflow-y-auto">
+        {interventions.map((intervention, index) => (
+          <button
+            key={intervention.appointment_id}
+            type="button"
+            onClick={() => intervention.lead_id && onOuvrirLead(intervention.lead_id)}
+            disabled={!intervention.lead_id}
+            className="group flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50 disabled:cursor-default"
+          >
+            <span
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+              style={{ backgroundColor: COULEUR_STATUT[intervention.statut] ?? '#94a3b8' }}
+            >
+              {index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {intervention.client ?? intervention.titre}
+              </span>
+              <span className="mt-0.5 block text-xs font-medium tabular-nums text-primary">
+                {jourEtHeure(intervention.debut)}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {[intervention.adresse, intervention.code_postal, intervention.ville].filter(Boolean).join(' ') || 'Adresse à compléter'}
+              </span>
+              <span className="mt-1 block text-[11px] text-muted-foreground transition-colors group-hover:text-primary">
+                {intervention.lead_id ? 'Ouvrir la fiche' : LIBELLE_STATUT[intervention.statut] ?? intervention.statut}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </aside>
   );
 }
 

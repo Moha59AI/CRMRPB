@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'manager' | 'advisor' | 'technician' | 'accountant';
 
-export type IntegrationProvider = 'meta' | 'google' | 'custom';
+export type IntegrationProvider = 'meta' | 'google' | 'onify' | 'custom';
 export type IntegrationStatus = 'connected' | 'error' | 'not_configured';
 
 export type WebhookDirection = 'inbound' | 'outbound';
@@ -237,6 +237,13 @@ export interface Contact {
   sms_consent: boolean;
   email_consent: boolean;
   unsubscribed: boolean;
+  /** Identifiants et metadonnees conserves pour un import Onify idempotent. */
+  onify_customer_id?: string | null;
+  onify_external_id?: string | null;
+  onify_source?: string | null;
+  onify_stage?: string | null;
+  onify_tags?: unknown[] | null;
+  onify_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -360,6 +367,12 @@ export interface Appointment {
   latitude: number | null;
   longitude: number | null;
   geo_precision: 'exact' | 'approximatif' | null;
+  /** Evénement miroir créé dans Google Agenda. */
+  google_calendar_event_id: string | null;
+  google_calendar_html_link: string | null;
+  google_calendar_updated_at: string | null;
+  google_calendar_payload_hash: string | null;
+  google_calendar_origin: 'crm' | 'google' | null;
   created_at: string;
   updated_at: string;
 }
@@ -511,6 +524,9 @@ export interface Quote {
   amount_ttc: number;
   franchise_amount: number;
   status: QuoteStatus;
+  onify_quote_id?: string | null;
+  onify_payload?: Record<string, unknown> | null;
+  onify_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -534,6 +550,27 @@ export interface Invoice {
   due_date: string | null;
   payment_date: string | null;
   status: InvoiceStatus;
+  onify_invoice_id?: string | null;
+  onify_payload?: Record<string, unknown> | null;
+  onify_synced_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnifyCreditNote {
+  id: string;
+  workspace_id: string;
+  contact_id: string | null;
+  invoice_id: string | null;
+  onify_credit_id: string;
+  credit_number: string | null;
+  invoice_number: string | null;
+  object: string | null;
+  status: string | null;
+  amount_ttc: number;
+  issue_date: string | null;
+  onify_payload: Record<string, unknown> | null;
+  onify_synced_at: string;
   created_at: string;
   updated_at: string;
 }

@@ -229,7 +229,15 @@ export function AppLayout() {
           titre="Cet écran n'a pas pu s'afficher"
           message="Le reste du CRM reste utilisable. Réessayez, ou passez à un autre écran."
         >
-          <Outlet />
+          {/* Une seule transition commune garde le meme rythme dans tous les
+              modules, y compris ceux ajoutes plus tard. La cle rejoue le
+              mouvement uniquement lors d'un vrai changement de page. */}
+          <div
+            key={location.pathname}
+            className="app-route-transition flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <Outlet />
+          </div>
         </ErrorBoundary>
 
         <BarreOnglets

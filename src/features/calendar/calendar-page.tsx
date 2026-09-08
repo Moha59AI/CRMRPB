@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { CarteInterventions } from './carte-interventions';
+import { GoogleCalendarControl } from './google-calendar-control';
 import { ChampAdresse } from '@/components/ChampAdresse';
 import type { AdresseNormalisee } from '@/services/adresse-service';
 import {
@@ -1634,10 +1635,16 @@ export function CalendarPage() {
         title="Agenda"
         description="Planning et rendez-vous"
         action={
-          <Button className="rounded-full gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Nouveau rendez-vous
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <GoogleCalendarControl onSynced={() => {
+              queryClient.invalidateQueries({ queryKey: ['appointments'] });
+              queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
+            }} />
+            <Button className="rounded-full gap-1.5" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Nouveau rendez-vous
+            </Button>
+          </div>
         }
       />
 

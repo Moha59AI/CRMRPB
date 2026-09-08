@@ -77,6 +77,7 @@ Deno.serve(async (req: Request) => {
           ...settings,
           refresh_token_ref: 'stored',
           oauth_connected_at: new Date().toISOString(),
+          calendar_authorized_at: new Date().toISOString(),
         },
       })
       .eq('id', connection.id);

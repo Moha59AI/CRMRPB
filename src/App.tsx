@@ -38,6 +38,7 @@ import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants'
 import { IntegrationsListPage } from '@/features/integrations/integrations-list-page';
 import { MetaSettingsPage } from '@/features/integrations/meta/meta-settings-page';
 import { GoogleAdsSettingsPage } from '@/features/integrations/google/google-ads-settings-page';
+import { OnifySettingsPage } from '@/features/integrations/onify/onify-settings-page';
 import { WebhooksPage } from '@/features/webhooks/webhooks-page';
 import { ClientDocumentsPage } from '@/features/client-documents/client-documents-page';
 
@@ -104,6 +105,7 @@ function AppRoutes() {
               <Route path="integrations" element={<IntegrationsListPage />} />
               <Route path="integrations/meta" element={<MetaSettingsPage />} />
               <Route path="integrations/google" element={<GoogleAdsSettingsPage />} />
+              <Route path="integrations/onify" element={<OnifySettingsPage />} />
               <Route path="webhooks" element={<WebhooksPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="insurers" element={<InsurersPage />} />

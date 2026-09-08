@@ -84,7 +84,11 @@ export async function saveGoogleAdsSettings(
   }
 
   const previous = parseGoogleAdsSettings(existing);
+  const previousRaw = (existing?.settings ?? {}) as Record<string, unknown>;
   const storedSettings = {
+    // Les réglages Agenda partagent volontairement la connexion OAuth Google.
+    // Un enregistrement depuis l'écran Google Ads ne doit pas les effacer.
+    ...previousRaw,
     connection_name: settings.connection_name,
     customer_id: settings.customer_id.replace(/\D/g, ''),
     login_customer_id: settings.login_customer_id.replace(/\D/g, ''),

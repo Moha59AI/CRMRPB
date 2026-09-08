@@ -12,6 +12,7 @@ import {
   Webhook,
   LayoutDashboard,
   ChartNoAxesCombined,
+  DatabaseZap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -215,6 +216,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/integrations/google',
         icon: ChartNoAxesCombined,
         description: 'Compte publicitaire, coûts et attribution des clics',
+      },
+      {
+        label: 'Onify',
+        path: '/settings/integrations/onify',
+        icon: DatabaseZap,
+        description: 'Import en lecture seule vers le nouveau CRM',
       },
       {
         label: 'Webhooks',

@@ -31,7 +31,13 @@ Deno.serve(async (req: Request) => {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: 'https://www.googleapis.com/auth/adwords',
+      // Autorisation incrementale : le meme compte Google sert aux donnees Ads
+      // et au miroir des rendez-vous CRM, sans demander un second couple de
+      // secrets OAuth.
+      scope: [
+        'https://www.googleapis.com/auth/adwords',
+        'https://www.googleapis.com/auth/calendar.events',
+      ].join(' '),
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: 'true',
