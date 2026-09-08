@@ -18,6 +18,7 @@ export type CleResultat =
   | 'interesse'
   | 'rdv'
   | 'documents'
+  | 'cloture'
   | 'pas_interesse'
   | 'faux_numero';
 
@@ -38,14 +39,14 @@ export interface Resultat {
 export const RESULTATS: Resultat[] = [
   {
     cle: 'sans_reponse',
-    label: "N'a pas répondu",
+    label: "NRP — n'a pas répondu",
     effet: 'Rappel programmé selon la cadence NRP',
     statut: 'nrp',
     sortDeFile: false,
   },
   {
     cle: 'rappeler',
-    label: 'À rappeler plus tard',
+    label: 'Nouveau lead / à rappeler',
     effet: 'Revient à la date que vous choisissez',
     statut: 'to_call',
     sortDeFile: false,
@@ -53,28 +54,35 @@ export const RESULTATS: Resultat[] = [
   },
   {
     cle: 'interesse',
-    label: 'Intéressé',
-    effet: 'Revient dans la file selon la cadence « Intéressé »',
+    label: 'Qualifié',
+    effet: 'Besoin confirmé — prochaine étape : obtenir les documents',
     statut: 'interested',
     sortDeFile: false,
   },
   {
     cle: 'documents',
-    label: 'Documents demandés',
-    effet: 'Revient si les documents ne sont pas reçus',
+    label: 'Attente documents',
+    effet: 'Reste suivi jusqu’à la réception des pièces',
     statut: 'documents_requested',
     sortDeFile: false,
   },
   {
     cle: 'rdv',
-    label: 'Rendez-vous pris',
-    effet: 'Quitte les relances — pensez à créer le rendez-vous',
+    label: 'RDV pris',
+    effet: 'Quitte les relances et passe à l’étape RDV pris',
     statut: 'appointment_scheduled',
     sortDeFile: true,
   },
   {
+    cle: 'cloture',
+    label: 'Clôturé',
+    effet: 'Parcours terminé — l’intervention est réalisée',
+    statut: 'converted',
+    sortDeFile: true,
+  },
+  {
     cle: 'pas_interesse',
-    label: 'Pas intéressé',
+    label: 'Perdu — pas intéressé',
     effet: 'Quitte définitivement la file',
     statut: 'lost',
     sortDeFile: true,
@@ -82,7 +90,7 @@ export const RESULTATS: Resultat[] = [
   },
   {
     cle: 'faux_numero',
-    label: 'Numéro invalide',
+    label: 'Perdu — numéro invalide',
     effet: 'Quitte la file : rappeler ne servirait à rien',
     statut: 'lost',
     sortDeFile: true,

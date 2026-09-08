@@ -28,6 +28,8 @@ import {
 } from '@/services/relances-service';
 import { archiverLeadsSelectionnes } from '@/services/leads-service';
 import { createClientDocumentRequest } from '@/services/client-documents-service';
+import { fetchReglagesEntreprise } from '@/services/admin-service';
+import { preparerSmsNrp } from './preparer-sms-nrp';
 
 const PAR_PAGE = 50;
 
@@ -85,6 +87,12 @@ export function RelancesPage() {
   const { data: compteurs } = useQuery({
     queryKey: ['relances-compteurs'],
     queryFn: () => compterRelances(),
+  });
+
+  const { data: reglages } = useQuery({
+    queryKey: ['reglages-entreprise'],
+    queryFn: fetchReglagesEntreprise,
+    staleTime: 5 * 60_000,
   });
 
   const { data, isLoading, isFetching } = useQuery({
@@ -170,18 +178,25 @@ export function RelancesPage() {
         prochaineAction: choix.prochaineAction,
         note: choix.note,
       });
-      return resultat;
+      const sms = choix.envoyerSmsNrp
+        ? await preparerSmsNrp(appelAQualifier, reglages?.telephone)
+        : null;
+      return { resultat, sms };
     },
-    onSuccess: (resultat) => {
+    onSuccess: (resultatEnregistre) => {
       const nom = appelAQualifier?.titre ?? 'Le lead';
       setAppelAQualifier(null);
       rafraichir();
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      const resultat = resultatEnregistre?.resultat;
       toast.success(
         resultat?.sortDeFile
           ? `${nom} quitte les relances`
           : `${nom} — ${resultat?.label.toLowerCase()}`,
       );
+      if (resultatEnregistre?.sms) {
+        window.location.href = `sms:${resultatEnregistre.sms.phone}?body=${encodeURIComponent(resultatEnregistre.sms.message)}`;
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -285,6 +300,7 @@ export function RelancesPage() {
     return (
       <SessionRelance
         file={session}
+        telephoneEntreprise={reglages?.telephone}
         onFermer={() => { setSession(null); rafraichir(); }}
         onTermine={() => { setSession(null); rafraichir(); }}
         onOuvrirFiche={ouvrirDossier}
@@ -466,6 +482,7 @@ export function RelancesPage() {
         onOuvertChange={(o) => !o && setAppelAQualifier(null)}
         nom={appelAQualifier?.titre ?? ''}
         contexte={contexteQualif}
+        telephone={appelAQualifier?.phone}
         enCours={qualifierAppel.isPending}
         onValider={(choix) => qualifierAppel.mutate(choix)}
       />

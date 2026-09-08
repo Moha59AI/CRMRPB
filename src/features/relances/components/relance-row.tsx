@@ -122,6 +122,9 @@ export const RelanceRow = memo(function RelanceRow({
   const Icone = ICONE[relance.kind];
   const actions = ACTIONS_PAR_TYPE[relance.kind];
   const derniere = libelleDerniereAction(relance);
+  const estLeadAQualifier = Boolean(
+    relance.leadId && !relance.taskId && !relance.appointmentId,
+  );
 
   return (
     <div
@@ -261,9 +264,12 @@ export const RelanceRow = memo(function RelanceRow({
         )}
         <Button variant="ghost" size="icon"
           className="h-7 w-7 rounded-full text-done hover:bg-done-soft hover:text-done"
-          onClick={() => onTraiter(relance)} title="Marquer comme traité">
+          onClick={() => onTraiter(relance)}
+          title={estLeadAQualifier ? 'Changer l’étape du lead' : 'Marquer comme traité'}>
           <Check className="h-3.5 w-3.5" />
-          <span className="sr-only">Marquer comme traité</span>
+          <span className="sr-only">
+            {estLeadAQualifier ? 'Changer l’étape du lead' : 'Marquer comme traité'}
+          </span>
         </Button>
         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full"
           onClick={() => onOuvrir(relance)} title="Ouvrir le dossier">

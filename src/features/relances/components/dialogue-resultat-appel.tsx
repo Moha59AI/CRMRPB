@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, PhoneOff, Check, CalendarClock } from 'lucide-react';
+import { Loader2, PhoneOff, Check, CalendarClock, MessageSquare } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -31,6 +31,8 @@ export interface ChoixResultat {
   /** Date de rappel, pour « à rappeler plus tard ». */
   prochaineAction: string | null;
   note: string | null;
+  /** Ouvre le SMS NRP pre-rempli apres l'enregistrement de l'etape. */
+  envoyerSmsNrp: boolean;
 }
 
 interface DialogueResultatAppelProps {
@@ -44,11 +46,12 @@ interface DialogueResultatAppelProps {
    */
   contexte?: 'appel' | 'traitement';
   enCours?: boolean;
+  telephone?: string | null;
   onValider: (choix: ChoixResultat) => void;
 }
 
 export function DialogueResultatAppel({
-  ouvert, onOuvertChange, nom, enCours, onValider, contexte = 'appel',
+  ouvert, onOuvertChange, nom, enCours, telephone, onValider, contexte = 'appel',
 }: DialogueResultatAppelProps) {
   const [choisi, setChoisi] = useState<Resultat | null>(null);
   const [heures, setHeures] = useState<number>(24);
@@ -66,7 +69,7 @@ export function DialogueResultatAppel({
     }
   }, [ouvert]);
 
-  const valider = useCallback(() => {
+  const valider = useCallback((avecSmsNrp = false) => {
     if (!choisi) return;
     onValider({
       cle: choisi.cle,
@@ -76,10 +79,11 @@ export function DialogueResultatAppel({
           : dansNHeures(heures)
         : null,
       note: note.trim() || null,
+      envoyerSmsNrp: choisi.cle === 'sans_reponse' && avecSmsNrp,
     });
   }, [choisi, heures, datePersonnalisee, note, onValider]);
 
-  // Chiffres 1 a 7 pour choisir, Entree pour valider. Le mode session ne
+  // Les chiffres affiches choisissent une issue, Entree valide sans SMS. Le mode session ne
   // quitte pas le clavier : un dialogue qui obligerait a prendre la souris
   // casserait ce qui fait son interet.
   useEffect(() => {
@@ -101,7 +105,7 @@ export function DialogueResultatAppel({
       if (e.key === 'Enter' && choisi && !enCours) {
         e.preventDefault();
         e.stopPropagation();
-        valider();
+        valider(false);
       }
     };
 
@@ -120,8 +124,7 @@ export function DialogueResultatAppel({
             {contexte === 'appel' ? "Comment s'est passé l'appel ?" : 'Où en est ce lead ?'}
           </DialogTitle>
           <DialogDescription>
-            {nom} — sans réponse ici, le lead revient à l'identique demain, et
-            indéfiniment.
+            {nom} — choisissez l’étape réelle pour programmer la bonne suite.
           </DialogDescription>
         </DialogHeader>
 
@@ -220,10 +223,16 @@ export function DialogueResultatAppel({
               placeholder={placeholderNote(choisi.cle)}
               className="rounded-lg"
             />
+            {choisi.cle === 'sans_reponse' && telephone && (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Le SMS commercial sera prérempli avec l’offre du client. Vous pourrez le relire avant l’envoi.
+              </p>
+            )}
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button" variant="ghost" className="rounded-full"
             onClick={() => onOuvertChange(false)}
@@ -231,14 +240,36 @@ export function DialogueResultatAppel({
           >
             Plus tard
           </Button>
-          <Button
-            type="button" className="rounded-full"
-            disabled={!choisi || enCours}
-            onClick={valider}
-          >
-            {enCours && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Enregistrer
-          </Button>
+          {choisi?.cle === 'sans_reponse' && telephone ? (
+            <>
+              <Button
+                type="button" variant="outline" className="rounded-full"
+                disabled={enCours}
+                onClick={() => valider(false)}
+              >
+                Enregistrer sans SMS
+              </Button>
+              <Button
+                type="button" className="rounded-full"
+                disabled={enCours}
+                onClick={() => valider(true)}
+              >
+                {enCours
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <MessageSquare className="mr-2 h-4 w-4" />}
+                Enregistrer + SMS
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button" className="rounded-full"
+              disabled={!choisi || enCours}
+              onClick={() => valider(false)}
+            >
+              {enCours && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Enregistrer l’étape
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -254,7 +285,8 @@ function placeholderNote(cle: CleResultat): string {
   if (cle === 'pas_interesse') return 'Pourquoi le client refuse ? Prix, délai, déjà équipé…';
   if (cle === 'documents') return 'Quels documents manquent ?';
   if (cle === 'rappeler') return 'Motif du rappel et disponibilité du client';
-  if (cle === 'rdv') return 'Lieu, créneau ou précision utile';
+  if (cle === 'rdv') return 'Créneau convenu et lieu du rendez-vous';
+  if (cle === 'cloture') return 'Intervention réalisée, précision utile (facultatif)';
   if (cle === 'faux_numero') return 'Précisez le problème rencontré';
   return "Résumé utile de l'appel (facultatif)";
 }

@@ -305,7 +305,10 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       <div className="mt-3">
         <LeadPipeline
           statut={lead.status}
-          onChangerStatut={(statut: LeadStatus) => majLead.mutate({ status: statut })}
+          onChangerStatut={(statut: LeadStatus) => majLead.mutate(
+            { status: statut },
+            { onSuccess: () => toast.success(`Étape mise à jour`) },
+          )}
           desactive={majLead.isPending}
         />
       </div>
@@ -324,7 +327,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
           <FileText className="mr-1.5 h-3.5 w-3.5" />Documents
         </Button>
         <Button size="sm" variant="outline" className="rounded-full"
-          onClick={() => toast.info('La prise de rendez-vous arrive avec le module Planning')}>
+          onClick={() => navigate('/calendar', { state: { createForLeadId: lead.id } })}>
           <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />RDV
         </Button>
         {lead.contact_id && (

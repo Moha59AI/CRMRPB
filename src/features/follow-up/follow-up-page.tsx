@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { fetchLeads } from '@/services/leads-service';
 import { fetchTasks, updateTask } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { statusLabels } from '@/features/leads/lead-shared';
 import type { Task, Lead, Profile } from '@/types';
 
 const priorityConfig: Record<string, { label: string; className: string }> = {
@@ -22,13 +23,6 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
   high: { label: 'Haute', className: 'bg-due-soft text-due border-due/25' },
   normal: { label: 'Normale', className: 'bg-muted text-muted-foreground border-border' },
   low: { label: 'Basse', className: 'bg-muted/50 text-muted-foreground border-border' },
-};
-
-const statusLabels: Record<string, string> = {
-  new: 'Nouveau', to_call: 'À appeler', calling: 'Appel en cours', nrp: 'NRP',
-  interested: 'Intéressé', documents_requested: 'Documents demandés',
-  documents_received: 'Documents reçus', appointment_scheduled: 'RDV planifié',
-  lost: 'Perdu', converted: 'Converti',
 };
 
 export function FollowUpPage() {

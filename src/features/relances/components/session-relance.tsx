@@ -14,6 +14,7 @@ import {
 import { archiverLeadsSelectionnes } from '@/services/leads-service';
 import { DialogueResultatAppel, type ChoixResultat } from './dialogue-resultat-appel';
 import { resultatParCle } from '../resultat-appel';
+import { preparerSmsNrp } from '../preparer-sms-nrp';
 
 /**
  * Mode concentré : un dossier à la fois, passage automatique au suivant.
@@ -27,7 +28,7 @@ const RACCOURCIS = [
   { touche: 'A', libelle: 'Appeler' },
   { touche: 'S', libelle: 'SMS' },
   { touche: 'R', libelle: 'Reporter' },
-  { touche: 'T', libelle: 'Traité' },
+  { touche: 'T', libelle: 'Étape / traité' },
   { touche: 'V', libelle: 'Archiver' },
   { touche: 'F', libelle: 'Fiche' },
   { touche: '→', libelle: 'Passer' },
@@ -39,9 +40,12 @@ interface SessionRelanceProps {
   onFermer: () => void;
   onTermine: () => void;
   onOuvrirFiche: (leadId: string) => void;
+  telephoneEntreprise?: string | null;
 }
 
-export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: SessionRelanceProps) {
+export function SessionRelance({
+  file, onFermer, onTermine, onOuvrirFiche, telephoneEntreprise,
+}: SessionRelanceProps) {
   // Qualifier est ce qui fait sortir le lead de la file. Sans ce dialogue, la
   // session faisait defiler des leads qui revenaient tous le lendemain.
   const [aQualifier, setAQualifier] = useState<Relance | null>(null);
@@ -144,6 +148,9 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
         prochaineAction: choix.prochaineAction,
         note: choix.note,
       });
+      const sms = choix.envoyerSmsNrp
+        ? await preparerSmsNrp(aQualifier, telephoneEntreprise)
+        : null;
       toast.success(
         resultat.sortDeFile
           ? `${aQualifier.titre} quitte les relances`
@@ -151,13 +158,16 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
       );
       setAQualifier(null);
       setTraitees((t) => t + 1);
+      if (sms) {
+        window.location.href = `sms:${sms.phone}?body=${encodeURIComponent(sms.message)}`;
+      }
       // On enchaine : c'est tout l'interet de la session.
       suivant();
     } catch (e) {
       toast.error((e as Error).message);
       setOccupe(false);
     }
-  }, [aQualifier, suivant]);
+  }, [aQualifier, suivant, telephoneEntreprise]);
 
   // Les raccourcis sont la raison d'être du mode : on ne quitte pas le clavier.
   useEffect(() => {
@@ -328,7 +338,9 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
                 className="rounded-full border-done/30 text-done hover:bg-done-soft hover:text-done"
                 onClick={() => void traiter()} disabled={occupe}>
                 <Check className="mr-2 h-4 w-4" />
-                Traité
+                {relance.leadId && !relance.taskId && !relance.appointmentId
+                  ? 'Changer l’étape'
+                  : 'Traité'}
               </Button>
               {relance.leadId && !relance.taskId && !relance.appointmentId && !relance.caseId && (
                 <Button
@@ -373,6 +385,7 @@ export function SessionRelance({ file, onFermer, onTermine, onOuvrirFiche }: Ses
         onOuvertChange={(o) => { if (!o) { setAQualifier(null); setOccupe(false); } }}
         nom={aQualifier?.titre ?? ''}
         contexte={contexte}
+        telephone={aQualifier?.phone}
         enCours={occupe}
         onValider={(choix) => void qualifier(choix)}
       />

@@ -25,6 +25,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
@@ -47,7 +51,9 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, sourceLabels, statusStyles, kanbanColumnOrder, statusSelectOptions, sourceSelectOptions, profileName, scoreColor, formatDate, leadName, vehicleLabel,
+  statusLabels, sourceLabels, statusStyles, leadJourneyStages, leadStageForKey,
+  leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
+  scoreColor, formatDate, leadName, vehicleLabel,
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
 
@@ -90,6 +96,14 @@ export function LeadsPage() {
   // New lead dialog
   const [newLeadOpen, setNewLeadOpen] = useState(false);
 
+  // Perdu et Cloture sortent le lead du travail actif : un glisser-deposer
+  // ou un clic trop rapide ne doit pas suffire a les appliquer.
+  const [transitionFinale, setTransitionFinale] = useState<{
+    leadId: string;
+    nom: string;
+    status: LeadStatus;
+  } | null>(null);
+
   // Seeding state
   const [seeding, setSeeding] = useState(false);
 
@@ -127,7 +141,7 @@ export function LeadsPage() {
     queryFn: () => fetchLeads({
       search,
       source: sourceFilter,
-      status: statusFilter,
+      statuses: leadStageForKey(statusFilter)?.statuses,
       assignedUserId: advisorFilter,
       archives: voirArchives,
       plusVieuxQueJours: voirAArchiver ? 2 : undefined,
@@ -147,12 +161,15 @@ export function LeadsPage() {
 
   // Mutations
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await updateLead(id, { status: status as LeadStatus });
+    mutationFn: async ({ id, status }: { id: string; status: LeadStatus }) => {
+      const { error } = await updateLead(id, { status });
       if (error) throw new Error(error);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
+      queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
+      toast.success(`Étape changée : ${statusLabels[variables.status]}`);
     },
     onError: (err: Error) => toast.error(messageErreurBase(err.message)),
   });
@@ -190,10 +207,21 @@ export function LeadsPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const handleStatusChange = useCallback((leadId: string, newStatus: string) => {
+  const handleStatusChange = useCallback((leadId: string, newStatus: LeadStatus) => {
+    const lead = leads?.find((item) => item.id === leadId);
+    const destination = leadStageForStatus(newStatus);
+    if (lead && leadStageForStatus(lead.status).key === destination.key) return;
+
+    if (destination.terminal) {
+      setTransitionFinale({
+        leadId,
+        nom: lead ? leadName(lead) : 'Ce lead',
+        status: newStatus,
+      });
+      return;
+    }
     updateStatusMutation.mutate({ id: leadId, status: newStatus });
-    toast.success(`Statut changé: ${statusLabels[newStatus] ?? newStatus}`);
-  }, [updateStatusMutation]);
+  }, [leads, updateStatusMutation]);
 
   const hasFilters = !!search || sourceFilter !== 'all' || statusFilter !== 'all' || advisorFilter !== 'all';
 
@@ -329,8 +357,8 @@ export function LeadsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous statuts</SelectItem>
-            {statusSelectOptions.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            {leadJourneyStages.map((stage) => (
+              <SelectItem key={stage.key} value={stage.key}>{stage.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -422,6 +450,38 @@ export function LeadsPage() {
       <DialogueSuppressionArchives
         ouvert={suppressionOuverte} onOuvertChange={setSuppressionOuverte}
       />
+
+      <AlertDialog
+        open={transitionFinale !== null}
+        onOpenChange={(ouvert) => !ouvert && setTransitionFinale(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {transitionFinale?.status === 'lost' ? 'Marquer ce lead comme perdu ?' : 'Clôturer ce dossier ?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {transitionFinale?.nom} sortira du parcours actif et des relances.
+              {transitionFinale?.status === 'converted'
+                ? " Clôturez uniquement quand l’intervention est terminée."
+                : ' Le lead pourra être réactivé plus tard.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn('rounded-full', transitionFinale?.status === 'lost' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90')}
+              onClick={() => {
+                if (!transitionFinale) return;
+                updateStatusMutation.mutate({ id: transitionFinale.leadId, status: transitionFinale.status });
+                setTransitionFinale(null);
+              }}
+            >
+              {transitionFinale?.status === 'lost' ? 'Marquer perdu' : 'Clôturer'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ConfirmerSuppression
         ouvert={aSupprimer !== null}
@@ -682,7 +742,7 @@ function LeadsTable({
   leads: Lead[];
   advisorMap: Map<string, Profile>;
   onRowClick: (lead: Lead) => void;
-  onStatusChange: (leadId: string, status: string) => void;
+  onStatusChange: (leadId: string, status: LeadStatus) => void;
   /** Absent quand le role ne permet pas de supprimer. */
   onSupprimer?: (lead: Lead) => void;
 }) {
@@ -750,7 +810,10 @@ function LeadsTable({
                     <DropdownMenuItem
                       key={opt.value}
                       onClick={() => onStatusChange(lead.id, opt.value)}
-                      className={cn(lead.status === opt.value && 'font-semibold')}
+                      disabled={leadStageForStatus(lead.status).targetStatus === opt.value}
+                      className={cn(
+                        leadStageForStatus(lead.status).targetStatus === opt.value && 'font-semibold',
+                      )}
                     >
                       <span className={cn('mr-2 h-2 w-2 rounded-full', statusStyles[opt.value]?.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-muted')} />
                       {opt.label}
@@ -796,17 +859,17 @@ function KanbanBoard({
   leads, onStatusChange, onCardClick,
 }: {
   leads: Lead[];
-  onStatusChange: (leadId: string, status: string) => void;
+  onStatusChange: (leadId: string, status: LeadStatus) => void;
   onCardClick: (lead: Lead) => void;
 }) {
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const leadsByStatus = useMemo(() => {
+  const leadsByStage = useMemo(() => {
     const m = new Map<string, Lead[]>();
-    kanbanColumnOrder.forEach((s) => m.set(s, []));
+    leadJourneyStages.forEach((stage) => m.set(stage.key, []));
     leads.forEach((l) => {
-      const arr = m.get(l.status);
+      const arr = m.get(leadStageForStatus(l.status).key);
       if (arr) arr.push(l);
     });
     return m;
@@ -815,13 +878,13 @@ function KanbanBoard({
   return (
     <div className="h-full overflow-x-auto overflow-y-hidden">
       <div className="flex h-full gap-3 p-4">
-        {kanbanColumnOrder.map((status) => {
-          const colLeads = leadsByStatus.get(status) ?? [];
+        {leadJourneyStages.map((stage) => {
+          const colLeads = leadsByStage.get(stage.key) ?? [];
           return (
             <div
-              key={status}
+              key={stage.key}
               className="flex w-72 shrink-0 flex-col"
-              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status); }}
+              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(stage.key); }}
               onDragLeave={(e) => {
                 if (e.currentTarget === e.target) setDragOverColumn(null);
               }}
@@ -830,25 +893,29 @@ function KanbanBoard({
                 const leadId = e.dataTransfer.getData('text/plain');
                 setDragOverColumn(null);
                 setDraggingId(null);
-                if (leadId) onStatusChange(leadId, status);
+                if (leadId) onStatusChange(leadId, stage.targetStatus);
               }}
             >
               {/* Column header */}
               <div
                 className={cn(
                   'mb-2 flex items-center justify-between rounded-lg px-3 py-2 transition-colors',
-                  dragOverColumn === status
+                  dragOverColumn === stage.key
                     ? 'bg-primary/10 ring-1 ring-primary/30'
                     : 'bg-muted/50',
                 )}
               >
                 <span className="text-xs font-semibold text-muted-foreground">
-                  {statusLabels[status]}
+                  {stage.label}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {colLeads.length}
                 </span>
               </div>
+
+              <p className="mb-2 px-1 text-[11px] text-muted-foreground">
+                {stage.description}
+              </p>
 
               {/* Column body */}
               <div className="flex-1 overflow-y-auto space-y-2 px-0.5 pb-2">

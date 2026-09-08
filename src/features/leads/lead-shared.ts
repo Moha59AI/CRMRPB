@@ -12,16 +12,16 @@ import type {
 // ============ CONSTANTS ============
 
 export const statusLabels: Record<string, string> = {
-  new: 'Nouveau',
-  to_call: 'À appeler',
-  calling: 'Appel en cours',
+  new: 'Nouveau lead',
+  to_call: 'Nouveau lead',
+  calling: 'Nouveau lead',
   nrp: 'NRP',
-  interested: 'Intéressé',
-  documents_requested: 'Documents demandés',
+  interested: 'Qualifié',
+  documents_requested: 'Attente documents',
   documents_received: 'Documents reçus',
-  appointment_scheduled: 'RDV planifié',
+  appointment_scheduled: 'RDV pris',
   lost: 'Perdu',
-  converted: 'Converti',
+  converted: 'Clôturé',
 };
 
 export const sourceLabels: Record<string, string> = {
@@ -33,8 +33,8 @@ export const sourceLabels: Record<string, string> = {
 };
 
 export const statusStyles: Record<string, string> = {
-  new: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  to_call: 'bg-amber-50 text-amber-700 border-amber-200',
+  new: 'bg-sky-50 text-sky-700 border-sky-200',
+  to_call: 'bg-sky-50 text-sky-700 border-sky-200',
   calling: 'bg-sky-50 text-sky-700 border-sky-200',
   nrp: 'bg-red-50 text-red-700 border-red-200',
   interested: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -45,16 +45,104 @@ export const statusStyles: Record<string, string> = {
   converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
-export const kanbanColumnOrder: LeadStatus[] = [
-  'new', 'to_call', 'calling', 'nrp', 'interested',
-  'documents_requested', 'documents_received', 'appointment_scheduled',
-  'lost', 'converted',
-];
+export type LeadJourneyStageKey =
+  | 'nouveau'
+  | 'nrp'
+  | 'qualifie'
+  | 'documents'
+  | 'rdv'
+  | 'perdu'
+  | 'cloture';
 
-export const statusSelectOptions: { value: LeadStatus; label: string }[] = kanbanColumnOrder.map((s) => ({
-  value: s,
-  label: statusLabels[s],
-}));
+export interface LeadJourneyStage {
+  key: LeadJourneyStageKey;
+  label: string;
+  description: string;
+  statuses: readonly LeadStatus[];
+  /** Statut interne applique quand l'utilisateur choisit cette etape. */
+  targetStatus: LeadStatus;
+  terminal?: boolean;
+}
+
+/**
+ * Les statuts techniques restent inchanges pour proteger les cadences SQL,
+ * mais l'equipe ne pilote que ces sept etapes metier dans toute l'interface.
+ */
+export const leadJourneyStages: readonly LeadJourneyStage[] = [
+  {
+    key: 'nouveau',
+    label: 'Nouveau lead',
+    description: 'À contacter rapidement',
+    statuses: ['new', 'to_call', 'calling'],
+    targetStatus: 'to_call',
+  },
+  {
+    key: 'nrp',
+    label: 'NRP',
+    description: 'Rappel automatique selon la cadence',
+    statuses: ['nrp'],
+    targetStatus: 'nrp',
+  },
+  {
+    key: 'qualifie',
+    label: 'Qualifié',
+    description: 'Besoin confirmé, pièces à obtenir',
+    statuses: ['interested'],
+    targetStatus: 'interested',
+  },
+  {
+    key: 'documents',
+    label: 'Attente documents',
+    description: 'Lien envoyé, dossier à compléter',
+    statuses: ['documents_requested', 'documents_received'],
+    targetStatus: 'documents_requested',
+  },
+  {
+    key: 'rdv',
+    label: 'RDV pris',
+    description: 'Créneau planifié dans l’agenda',
+    statuses: ['appointment_scheduled'],
+    targetStatus: 'appointment_scheduled',
+  },
+  {
+    key: 'perdu',
+    label: 'Perdu',
+    description: 'Sorti des relances',
+    statuses: ['lost'],
+    targetStatus: 'lost',
+    terminal: true,
+  },
+  {
+    key: 'cloture',
+    label: 'Clôturé',
+    description: 'Intervention terminée',
+    statuses: ['converted'],
+    targetStatus: 'converted',
+    terminal: true,
+  },
+] as const;
+
+export function leadStageForStatus(status: LeadStatus): LeadJourneyStage {
+  return leadJourneyStages.find((stage) => stage.statuses.includes(status))
+    ?? leadJourneyStages[0];
+}
+
+export function leadStageForKey(key: string): LeadJourneyStage | undefined {
+  return leadJourneyStages.find((stage) => stage.key === key);
+}
+
+export function leadStageDescription(status: LeadStatus): string {
+  if (status === 'calling') return 'Appel en cours — enregistrez son résultat';
+  if (status === 'documents_received') return 'Documents reçus — vérifiez les pièces';
+  return leadStageForStatus(status).description;
+}
+
+/** Choix courts : jamais de doublon « nouveau / à appeler / appel en cours ». */
+export const statusSelectOptions: { value: LeadStatus; label: string }[] =
+  leadJourneyStages.map((stage) => ({
+    value: stage.targetStatus,
+    label: stage.label,
+  }));
 
 export const sourceSelectOptions: { value: LeadSource; label: string }[] = [
   { value: 'meta', label: 'Meta' },

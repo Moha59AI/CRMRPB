@@ -1,13 +1,15 @@
 // Leads
 
 import { supabase } from '@/lib/supabase';
-import type { Lead } from '@/types';
+import type { Lead, LeadStatus } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchLeads(params: {
   search?: string;
   source?: string;
   status?: string;
+  /** Plusieurs statuts techniques reunis sous une etape metier. */
+  statuses?: readonly LeadStatus[];
   assignedUserId?: string;
   /** Sans valeur, les archives sont exclues : c'est le point de l'archivage. */
   archives?: boolean;
@@ -35,7 +37,8 @@ export async function fetchLeads(params: {
     query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,address.ilike.%${s}%,postal_code.ilike.%${s}%,city.ilike.%${s}%,intervention_address.ilike.%${s}%,intervention_postal_code.ilike.%${s}%,intervention_city.ilike.%${s}%,vehicle_registration.ilike.%${s}%`);
   }
   if (params.source && params.source !== 'all') query = query.eq('source', params.source);
-  if (params.status && params.status !== 'all') query = query.eq('status', params.status);
+  if (params.statuses?.length) query = query.in('status', [...params.statuses]);
+  else if (params.status && params.status !== 'all') query = query.eq('status', params.status);
   if (params.assignedUserId && params.assignedUserId !== 'all') query = query.eq('assigned_user_id', params.assignedUserId);
 
   const { data, error } = await query.limit(200);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -80,7 +80,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { fetchCases } from '@/services/cases-service';
-import { fetchLeads } from '@/services/leads-service';
+import { fetchLeads, updateLead } from '@/services/leads-service';
 import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
@@ -849,12 +849,15 @@ function CreateAppointmentDialog({
   profiles,
   onCreate,
   creating,
+  initialLeadId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   profiles: Profile[];
   onCreate: (data: Partial<Appointment>) => void;
   creating: boolean;
+  /** Fourni depuis une fiche lead : le client et son adresse sont preselectionnes. */
+  initialLeadId?: string;
 }) {
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
@@ -980,7 +983,7 @@ function CreateAppointmentDialog({
    * On ne remplace jamais une adresse deja saisie : elle a ete tapee pour ce
    * rendez-vous-la, et l'ecraser ferait perdre l'information sans prevenir.
    */
-  const reprendreDuLead = (leadId: string) => {
+  const reprendreDuLead = useCallback((leadId: string) => {
     const lead = (leadsQuery.data ?? []).find((l) => l.id === leadId);
     if (!lead) return;
 
@@ -1011,7 +1014,14 @@ function CreateAppointmentDialog({
       const nom = [lead.first_name, lead.last_name].filter(Boolean).join(' ');
       form.setValue('title', nom ? `Intervention — ${nom}` : 'Intervention');
     }
-  };
+  }, [form, leadsQuery.data]);
+
+  useEffect(() => {
+    if (!open || !initialLeadId || !leadsQuery.data) return;
+    form.setValue('linkType', 'lead');
+    form.setValue('leadId', initialLeadId);
+    reprendreDuLead(initialLeadId);
+  }, [form, initialLeadId, leadsQuery.data, open, reprendreDuLead]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -1318,6 +1328,18 @@ export function CalendarPage() {
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [initialLeadId, setInitialLeadId] = useState<string | undefined>(() => {
+    const state = location.state as { createForLeadId?: string } | null;
+    return state?.createForLeadId;
+  });
+
+  // La fiche lead ouvre directement le vrai formulaire de rendez-vous. L'etat
+  // de navigation est ensuite retire pour que Recharger ne rouvre pas la boite.
+  useEffect(() => {
+    if (!initialLeadId) return;
+    setCreateOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [initialLeadId, location.pathname, navigate]);
 
   // ---- Effective assigned user filter (advisor & technician are mutually exclusive) ----
   const effectiveAssignedUserId =
@@ -1446,29 +1468,66 @@ export function CalendarPage() {
 
   // ---- Mutations ----
   const createMutation = useMutation({
-    mutationFn: (data: Partial<Appointment>) => createAppointment(data),
-    onSuccess: (res) => {
-      if (res.error) {
-        toast.error('Erreur lors de la création', { description: res.error });
-        return;
+    mutationFn: async (data: Partial<Appointment>) => {
+      const res = await createAppointment(data);
+      if (res.error || !res.appointment) {
+        throw new Error(res.error ?? 'Le rendez-vous n’a pas été créé');
       }
-      toast.success('Rendez-vous créé', { description: res.appointment?.title });
+      if (data.lead_id) {
+        const { error } = await updateLead(data.lead_id, { status: 'appointment_scheduled' });
+        if (error) {
+          // Evite qu'un nouvel essai cree un doublon : si la seconde ecriture
+          // echoue, on retire le rendez-vous qui vient juste d'etre cree.
+          const annulation = await deleteAppointment(res.appointment.id);
+          if (annulation.error) {
+            throw new Error(`Rendez-vous créé, mais étape du lead non mise à jour : ${error}`);
+          }
+          throw new Error(`Le rendez-vous n’a pas été conservé car l’étape du lead n’a pas pu être mise à jour : ${error}`);
+        }
+      }
+      return res.appointment;
+    },
+    onSuccess: (appointment) => {
+      toast.success('Rendez-vous créé', { description: appointment.title });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
       setCreateOpen(false);
+      setInitialLeadId(undefined);
     },
     onError: (err) => toast.error('Erreur lors de la création', { description: err.message }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<Appointment> }) =>
-      updateAppointment(id, updates),
-    onSuccess: (res, vars) => {
-      if (res.error) {
-        toast.error('Erreur lors de la mise à jour', { description: res.error });
-        return;
+    mutationFn: async ({
+      id, updates, leadId, previousStatus,
+    }: {
+      id: string;
+      updates: Partial<Appointment>;
+      leadId?: string | null;
+      previousStatus?: AppointmentStatus;
+    }) => {
+      const res = await updateAppointment(id, updates);
+      if (res.error) throw new Error(res.error);
+
+      if (updates.status === 'completed' && leadId) {
+        const { error } = await updateLead(leadId, { status: 'converted' });
+        if (error) {
+          if (previousStatus) {
+            const retour = await updateAppointment(id, { status: previousStatus });
+            if (retour.error) {
+              throw new Error(`Intervention terminée, mais dossier non clôturé : ${error}`);
+            }
+          }
+          throw new Error(`L’intervention n’a pas été terminée car le dossier n’a pas pu être clôturé : ${error}`);
+        }
       }
+    },
+    onSuccess: (_, vars) => {
       toast.success('Rendez-vous mis à jour');
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
       setSelectedAppt((prev) => (prev ? { ...prev, ...vars.updates } : prev));
     },
     onError: (err) => toast.error('Erreur lors de la mise à jour', { description: err.message }),
@@ -1525,7 +1584,14 @@ export function CalendarPage() {
   }
   function handleComplete() {
     if (!selectedAppt) return;
-    updateMutation.mutate({ id: selectedAppt.id, updates: { status: 'completed' } });
+    updateMutation.mutate({
+      id: selectedAppt.id,
+      updates: { status: 'completed' },
+      // Un appel ou une reunion termines ne signifient pas que le vitrage a
+      // ete pose. Seule une intervention clot le parcours commercial.
+      leadId: selectedAppt.type === 'intervention' ? selectedAppt.lead_id : null,
+      previousStatus: selectedAppt.status,
+    });
   }
   function handleCancelAppt() {
     if (!selectedAppt) return;
@@ -1771,10 +1837,14 @@ export function CalendarPage() {
       {/* Create dialog */}
       <CreateAppointmentDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={(ouvert) => {
+          setCreateOpen(ouvert);
+          if (!ouvert) setInitialLeadId(undefined);
+        }}
         profiles={profiles}
         onCreate={(data) => createMutation.mutate(data)}
         creating={createMutation.isPending}
+        initialLeadId={initialLeadId}
       />
     </div>
   );
