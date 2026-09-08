@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type { Invoice, OnifyCreditNote } from '@/types';
+import { AccountingConsolidatedSection } from './accounting-consolidated-section';
 import { fetchFinancialDashboardData, type FinancialDashboardData } from './financial-dashboard-service';
 
 type FinancialPeriod = '30d' | '90d' | 'year' | 'all';
@@ -127,6 +128,7 @@ export function FinancialDashboardPage() {
             </Alert>
           )}
           {view && <DashboardContent view={view} />}
+          <AccountingConsolidatedSection />
         </div>
       </div>
     </>
