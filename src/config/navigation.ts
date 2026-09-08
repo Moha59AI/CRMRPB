@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   ChartNoAxesCombined,
   DatabaseZap,
+  WalletCards,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -122,6 +123,12 @@ export const navSections: NavSection[] = [
   {
     titre: 'Gestion',
     items: [
+      {
+        label: 'Finance',
+        path: '/finance',
+        icon: WalletCards,
+        description: "Chiffre d'affaires, encaissements et marge",
+      },
       {
         label: 'Facturation',
         path: '/billing',

@@ -25,6 +25,7 @@ import { CampaignsPage } from '@/features/campaigns/campaigns-page';
 import { MarketingPage } from '@/features/marketing/marketing-page';
 import { CommunicationsPage } from '@/features/communications/communications-page';
 import { BillingPage } from '@/features/billing/billing-page';
+import { FinancialDashboardPage } from '@/features/finance/financial-dashboard-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { UsersPage } from '@/features/settings/users-page';
 import { InsurersPage } from '@/features/settings/insurers-page';
@@ -98,6 +99,7 @@ function AppRoutes() {
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/communications" element={<CommunicationsPage />} />
             <Route path="/billing" element={<BillingPage />} />
+            <Route path="/finance" element={<FinancialDashboardPage />} />
             {/* Les reglages partagent une sous-navigation : sans elle, ces
                 pages n'etaient joignables qu'en tapant leur URL. */}
             <Route path="/settings" element={<SettingsLayout />}>
