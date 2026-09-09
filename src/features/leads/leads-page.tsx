@@ -16,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -51,11 +50,12 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, sourceLabels, statusStyles, leadJourneyStages, leadStageForKey,
+  statusLabels, statusStyles, leadJourneyStages, leadStageForKey,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
   scoreColor, formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
+import { SourceBadge } from './source-badge';
 
 // ============ MAIN PAGE ============
 
@@ -699,7 +699,10 @@ function ListeMobile({
                 <span className="min-w-0 truncate text-sm font-medium text-foreground">
                   {leadName(lead)}
                 </span>
-                <StatusBadge status={lead.status} className="shrink-0" />
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <SourceBadge source={lead.source} />
+                  <StatusBadge status={lead.status} />
+                </div>
               </div>
 
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -801,9 +804,7 @@ function LeadsTable({
               {lead.offer || '—'}
             </TableCell>
             <TableCell>
-              <Badge variant="secondary" className="rounded-full text-[10px]">
-                {sourceLabels[lead.source] ?? lead.source}
-              </Badge>
+              <SourceBadge source={lead.source} />
             </TableCell>
             <TableCell onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
@@ -987,6 +988,7 @@ function KanbanCard({
           </span>
         )}
       </div>
+      <SourceBadge source={lead.source} className="mt-2" />
       {lead.phone && (
         <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
           <Phone className="h-3 w-3" />
@@ -1036,9 +1038,7 @@ function CompactList({
             <span className={cn('min-w-[130px] truncate text-xs text-muted-foreground', !lead.glass_type && 'italic text-muted-foreground/70')}>
               {vitrageLabel(lead)}
             </span>
-            <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
-              {sourceLabels[lead.source] ?? lead.source}
-            </Badge>
+            <SourceBadge source={lead.source} className="shrink-0" />
             <StatusBadge status={lead.status} className="shrink-0" />
             <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold shrink-0 w-12 justify-end', scoreColor(lead.score))}>
               {lead.score > 0 && <Star className="h-3 w-3" />}
