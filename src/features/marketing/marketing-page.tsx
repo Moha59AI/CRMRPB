@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  AlertCircle, CalendarCheck2, CircleDollarSign, MousePointerClick,
-  Download, Gauge, RefreshCw, Settings2, Target, TrendingUp,
-  TriangleAlert, UserCheck, UserPlus, Wrench,
+  AlertCircle, BadgeEuro, CalendarCheck2, CircleDollarSign, Coins,
+  Download, Gauge, Globe2, Link2, MousePointerClick, PhoneCall,
+  RefreshCw, Settings2, Target, TrendingUp, TriangleAlert, UserCheck,
+  UserPlus, Webhook, Wrench,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '@/components/PageHeader';
@@ -52,6 +53,10 @@ function cost(value: number, count: number): string {
   return count > 0 ? euro.format(value / count) : '—';
 }
 
+function multiple(value: number, reference: number): string {
+  return reference > 0 ? `${decimal.format(value / reference)}×` : '—';
+}
+
 function variation(current: number, previous: number): string {
   if (previous === 0) return current === 0 ? 'stable' : 'nouveau';
   const value = (current - previous) / Math.abs(previous);
@@ -68,6 +73,8 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
     'Campagne', 'ID', 'Statut', 'Dépenses', 'Impressions', 'Clics', 'CTR', 'CPC',
     'Conversions Google', 'Leads CRM', 'Taux clic vers lead', 'CPL', 'Qualifiés',
     'Rendez-vous', 'Dossiers Glass', 'Interventions', 'Coût par intervention',
+    'Factures rapprochées', 'CA net après avoirs', 'Encaissé', 'ROAS CRM',
+    'Marge estimée', 'Résultat marge après avoirs et Ads',
   ];
   const rows = campaigns.map((campaign) => [
     campaign.name,
@@ -87,6 +94,14 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
     campaign.transformedLeads,
     campaign.interventions,
     campaign.interventions > 0 ? (campaign.spend / campaign.interventions).toFixed(2).replace('.', ',') : '',
+    campaign.invoices,
+    campaign.netRevenue.toFixed(2).replace('.', ','),
+    campaign.collectedRevenue.toFixed(2).replace('.', ','),
+    campaign.spend > 0 ? (campaign.netRevenue / campaign.spend).toFixed(2).replace('.', ',') : '',
+    campaign.estimatedMargin.toFixed(2).replace('.', ','),
+    campaign.marginKnownInvoices > 0
+      ? (campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend).toFixed(2).replace('.', ',')
+      : '',
   ]);
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\n');
   const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -284,6 +299,8 @@ export function MarketingPage() {
                 />
               </div>
 
+              <ProfitabilitySection data={data} />
+
               <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
                 <Card className="marketing-card marketing-chart-card rounded-xl p-5">
                   <div className="mb-4 flex items-start justify-between gap-3">
@@ -428,6 +445,10 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
             <TableHead className="text-right">Dossiers Glass</TableHead>
             <TableHead className="text-right">Interv.</TableHead>
             <TableHead className="text-right">Coût / interv.</TableHead>
+            <TableHead className="text-right">CA net</TableHead>
+            <TableHead className="text-right">Encaissé</TableHead>
+            <TableHead className="text-right">ROAS CRM</TableHead>
+            <TableHead className="text-right">Marge après pub</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -463,11 +484,175 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
                 <TableCell className="text-right tabular-nums font-medium">{integer.format(campaign.transformedLeads)}</TableCell>
                 <TableCell className="text-right tabular-nums font-medium">{integer.format(campaign.interventions)}</TableCell>
                 <TableCell className="text-right tabular-nums">{cost(campaign.spend, campaign.interventions)}</TableCell>
+                <TableCell className="text-right tabular-nums font-medium">{euro.format(campaign.netRevenue)}</TableCell>
+                <TableCell className="text-right tabular-nums">{euro.format(campaign.collectedRevenue)}</TableCell>
+                <TableCell className="text-right tabular-nums font-medium">{multiple(campaign.netRevenue, campaign.spend)}</TableCell>
+                <TableCell className={`text-right tabular-nums font-medium ${
+                  campaign.marginKnownInvoices > 0
+                    && campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend < 0
+                    ? 'text-destructive' : 'text-success'
+                }`}>
+                  {campaign.marginKnownInvoices > 0
+                    ? euro.format(campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend)
+                    : '—'}
+                </TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+function ProfitabilitySection({ data }: { data: MarketingDashboardData }) {
+  const { totals, channels, financialAttribution } = data;
+  const marginAfterAds = totals.estimatedMargin - totals.creditedRevenue - totals.spend;
+  const hasKnownMargin = totals.marginKnownInvoices > 0;
+  const invoiceCoverage = ratio(financialAttribution.leadsWithInvoice, totals.transformedLeads);
+  const marginCoverage = ratio(totals.marginKnownInvoices, totals.invoices);
+  const channelIcons = { webhook: Webhook, telephone: PhoneCall, web: Globe2 } as const;
+
+  return (
+    <Card className="marketing-card overflow-hidden rounded-xl border-primary/20">
+      <div className="border-b border-border bg-primary/[0.03] p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <BadgeEuro className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-semibold">Rentabilité Google Ads rapprochée au CRM</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Les factures et avoirs sont rattachés au dossier Glass en priorité, puis au client par téléphone ou e-mail.
+            </p>
+          </div>
+          <Badge variant="secondary" className="w-fit rounded-full">
+            {integer.format(financialAttribution.matchedInvoices)} facture{financialAttribution.matchedInvoices > 1 ? 's' : ''} rapprochée{financialAttribution.matchedInvoices > 1 ? 's' : ''}
+          </Badge>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ProfitMetric
+            icon={CircleDollarSign}
+            label="CA net attribué"
+            value={euro.format(totals.netRevenue)}
+            detail={`${euro.format(totals.invoicedRevenue)} facturé − ${euro.format(totals.creditedRevenue)} d'avoirs`}
+          />
+          <ProfitMetric
+            icon={Coins}
+            label="Déjà encaissé"
+            value={euro.format(totals.collectedRevenue)}
+            detail={`${ratio(totals.collectedRevenue, totals.netRevenue)} du CA net attribué`}
+          />
+          <ProfitMetric
+            icon={TrendingUp}
+            label="ROAS CRM"
+            value={multiple(totals.netRevenue, totals.spend)}
+            detail={`${euro.format(totals.netRevenue)} de CA net pour ${euro.format(totals.spend)} de publicité`}
+          />
+          <ProfitMetric
+            icon={Gauge}
+            label="Marge connue après pub"
+            value={hasKnownMargin ? euro.format(marginAfterAds) : 'À compléter'}
+            detail={hasKnownMargin
+              ? `${marginCoverage} des factures ont une marge · avoirs et Ads déduits`
+              : 'La marge des factures rapprochées n’est pas renseignée'}
+            tone={!hasKnownMargin ? 'default' : marginAfterAds < 0 ? 'danger' : 'success'}
+          />
+        </div>
+      </div>
+
+      <div className="grid xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="overflow-x-auto p-5">
+          <h3 className="text-sm font-semibold">Résultat par origine du lead Google</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Les dépenses restent au niveau campagne : elles ne sont pas réparties artificiellement entre appels et formulaires.
+          </p>
+          <Table className="mt-3">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Origine</TableHead>
+                <TableHead className="text-right">Leads</TableHead>
+                <TableHead className="text-right">Dossiers</TableHead>
+                <TableHead className="text-right">Interv.</TableHead>
+                <TableHead className="text-right">CA net</TableHead>
+                <TableHead className="text-right">Encaissé</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {channels.map((channel) => {
+                const Icon = channelIcons[channel.id];
+                return (
+                  <TableRow key={channel.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2 font-medium">
+                        <Icon className="h-4 w-4 text-primary" />
+                        {channel.label}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{integer.format(channel.leads)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{integer.format(channel.transformedLeads)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{integer.format(channel.interventions)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{euro.format(channel.netRevenue)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{euro.format(channel.collectedRevenue)}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {!channels.length && (
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">Aucun lead Google sur la période.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="border-t border-border bg-muted/20 p-5 xl:border-l xl:border-t-0">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Fiabilité financière</h3>
+          </div>
+          <div className="mt-4 space-y-3 text-xs">
+            <ReconciliationLine label="Par dossier Glass" value={financialAttribution.invoicesByCase} detail="lien exact" />
+            <ReconciliationLine label="Par identité client" value={financialAttribution.invoicesByContact} detail="téléphone ou e-mail" />
+            <ReconciliationLine label="Dossiers avec facture" value={financialAttribution.leadsWithInvoice} detail={`${invoiceCoverage} des transformés`} />
+          </div>
+          <p className="mt-5 text-[11px] leading-relaxed text-muted-foreground">
+            Le ROAS correspond au CA net après avoirs divisé par les dépenses Google Ads. La marge après pub reste indicative : elle ne devient complète que lorsque chaque facture contient sa marge estimée.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ProfitMetric({ icon: Icon, label, value, detail, tone = 'default' }: {
+  icon: typeof CircleDollarSign;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: 'default' | 'success' | 'danger';
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <p className={`mt-3 text-2xl font-semibold tabular-nums ${
+        tone === 'danger' ? 'text-destructive' : tone === 'success' ? 'text-success' : ''
+      }`}>{value}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function ReconciliationLine({ label, value, detail }: { label: string; value: number; detail: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
+      <div>
+        <p className="font-medium">{label}</p>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">{detail}</p>
+      </div>
+      <span className="text-base font-semibold tabular-nums">{integer.format(value)}</span>
     </div>
   );
 }
@@ -518,6 +703,15 @@ function MediaBuyingSignals({ data }: { data: MarketingDashboardData }) {
   const accountCpl = totals.leads ? totals.spend / totals.leads : 0;
   const signals: Array<{ title: string; detail: string; tone: 'warning' | 'info' | 'success' }> = [];
 
+  if (totals.marginKnownInvoices > 0) {
+    const resultAfterAds = totals.estimatedMargin - totals.creditedRevenue - totals.spend;
+    signals.push({
+      title: resultAfterAds >= 0 ? 'L’acquisition couvre la marge connue' : 'La marge connue ne couvre pas la publicité',
+      detail: `${euro.format(resultAfterAds)} après déduction des avoirs et de ${euro.format(totals.spend)} de Google Ads.`,
+      tone: resultAfterAds >= 0 ? 'success' : 'warning',
+    });
+  }
+
   for (const campaign of campaigns.filter((item) => item.spend >= minimumSpend && item.leads === 0).slice(0, 2)) {
     signals.push({
       title: `${campaign.name} dépense sans lead CRM`,
@@ -550,12 +744,12 @@ function MediaBuyingSignals({ data }: { data: MarketingDashboardData }) {
     });
   }
   const best = campaigns
-    .filter((item) => item.interventions > 0)
-    .sort((a, b) => a.spend / a.interventions - b.spend / b.interventions)[0];
+    .filter((item) => item.spend > 0 && item.netRevenue > 0)
+    .sort((a, b) => b.netRevenue / b.spend - a.netRevenue / a.spend)[0];
   if (best) {
     signals.push({
-      title: `${best.name} transforme le mieux en intervention`,
-      detail: `${best.interventions} intervention${best.interventions > 1 ? 's' : ''} à ${cost(best.spend, best.interventions)} chacune.`,
+      title: `${best.name} a le meilleur ROAS CRM`,
+      detail: `${multiple(best.netRevenue, best.spend)} de ROAS sur ${euro.format(best.netRevenue)} de CA net rapproché.`,
       tone: 'success',
     });
   }

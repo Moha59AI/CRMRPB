@@ -12,6 +12,14 @@ export interface MarketingTotals {
   transformedLeads: number;
   pendingLeads: number;
   lostLeads: number;
+  invoices: number;
+  invoicedRevenue: number;
+  creditedRevenue: number;
+  netRevenue: number;
+  collectedRevenue: number;
+  estimatedMargin: number;
+  marginKnownInvoices: number;
+  revenueLinkedLeads: number;
 }
 
 export interface MarketingCampaignRow extends MarketingTotals {
@@ -36,6 +44,29 @@ export interface AttributionBreakdown {
   clickCaptured: number;
   utm: number;
   unresolved: number;
+}
+
+export interface FinancialAttributionBreakdown {
+  invoicesByCase: number;
+  invoicesByContact: number;
+  leadsWithInvoice: number;
+  marginKnownInvoices: number;
+  matchedInvoices: number;
+}
+
+export type MarketingLeadChannel = 'webhook' | 'telephone' | 'web';
+
+export interface MarketingChannelRow {
+  id: MarketingLeadChannel;
+  label: string;
+  leads: number;
+  qualifiedLeads: number;
+  transformedLeads: number;
+  interventions: number;
+  invoices: number;
+  netRevenue: number;
+  collectedRevenue: number;
+  estimatedMargin: number;
 }
 
 export interface MarketingSearchTermRow {
@@ -65,6 +96,8 @@ export interface MarketingDashboardData {
   attribution: AttributionBreakdown;
   searchTerms: MarketingSearchTermRow[];
   searchTermsAvailable: boolean;
+  channels: MarketingChannelRow[];
+  financialAttribution: FinancialAttributionBreakdown;
 }
 
 type MetricRow = {
@@ -89,9 +122,16 @@ type LeadRow = {
   gclid: string | null;
   gbraid: string | null;
   wbraid: string | null;
+  contact_id: string | null;
+  source: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  raw_payload: Record<string, unknown> | null;
 };
 
-type CaseRow = { id: string; lead_id: string | null; status: string };
+type CandidateLeadRow = Pick<LeadRow, 'id' | 'arrive_le' | 'contact_id'>;
+
+type CaseRow = { id: string; lead_id: string | null; contact_id: string | null; status: string };
 type AppointmentRow = {
   lead_id: string | null;
   case_id: string | null;
@@ -116,6 +156,37 @@ type SearchTermMetricRow = {
   conversions: number | string;
 };
 
+type InvoiceRow = {
+  id: string;
+  case_id: string | null;
+  contact_id: string | null;
+  status: string;
+  amount_ttc: number | string | null;
+  amount_paid: number | string | null;
+  estimated_margin: number | string | null;
+  issue_date: string;
+};
+
+type CreditRow = {
+  invoice_id: string | null;
+  contact_id: string | null;
+  status: string | null;
+  amount_ttc: number | string | null;
+  issue_date: string | null;
+  created_at: string;
+};
+
+type LeadFinance = {
+  invoices: number;
+  invoicedRevenue: number;
+  creditedRevenue: number;
+  collectedRevenue: number;
+  estimatedMargin: number;
+  marginKnownInvoices: number;
+  invoicesByCase: number;
+  invoicesByContact: number;
+};
+
 const qualifiedStatuses = new Set([
   'interested', 'documents_requested', 'documents_received',
   'appointment_scheduled', 'converted',
@@ -138,6 +209,14 @@ const emptyTotals = (): MarketingTotals => ({
   transformedLeads: 0,
   pendingLeads: 0,
   lostLeads: 0,
+  invoices: 0,
+  invoicedRevenue: 0,
+  creditedRevenue: 0,
+  netRevenue: 0,
+  collectedRevenue: 0,
+  estimatedMargin: 0,
+  marginKnownInvoices: 0,
+  revenueLinkedLeads: 0,
 });
 
 const emptyAttribution = (): AttributionBreakdown => ({
@@ -146,6 +225,23 @@ const emptyAttribution = (): AttributionBreakdown => ({
   utm: 0,
   unresolved: 0,
 });
+
+const emptyFinance = (): LeadFinance => ({
+  invoices: 0,
+  invoicedRevenue: 0,
+  creditedRevenue: 0,
+  collectedRevenue: 0,
+  estimatedMargin: 0,
+  marginKnownInvoices: 0,
+  invoicesByCase: 0,
+  invoicesByContact: 0,
+});
+
+const channelLabels: Record<MarketingLeadChannel, string> = {
+  webhook: 'Formulaires / webhook',
+  telephone: 'Appels téléphoniques',
+  web: 'Web Google Ads',
+};
 
 function normalized(value: string | null | undefined): string {
   return (value ?? '').trim().toLocaleLowerCase('fr-FR');
@@ -166,6 +262,98 @@ function addDays(value: Date, days: number): Date {
   const result = new Date(value);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function numeric(value: number | string | null | undefined): number {
+  const result = Number(value ?? 0);
+  return Number.isFinite(result) ? result : 0;
+}
+
+function leadChannel(lead: LeadRow): MarketingLeadChannel {
+  const payload = lead.raw_payload ?? {};
+  const originalChannel = normalized(String(
+    payload.onify_channel ?? payload.channel ?? payload.canal ?? '',
+  ));
+  const medium = normalized(lead.utm_medium);
+  if (originalChannel.includes('telephone') || originalChannel.includes('téléphone') || medium.includes('telephone')) {
+    return 'telephone';
+  }
+  if (originalChannel.includes('webhook') || medium.includes('webhook') || lead.source === 'webhook') {
+    return 'webhook';
+  }
+  return 'web';
+}
+
+function activeCredit(status: string | null): boolean {
+  const value = normalized(status);
+  return !value.includes('brouillon') && !value.includes('draft')
+    && !value.includes('annul') && !value.includes('cancel');
+}
+
+function reconcileFinance(
+  leads: LeadRow[],
+  candidateLeads: CandidateLeadRow[],
+  cases: CaseRow[],
+  invoices: InvoiceRow[],
+  credits: CreditRow[],
+): Map<string, LeadFinance> {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  const caseToLead = new Map(cases
+    .filter((item) => item.lead_id && leadById.has(item.lead_id))
+    .map((item) => [item.id, item.lead_id as string]));
+  const leadsByContact = new Map<string, CandidateLeadRow[]>();
+  for (const lead of candidateLeads) {
+    if (!lead.contact_id) continue;
+    leadsByContact.set(lead.contact_id, [...(leadsByContact.get(lead.contact_id) ?? []), lead]);
+  }
+  for (const contactLeads of leadsByContact.values()) {
+    contactLeads.sort((a, b) => b.arrive_le.localeCompare(a.arrive_le));
+  }
+
+  const financeByLead = new Map<string, LeadFinance>();
+  const invoiceToLead = new Map<string, string>();
+  const ensureFinance = (leadId: string) => {
+    if (!financeByLead.has(leadId)) financeByLead.set(leadId, emptyFinance());
+    return financeByLead.get(leadId)!;
+  };
+  const leadForContact = (contactId: string | null, financialDate: string | null): string | null => {
+    if (!contactId || !financialDate) return null;
+    const date = new Date(financialDate);
+    if (Number.isNaN(date.getTime())) return null;
+    const candidate = (leadsByContact.get(contactId) ?? []).find((lead) => {
+      const arrival = new Date(lead.arrive_le);
+      const ageDays = (date.getTime() - arrival.getTime()) / 86_400_000;
+      return ageDays >= -1 && ageDays <= 366;
+    });
+    return candidate && leadById.has(candidate.id) ? candidate.id : null;
+  };
+
+  for (const invoice of invoices) {
+    if (invoice.status === 'cancelled') continue;
+    const exactLeadId = invoice.case_id ? caseToLead.get(invoice.case_id) ?? null : null;
+    const leadId = exactLeadId ?? leadForContact(invoice.contact_id, invoice.issue_date);
+    if (!leadId) continue;
+    invoiceToLead.set(invoice.id, leadId);
+    const finance = ensureFinance(leadId);
+    finance.invoices++;
+    finance.invoicedRevenue += numeric(invoice.amount_ttc);
+    finance.collectedRevenue += numeric(invoice.amount_paid);
+    const margin = numeric(invoice.estimated_margin);
+    finance.estimatedMargin += margin;
+    if (margin > 0) finance.marginKnownInvoices++;
+    if (exactLeadId) finance.invoicesByCase++;
+    else finance.invoicesByContact++;
+  }
+
+  for (const credit of credits) {
+    if (!activeCredit(credit.status)) continue;
+    const leadId = (credit.invoice_id ? invoiceToLead.get(credit.invoice_id) ?? null : null)
+      ?? leadForContact(credit.contact_id, credit.issue_date ?? credit.created_at);
+    if (!leadId) continue;
+    ensureFinance(leadId).creditedRevenue += numeric(credit.amount_ttc);
+  }
+
+  return financeByLead;
 }
 
 function campaignForLead(
@@ -199,19 +387,24 @@ function aggregatePeriod(
   metrics: MetricRow[],
   leads: LeadRow[],
   appointmentLeadIds: Set<string>,
+  transformedLeadIds: Set<string>,
   interventionLeadIds: Set<string>,
+  financeByLead: Map<string, LeadFinance>,
   timelineDates: string[] = [],
 ): {
   totals: MarketingTotals;
   campaigns: MarketingCampaignRow[];
   timeline: MarketingDay[];
   attribution: AttributionBreakdown;
+  financialAttribution: FinancialAttributionBreakdown;
+  channels: MarketingChannelRow[];
   lastSyncedAt: string | null;
 } {
   const campaigns = new Map<string, MarketingCampaignRow>();
   const campaignNameToId = new Map<string, string>();
   const timeline = new Map<string, MarketingDay>();
   const attribution = emptyAttribution();
+  const channels = new Map<MarketingLeadChannel, MarketingChannelRow>();
   const ensureDay = (date: string) => {
     if (!timeline.has(date)) {
       timeline.set(date, {
@@ -226,6 +419,16 @@ function aggregatePeriod(
     const campaign = campaigns.get(id)!;
     if (status) campaign.status = status;
     return campaign;
+  };
+  const ensureChannel = (id: MarketingLeadChannel) => {
+    if (!channels.has(id)) {
+      channels.set(id, {
+        id, label: channelLabels[id], leads: 0, qualifiedLeads: 0,
+        transformedLeads: 0, interventions: 0, invoices: 0,
+        netRevenue: 0, collectedRevenue: 0, estimatedMargin: 0,
+      });
+    }
+    return channels.get(id)!;
   };
 
   for (const date of timelineDates) ensureDay(date);
@@ -253,17 +456,40 @@ function aggregatePeriod(
     const campaign = ensureCampaign(attributed.id, attributed.name);
     campaign.leads++;
     if (qualifiedStatuses.has(lead.status)) campaign.qualifiedLeads++;
-    if (lead.status === 'converted') campaign.transformedLeads++;
+    if (transformedLeadIds.has(lead.id)) campaign.transformedLeads++;
     if (pendingStatuses.has(lead.status)) campaign.pendingLeads++;
     if (lead.status === 'lost') campaign.lostLeads++;
     if (appointmentLeadIds.has(lead.id)) campaign.appointments++;
     if (interventionLeadIds.has(lead.id)) campaign.interventions++;
+    const finance = financeByLead.get(lead.id);
+    if (finance) {
+      campaign.invoices += finance.invoices;
+      campaign.invoicedRevenue += finance.invoicedRevenue;
+      campaign.creditedRevenue += finance.creditedRevenue;
+      campaign.netRevenue += finance.invoicedRevenue - finance.creditedRevenue;
+      campaign.collectedRevenue += finance.collectedRevenue;
+      campaign.estimatedMargin += finance.estimatedMargin;
+      campaign.marginKnownInvoices += finance.marginKnownInvoices;
+      if (finance.invoices > 0) campaign.revenueLinkedLeads++;
+    }
+
+    const channel = ensureChannel(leadChannel(lead));
+    channel.leads++;
+    if (qualifiedStatuses.has(lead.status)) channel.qualifiedLeads++;
+    if (transformedLeadIds.has(lead.id)) channel.transformedLeads++;
+    if (interventionLeadIds.has(lead.id)) channel.interventions++;
+    if (finance) {
+      channel.invoices += finance.invoices;
+      channel.netRevenue += finance.invoicedRevenue - finance.creditedRevenue;
+      channel.collectedRevenue += finance.collectedRevenue;
+      channel.estimatedMargin += finance.estimatedMargin;
+    }
 
     const day = ensureDay(dayKey(lead.arrive_le));
     day.leads++;
     if (appointmentLeadIds.has(lead.id)) day.appointments++;
     if (interventionLeadIds.has(lead.id)) day.interventions++;
-    if (lead.status === 'converted') day.transformedLeads++;
+    if (transformedLeadIds.has(lead.id)) day.transformedLeads++;
   }
 
   const campaignRows = [...campaigns.values()]
@@ -280,13 +506,34 @@ function aggregatePeriod(
     transformedLeads: sum.transformedLeads + campaign.transformedLeads,
     pendingLeads: sum.pendingLeads + campaign.pendingLeads,
     lostLeads: sum.lostLeads + campaign.lostLeads,
+    invoices: sum.invoices + campaign.invoices,
+    invoicedRevenue: sum.invoicedRevenue + campaign.invoicedRevenue,
+    creditedRevenue: sum.creditedRevenue + campaign.creditedRevenue,
+    netRevenue: sum.netRevenue + campaign.netRevenue,
+    collectedRevenue: sum.collectedRevenue + campaign.collectedRevenue,
+    estimatedMargin: sum.estimatedMargin + campaign.estimatedMargin,
+    marginKnownInvoices: sum.marginKnownInvoices + campaign.marginKnownInvoices,
+    revenueLinkedLeads: sum.revenueLinkedLeads + campaign.revenueLinkedLeads,
   }), emptyTotals());
+
+  const financialAttribution = leads.reduce<FinancialAttributionBreakdown>((sum, lead) => {
+    const finance = financeByLead.get(lead.id);
+    if (!finance) return sum;
+    sum.invoicesByCase += finance.invoicesByCase;
+    sum.invoicesByContact += finance.invoicesByContact;
+    sum.matchedInvoices += finance.invoices;
+    sum.marginKnownInvoices += finance.marginKnownInvoices;
+    if (finance.invoices > 0) sum.leadsWithInvoice++;
+    return sum;
+  }, { invoicesByCase: 0, invoicesByContact: 0, leadsWithInvoice: 0, marginKnownInvoices: 0, matchedInvoices: 0 });
 
   return {
     totals,
     campaigns: campaignRows,
     timeline: [...timeline.values()].sort((a, b) => a.date.localeCompare(b.date)),
     attribution,
+    financialAttribution,
+    channels: [...channels.values()].sort((a, b) => b.leads - a.leads),
     lastSyncedAt,
   };
 }
@@ -346,10 +593,10 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
       .order('metric_date', { ascending: true }),
     supabase
       .from('leads')
-      .select('id,arrive_le,status,google_campaign_id,campaign_name,utm_campaign,gclid,gbraid,wbraid')
+      .select('id,arrive_le,status,contact_id,source,google_campaign_id,campaign_name,utm_source,utm_medium,utm_campaign,gclid,gbraid,wbraid,raw_payload')
       .gte('arrive_le', previousStart.toISOString())
       .lt('arrive_le', endExclusive.toISOString())
-      .or('gclid.not.is.null,gbraid.not.is.null,wbraid.not.is.null,google_campaign_id.not.is.null,utm_source.ilike.%google%,utm_medium.ilike.%cpc%'),
+      .or('source.eq.google_ads,gclid.not.is.null,gbraid.not.is.null,wbraid.not.is.null,google_campaign_id.not.is.null,utm_source.ilike.%google%,utm_medium.ilike.%cpc%'),
     supabase
       .from('google_ads_search_terms_daily')
       .select('campaign_id,campaign_name,ad_group_id,ad_group_name,search_term,keyword_text,keyword_match_type,search_term_match_type,targeting_status,device,impressions,clicks,cost_micros,conversions')
@@ -367,7 +614,7 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
   const leadIds = leads.map((lead) => lead.id);
 
   const caseResult = leadIds.length
-    ? await supabase.from('windscreen_cases').select('id,lead_id,status').in('lead_id', leadIds)
+    ? await supabase.from('windscreen_cases').select('id,lead_id,contact_id,status').in('lead_id', leadIds)
     : { data: [] as CaseRow[], error: null };
   if (caseResult.error) throw new Error(caseResult.error.message);
   const cases = (caseResult.data ?? []) as CaseRow[];
@@ -393,6 +640,53 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
       .filter((item) => item.lead_id && interventionStatuses.has(item.status))
       .map((item) => item.lead_id as string),
   );
+  const transformedLeadIds = new Set([
+    ...leads.filter((lead) => lead.status === 'converted').map((lead) => lead.id),
+    ...cases.filter((item) => item.lead_id).map((item) => item.lead_id as string),
+  ]);
+
+  const contactIds = [...new Set(leads.map((lead) => lead.contact_id).filter((id): id is string => Boolean(id)))];
+  const candidateLeadResult = contactIds.length
+    ? await supabase
+      .from('leads')
+      .select('id,arrive_le,contact_id')
+      .in('contact_id', contactIds)
+      .lt('arrive_le', endExclusive.toISOString())
+      .limit(5000)
+    : { data: [] as CandidateLeadRow[], error: null };
+  if (candidateLeadResult.error) throw new Error(candidateLeadResult.error.message);
+  const financeFilter = [
+    caseIds.length ? `case_id.in.(${caseIds.join(',')})` : '',
+    contactIds.length ? `contact_id.in.(${contactIds.join(',')})` : '',
+  ].filter(Boolean).join(',');
+  const invoiceResult = financeFilter
+    ? await supabase
+      .from('invoices')
+      .select('id,case_id,contact_id,status,amount_ttc,amount_paid,estimated_margin,issue_date')
+      .or(financeFilter)
+      .limit(5000)
+    : { data: [] as InvoiceRow[], error: null };
+  if (invoiceResult.error) throw new Error(invoiceResult.error.message);
+  const invoices = (invoiceResult.data ?? []) as InvoiceRow[];
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+  const creditFilter = [
+    invoiceIds.length ? `invoice_id.in.(${invoiceIds.join(',')})` : '',
+    contactIds.length ? `contact_id.in.(${contactIds.join(',')})` : '',
+  ].filter(Boolean).join(',');
+  const creditResult = creditFilter
+    ? await supabase
+      .from('onify_credit_notes')
+      .select('invoice_id,contact_id,status,amount_ttc,issue_date,created_at')
+      .or(creditFilter)
+      .limit(5000)
+    : { data: [] as CreditRow[], error: null };
+  if (creditResult.error && !['42P01', 'PGRST205'].includes(creditResult.error.code ?? '')) {
+    throw new Error(creditResult.error.message);
+  }
+  const financeByLead = reconcileFinance(
+    leads, (candidateLeadResult.data ?? []) as CandidateLeadRow[], cases, invoices,
+    (creditResult.data ?? []) as CreditRow[],
+  );
 
   const currentMetrics = metrics.filter((metric) => metric.metric_date >= currentStartDate);
   const previousMetrics = metrics.filter((metric) => metric.metric_date < currentStartDate);
@@ -402,10 +696,12 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
   const timelineDates = Array.from({ length: days }, (_, index) => localDateKey(addDays(currentStart, index)));
 
   const current = aggregatePeriod(
-    currentMetrics, currentLeads, appointmentLeadIds, interventionLeadIds, timelineDates,
+    currentMetrics, currentLeads, appointmentLeadIds, transformedLeadIds,
+    interventionLeadIds, financeByLead, timelineDates,
   );
   const previous = aggregatePeriod(
-    previousMetrics, previousLeads, appointmentLeadIds, interventionLeadIds,
+    previousMetrics, previousLeads, appointmentLeadIds, transformedLeadIds,
+    interventionLeadIds, financeByLead,
   );
 
   return {
@@ -417,5 +713,7 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
     attribution: current.attribution,
     searchTerms: aggregateSearchTerms((searchTermResult.data ?? []) as SearchTermMetricRow[]),
     searchTermsAvailable,
+    channels: current.channels,
+    financialAttribution: current.financialAttribution,
   };
 }
