@@ -198,6 +198,11 @@ export const LIBELLE_VITRAGE: Record<GlassType, string> = {
   autre: 'Autre',
 };
 
+/** Libelle court et explicite pour les listes, y compris avant qualification. */
+export function vitrageLabel(lead: Pick<Lead, 'glass_type'>): string {
+  return lead.glass_type ? LIBELLE_VITRAGE[lead.glass_type] : 'À qualifier';
+}
+
 /**
  * Libelles des champs modifiables, pour dire a l'utilisateur ce qu'il s'apprete
  * a enregistrer. Les colonnes techniques (citycode, coordonnees) n'y figurent

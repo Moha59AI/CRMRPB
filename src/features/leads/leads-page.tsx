@@ -47,13 +47,13 @@ import { cn } from '@/lib/utils';
 import { OUTILS_DEMO_ACTIFS } from '@/config/features';
 import type {
   Lead, Profile,
-  LeadStatus, LeadSource,
+  LeadStatus, LeadSource, GlassType,
 } from '@/types';
 
 import {
   statusLabels, sourceLabels, statusStyles, leadJourneyStages, leadStageForKey,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
-  scoreColor, formatDate, leadName, vehicleLabel,
+  scoreColor, formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
 
@@ -672,7 +672,7 @@ function ViewToggleButton({
  *
  * Le tableau porte huit colonnes : a 375 px, chacune ferait quarante pixels.
  * La carte reprend ce qu'on lit pour decider d'appeler -- qui, quel numero, ou,
- * quel statut, depuis quand -- et rien d'autre.
+ * quel statut, quel vitrage, depuis quand -- et rien d'autre.
  *
  * Le numero est un lien `tel:` distinct de la carte : sur un telephone, ouvrir
  * la fiche et lancer l'appel sont deux gestes differents, et le second doit
@@ -705,6 +705,9 @@ function ListeMobile({
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {lead.city && <span className="truncate">{lead.city}</span>}
                 {vehicleLabel(lead) && <span className="truncate">{vehicleLabel(lead)}</span>}
+                <span className={cn('truncate', !lead.glass_type && 'italic text-muted-foreground/70')}>
+                  {vitrageLabel(lead)}
+                </span>
                 <span className="tabular">{formatDate(lead.arrive_le)}</span>
               </div>
             </button>
@@ -756,6 +759,7 @@ function LeadsTable({
         <TableHead className="text-xs">Téléphone</TableHead>
         <TableHead className="text-xs">Ville</TableHead>
         <TableHead className="text-xs">Véhicule</TableHead>
+        <TableHead className="text-xs">Vitrage</TableHead>
         <TableHead className="text-xs">Cadeau</TableHead>
         <TableHead className="text-xs">Source</TableHead>
         <TableHead className="text-xs">Statut</TableHead>
@@ -787,6 +791,11 @@ function LeadsTable({
             </TableCell>
             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
               {vehicleLabel(lead)}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+              <span className={cn(!lead.glass_type && 'italic text-muted-foreground/70')}>
+                {vitrageLabel(lead)}
+              </span>
             </TableCell>
             <TableCell className="max-w-44 truncate text-sm text-muted-foreground" title={lead.offer ?? undefined}>
               {lead.offer || '—'}
@@ -990,6 +999,9 @@ function KanbanCard({
       {(lead.vehicle_make || lead.vehicle_model) && (
         <p className="mt-1 text-xs text-muted-foreground/70">{vehicleLabel(lead)}</p>
       )}
+      <p className={cn('mt-1 text-xs text-muted-foreground', !lead.glass_type && 'italic text-muted-foreground/70')}>
+        Vitrage : {vitrageLabel(lead)}
+      </p>
     </div>
   );
 }
@@ -1020,6 +1032,9 @@ function CompactList({
             </span>
             <span className="text-xs text-muted-foreground flex-1 truncate">
               {lead.city || '—'}
+            </span>
+            <span className={cn('min-w-[130px] truncate text-xs text-muted-foreground', !lead.glass_type && 'italic text-muted-foreground/70')}>
+              {vitrageLabel(lead)}
             </span>
             <Badge variant="secondary" className="rounded-full text-[10px] shrink-0">
               {sourceLabels[lead.source] ?? lead.source}
@@ -1064,6 +1079,7 @@ function NewLeadDialog({
     vehicle_registration: '',
     vehicle_make: '',
     vehicle_model: '',
+    glass_type: null as GlassType | null,
     source: 'manual' as LeadSource,
     insurance: '',
     offer: '',
@@ -1101,6 +1117,7 @@ function NewLeadDialog({
       address: '', city: '', postal_code: '',
       citycode: null, latitude: null, longitude: null, geo_precision: null,
       vehicle_registration: '', vehicle_make: '', vehicle_model: '',
+      glass_type: null,
       source: 'manual', insurance: '', offer: '',
     });
   };
@@ -1238,6 +1255,22 @@ function NewLeadDialog({
                   className="rounded-lg"
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Vitrage concerné</Label>
+              <Select
+                value={form.glass_type ?? undefined}
+                onValueChange={(value) => setForm({ ...form, glass_type: value as GlassType })}
+              >
+                <SelectTrigger className="rounded-lg">
+                  <SelectValue placeholder="Sélectionner le vitrage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LIBELLE_VITRAGE).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

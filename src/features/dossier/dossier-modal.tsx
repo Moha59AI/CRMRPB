@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,7 +17,7 @@ import { useBrouillon, useAvertirSiModifie } from '@/hooks/use-brouillon';
 import { messageErreurBase } from '@/lib/erreurs';
 import { BarreEnregistrement } from '@/components/BarreEnregistrement';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { LIBELLE_CHAMP_LEAD } from '@/features/leads/lead-shared';
@@ -74,9 +74,23 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   const precedent = position > 0 ? liste[position - 1] : null;
   const suivant = position >= 0 && position < liste.length - 1 ? liste[position + 1] : null;
 
+  // Une fermeture peut etre demandee presque simultanement par le bouton,
+  // le fond et Echap. Reculer deux fois dans l'historique sortait alors de la
+  // liste et pouvait laisser la couche de fiche montee au-dessus d'une autre
+  // page. L'intention est maintenant idempotente et revient explicitement a
+  // la page qui est deja rendue derriere la fiche.
+  const fermetureEnCours = useRef(false);
   const fermer = useCallback(() => {
-    if (pleinePage || !etat.background) navigate('/relances');
-    else navigate(-1);
+    if (fermetureEnCours.current) return;
+    fermetureEnCours.current = true;
+
+    if (pleinePage || !etat.background) {
+      navigate('/relances', { replace: true });
+      return;
+    }
+
+    const { pathname, search, hash } = etat.background;
+    navigate(`${pathname}${search}${hash}`, { replace: true });
   }, [pleinePage, etat.background, navigate]);
 
   // On remplace l'entrée d'historique : enchaîner vingt dossiers ne doit pas
@@ -109,8 +123,41 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   const brouillon = useBrouillon<Lead>(lead ?? undefined, leadId);
   useAvertirSiModifie(brouillon.estModifie);
 
-  const enregistrer = () => {
-    if (!brouillon.estModifie) return;
+  // Fermer en perdant sa saisie est le defaut que ce brouillon doit eviter :
+  // on demande, plutot que de fermer ou de refuser.
+  const [fermetureDemandee, setFermetureDemandee] = useState(false);
+
+  /**
+   * Fermeture differee jusqu'a la fin de l'animation du dialogue Radix.
+   *
+   * Un simple rendu d'attente ne suffisait pas : si l'enregistrement repondait
+   * vite, la fiche etait demontee pendant les 200 ms de sortie du dialogue.
+   * Radix pouvait alors conserver `pointer-events: none` sur le body et toute
+   * la page paraissait gelee. On rend d'abord la main au dialogue, puis on
+   * navigue une fois son animation terminee.
+   */
+  const minuteurFermeture = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (minuteurFermeture.current !== null) {
+        clearTimeout(minuteurFermeture.current);
+      }
+    };
+  }, []);
+
+  const fermerApresDialogue = useCallback(() => {
+    setFermetureDemandee(false);
+    if (minuteurFermeture.current !== null) return;
+
+    minuteurFermeture.current = setTimeout(() => {
+      minuteurFermeture.current = null;
+      fermer();
+    }, 250);
+  }, [fermer]);
+
+  const enregistrer = (apres?: () => void) => {
+    if (!brouillon.estModifie || majLead.isPending) return;
 
     // Les espaces de bordure viennent de la frappe, pas de l'intention. On ne
     // les coupe qu'ici : le faire a chaque touche empecherait de taper
@@ -125,34 +172,19 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
       onSuccess: () => {
         brouillon.vider();
         toast.success('Fiche enregistrée');
+        apres?.();
       },
     });
   };
 
-  // Fermer en perdant sa saisie est le defaut que ce brouillon doit eviter :
-  // on demande, plutot que de fermer ou de refuser.
-  const [fermetureDemandee, setFermetureDemandee] = useState(false);
-
-  /**
-   * Fermeture differee, demandee depuis le dialogue de confirmation.
-   *
-   * Naviguer directement depuis le bouton demonterait la fiche -- donc le
-   * dialogue avec elle -- pendant que Radix est en train de le fermer. Sa
-   * couche modale ne rendrait alors jamais les clics au reste de la page.
-   * On ferme d'abord, on navigue au rendu suivant.
-   */
-  const [fermerApresDialogue, setFermerApresDialogue] = useState(false);
-
-  useEffect(() => {
-    if (!fermerApresDialogue || fermetureDemandee) return;
-    setFermerApresDialogue(false);
-    fermer();
-  }, [fermerApresDialogue, fermetureDemandee, fermer]);
-
   const fermerAvecGarde = useCallback(() => {
+    // La reponse de la base doit finir avant de decider s'il reste un
+    // brouillon. Ouvrir la confirmation pendant ce court intervalle creait
+    // deux transitions concurrentes autour du meme formulaire.
+    if (majLead.isPending) return;
     if (brouillon.estModifie) setFermetureDemandee(true);
     else fermer();
-  }, [brouillon.estModifie, fermer]);
+  }, [brouillon.estModifie, fermer, majLead.isPending]);
 
   const journaliser = (type: 'call_outbound' | 'sms_outbound', contenu: string) => {
     if (!leadId) return;
@@ -422,27 +454,23 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
               className="rounded-full"
               onClick={() => {
                 brouillon.annuler();
-                setFermetureDemandee(false);
-                setFermerApresDialogue(true);
+                fermerApresDialogue();
               }}
             >
               Fermer sans enregistrer
             </Button>
-            <AlertDialogAction
+            <Button
               className="rounded-full"
+              disabled={majLead.isPending}
               onClick={() => {
-                setFermetureDemandee(false);
-                majLead.mutate(brouillon.modifications, {
-                  onSuccess: () => {
-                    brouillon.vider();
-                    toast.success('Fiche enregistrée');
-                    setFermerApresDialogue(true);
-                  },
-                });
+                // Le dialogue reste ouvert tant que la base n'a pas confirme.
+                // En cas d'erreur, l'utilisateur garde sa saisie et peut
+                // recommencer au lieu de se retrouver devant une fiche muette.
+                enregistrer(fermerApresDialogue);
               }}
             >
               Enregistrer et fermer
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

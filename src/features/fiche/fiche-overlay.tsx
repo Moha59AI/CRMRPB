@@ -51,7 +51,18 @@ export function FicheOverlay<T extends string>({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') fermer();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+
+      // Un dialogue ouvert dans la fiche est proprietaire d'Echap. Sans ce
+      // garde, Radix fermait le dialogue tandis que la coque demandait aussi
+      // la fermeture de la fiche dans le meme evenement : deux demontages
+      // concurrents pouvaient laisser un voile invisible au-dessus du CRM.
+      const dialogueImbrique = document.querySelector(
+        '[data-state="open"][role="dialog"], [data-state="open"][role="alertdialog"]',
+      );
+      if (dialogueImbrique) return;
+
+      fermer();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

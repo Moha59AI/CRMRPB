@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const edgeFunction = readFileSync('supabase/functions/onify-sync/index.ts', 'utf8');
 const migration = readFileSync('supabase/migrations/20260908150000_onify_import.sql', 'utf8');
-const app = readFileSync('src/App.tsx', 'utf8');
+const routes = readFileSync('src/app/app-routes.tsx', 'utf8');
 const integrations = readFileSync('src/features/integrations/integrations-list-page.tsx', 'utf8');
 
 test('Onify est uniquement lu par la fonction de synchronisation', () => {
@@ -55,7 +55,7 @@ test('la migration rend les imports idempotents et protege les avoirs par RLS', 
 });
 
 test('Onify est accessible depuis les integrations du CRM', () => {
-  assert.match(app, /integrations\/onify/);
+  assert.match(routes, /integrations\/onify/);
   assert.match(integrations, /name: 'Onify'/);
   assert.match(integrations, /lecture seule/);
 });

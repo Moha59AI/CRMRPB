@@ -52,6 +52,10 @@ export function ChampAdresse({
   const [chargement, setChargement] = useState(false);
   const [surligne, setSurligne] = useState(-1);
   const [echec, setEchec] = useState<string | null>(null);
+  // Une valeur deja enregistree n'est pas une recherche utilisateur. Sans ce
+  // garde, chaque ouverture ou rafraichissement de fiche interrogeait la BAN
+  // et ouvrait six suggestions sur une adresse que personne ne modifiait.
+  const [interactionUtilisateur, setInteractionUtilisateur] = useState(false);
 
   const conteneur = useRef<HTMLDivElement>(null);
   // Ce que l'utilisateur vient de choisir : sans ca, la selection relance
@@ -59,7 +63,7 @@ export function ChampAdresse({
   const dernierChoix = useRef<string | null>(null);
 
   useEffect(() => {
-    if (desactive) return;
+    if (desactive || !interactionUtilisateur) return;
     if (dernierChoix.current === valeur) return;
     if (valeur.trim().length < 3) {
       setSuggestions([]);
@@ -92,7 +96,7 @@ export function ChampAdresse({
       clearTimeout(minuteur);
       controleur.abort();
     };
-  }, [valeur, type, desactive]);
+  }, [valeur, type, desactive, interactionUtilisateur]);
 
   // Un clic hors du champ ferme la liste sans rien choisir.
   useEffect(() => {
@@ -106,6 +110,7 @@ export function ChampAdresse({
 
   const choisir = (s: AdresseSuggestion) => {
     dernierChoix.current = s.label;
+    setInteractionUtilisateur(false);
     onValeurChange(s.label);
     onChoisir(normaliser(s));
     setOuvert(false);
@@ -152,10 +157,20 @@ export function ChampAdresse({
             aria-autocomplete="list"
             aria-invalid={!!erreur}
             className={cn('rounded-lg pl-8', chargement && 'pr-9')}
-            onChange={(e) => onValeurChange(e.target.value)}
+            onChange={(e) => {
+              setInteractionUtilisateur(true);
+              onValeurChange(e.target.value);
+            }}
             onKeyDown={auClavier}
-            onBlur={onBlur}
-            onFocus={() => suggestions.length > 0 && setOuvert(true)}
+            onBlur={() => {
+              setInteractionUtilisateur(false);
+              setOuvert(false);
+              onBlur?.();
+            }}
+            onFocus={() => {
+              setInteractionUtilisateur(true);
+              if (suggestions.length > 0) setOuvert(true);
+            }}
           />
           {chargement && (
             <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />

@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const page = readFileSync('src/features/finance/financial-dashboard-page.tsx', 'utf8');
 const service = readFileSync('src/features/finance/financial-dashboard-service.ts', 'utf8');
-const app = readFileSync('src/App.tsx', 'utf8');
+const routes = readFileSync('src/app/app-routes.tsx', 'utf8');
 const navigation = readFileSync('src/config/navigation.ts', 'utf8');
 
 test('le dashboard financier consolide toutes les sources deja disponibles', () => {
@@ -34,6 +34,6 @@ test('le dashboard distingue encaissements marge et anciennete des impayes', () 
 });
 
 test('la page Finance est routee et visible dans la navigation', () => {
-  assert.match(app, /path="\/finance"/);
+  assert.match(routes, /path="\/finance"/);
   assert.match(navigation, /label: 'Finance'/);
 });

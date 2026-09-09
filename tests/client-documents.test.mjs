@@ -33,12 +33,12 @@ test('les depots refusent les formats dangereux et les fichiers trop lourds', as
 });
 
 test('la fiche et les relances envoient le nouveau lien client', async () => {
-  const app = await read('src/App.tsx');
+  const routes = await read('src/app/app-routes.tsx');
   const fiche = await read('src/features/dossier/dossier-modal.tsx');
   const relances = await read('src/features/relances/relances-page.tsx');
   const panel = await read('src/features/dossier/documents-client-panel.tsx');
   const service = await read('src/services/client-documents-service.ts');
-  assert.match(app, /path="\/documents"/);
+  assert.match(routes, /path="\/documents"/);
   assert.match(fiche, /createClientDocumentRequest/);
   assert.match(relances, /createClientDocumentRequest/);
   assert.match(panel, /Collecte des documents/);
