@@ -431,6 +431,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
         onglet={onglet}
         onUpdate={brouillon.modifier}
         enregistrement={majLead.isPending}
+        onVoirHistorique={() => setOnglet('historique')}
       />
 
       <AlertDialog open={fermetureDemandee} onOpenChange={setFermetureDemandee}>

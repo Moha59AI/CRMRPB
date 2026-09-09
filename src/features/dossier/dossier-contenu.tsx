@@ -21,6 +21,7 @@ import type { AnalyseDoublon } from '@/services/leads-service';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
 import { DocumentsClientPanel } from './documents-client-panel';
+import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 
 interface EvenementTimeline {
   cle: string;
@@ -50,10 +51,11 @@ interface DossierContenuProps {
   onglet: OngletDossier;
   onUpdate: (updates: Partial<Lead>) => void;
   enregistrement: boolean;
+  onVoirHistorique: () => void;
 }
 
 export function DossierContenu({
-  lead, profiles, onglet, onUpdate, enregistrement,
+  lead, profiles, onglet, onUpdate, enregistrement, onVoirHistorique,
 }: DossierContenuProps) {
   const queryClient = useQueryClient();
   const [nouvelleNote, setNouvelleNote] = useState('');
@@ -88,7 +90,11 @@ export function DossierContenu({
   });
 
   const ajouterNote = useMutation({
-    mutationFn: () => createNote({ lead_id: lead.id, content: nouvelleNote.trim() }),
+    mutationFn: async () => {
+      const result = await createNote({ lead_id: lead.id, content: nouvelleNote.trim() });
+      if (result.error) throw new Error(result.error);
+      return result.note;
+    },
     onSuccess: () => {
       setNouvelleNote('');
       queryClient.invalidateQueries({ queryKey: ['lead-notes', lead.id] });
@@ -150,6 +156,12 @@ export function DossierContenu({
         {doublon && doublon.type !== 'aucun' && <BandeauDoublon analyse={doublon} />}
 
         <ProchaineAction lead={lead} />
+
+        <LeadAiAssistant
+          lead={lead}
+          notes={notes ?? []}
+          onVoirHistorique={onVoirHistorique}
+        />
 
         <Bloc titre="Client et coordonnées">
           <LeadIdentity lead={lead} onUpdate={onUpdate} desactive={enregistrement} />

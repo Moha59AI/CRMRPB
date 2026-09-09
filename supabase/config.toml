@@ -48,3 +48,9 @@ verify_jwt = false
 
 [functions.web-push]
 verify_jwt = false
+
+[functions.ai-store-secret]
+verify_jwt = true
+
+[functions.lead-ai-assistant]
+verify_jwt = true

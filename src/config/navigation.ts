@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   ChartNoAxesCombined,
   DatabaseZap,
+  BrainCircuit,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react';
@@ -223,6 +224,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/integrations/google',
         icon: ChartNoAxesCombined,
         description: 'Compte publicitaire, coûts et attribution des clics',
+      },
+      {
+        label: 'Assistant IA',
+        path: '/settings/integrations/ai',
+        icon: BrainCircuit,
+        description: 'Résumé des leads et prochaine action suggérée',
       },
       {
         label: 'Onify',

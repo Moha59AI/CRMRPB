@@ -38,6 +38,7 @@ const IntegrationsListPage = lazy(() => import('@/features/integrations/integrat
 const MetaSettingsPage = lazy(() => import('@/features/integrations/meta/meta-settings-page').then((m) => ({ default: m.MetaSettingsPage })));
 const GoogleAdsSettingsPage = lazy(() => import('@/features/integrations/google/google-ads-settings-page').then((m) => ({ default: m.GoogleAdsSettingsPage })));
 const OnifySettingsPage = lazy(() => import('@/features/integrations/onify/onify-settings-page').then((m) => ({ default: m.OnifySettingsPage })));
+const AiSettingsPage = lazy(() => import('@/features/ai/ai-settings-page').then((m) => ({ default: m.AiSettingsPage })));
 const WebhooksPage = lazy(() => import('@/features/webhooks/webhooks-page').then((m) => ({ default: m.WebhooksPage })));
 const UsersPage = lazy(() => import('@/features/settings/users-page').then((m) => ({ default: m.UsersPage })));
 const InsurersPage = lazy(() => import('@/features/settings/insurers-page').then((m) => ({ default: m.InsurersPage })));
@@ -125,6 +126,7 @@ export function AppRoutes() {
             <Route path="integrations/meta" element={charger(<MetaSettingsPage />)} />
             <Route path="integrations/google" element={charger(<GoogleAdsSettingsPage />)} />
             <Route path="integrations/onify" element={charger(<OnifySettingsPage />)} />
+            <Route path="integrations/ai" element={charger(<AiSettingsPage />)} />
             <Route path="webhooks" element={charger(<WebhooksPage />)} />
             <Route path="users" element={charger(<UsersPage />)} />
             <Route path="insurers" element={charger(<InsurersPage />)} />

@@ -45,9 +45,12 @@ téléphone, il ne peut ni prévenir d'un retard ni se faire ouvrir un portail.
 | `activities` | L | L | LC | LC | — |
 | `communications` | LCMS | LCMS | LC | LC (les siennes) | — |
 | `notifications` | LCM | LCM | LM (les siennes) | LM (les siennes) | LM (les siennes) |
+| `lead_ai_insights` | LCS | LC | LC | — | — |
 
 Notes et communications ne se modifient ni ne s'effacent : un échange consigné
 est une trace, pas un brouillon.
+Les analyses IA suivent la même logique : elles sont ajoutées et consultées,
+jamais réécrites. Seul l'administrateur peut les supprimer.
 
 ## Acquisition
 
@@ -121,6 +124,8 @@ Karim » sans requête privilégiée. Seul l'administrateur y écrit.
 | `meta-process-queue` | `service_role` uniquement (cron) |
 | `create_client_document_request` | Administrateur, responsable, conseiller |
 | `client-documents` | Public avec jeton privé valide ; aucune lecture anonyme directe des tables ou du bucket |
+| `ai-store-secret` | Administrateur — clé stockée dans Supabase Vault |
+| `lead-ai-assistant` | Administrateur, responsable, conseiller — analyse manuelle sans écriture sur le lead |
 
 ---
 

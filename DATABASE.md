@@ -154,6 +154,28 @@ Connexions aux services externes.
 
 **Note** : Les secrets (App Secret, tokens) ne sont JAMAIS stockés dans `settings`. Ils sont stockés via Supabase Vault avec une référence dans `settings`.
 
+### lead_ai_insights
+Historique immuable des analyses IA demandées depuis une fiche lead. Les
+commentaires d'origine restent dans la table notes ; cette table ne conserve
+que le résumé, les suggestions et les références aux notes ayant servi de
+preuve.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| lead_id | uuid → leads | Lead analysé |
+| requested_by | uuid → auth.users | Utilisateur ayant lancé l'analyse |
+| model | text | Modèle réellement appelé |
+| summary | text | Résumé factuel |
+| detected_information | jsonb | Faits détectés, confiance et note source |
+| next_action | jsonb | Action et date suggérées, jamais appliquées automatiquement |
+| warnings | jsonb | Informations manquantes ou contradictions |
+| evidence | jsonb | Références vérifiées vers les notes sources |
+| source_notes_count, source_latest_note_at | integer/timestamptz | Permettent de signaler une analyse obsolète |
+| input_tokens, output_tokens, total_tokens | integer | Consommation réelle retournée par OpenAI |
+| estimated_cost_usd | numeric | Estimation du coût de l'appel |
+| created_at | timestamptz | |
+
 ### google_ads_daily_metrics
 Mesures Google Ads synchronisées toutes les 15 minutes, une ligne par campagne
 et par jour. Les résultats métier ne sont pas copiés ici : la page Marketing
@@ -300,6 +322,11 @@ Journal d'audit des actions administratives.
 
 ### google_ads_oauth_states
 - SELECT/INSERT/UPDATE/DELETE : aucune opération directe depuis le navigateur
+
+### lead_ai_insights
+- SELECT/INSERT : administrateur, responsable et conseiller du workspace
+- UPDATE : interdit ; une nouvelle analyse crée une nouvelle ligne
+- DELETE : administrateur uniquement
 
 ### meta_forms
 - SELECT : membres du workspace

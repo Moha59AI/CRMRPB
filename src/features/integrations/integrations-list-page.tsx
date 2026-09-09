@@ -1,4 +1,4 @@
-import { BarChart3, DatabaseZap, Megaphone as MetaIcon, Webhook, Plus } from 'lucide-react';
+import { BarChart3, BrainCircuit, DatabaseZap, Megaphone as MetaIcon, Webhook, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,13 @@ interface IntegrationCard {
 }
 
 const integrations: IntegrationCard[] = [
+  {
+    name: 'Assistant IA',
+    description: 'Résumés sourcés des leads, lecture des commentaires et prochaine action suggérée.',
+    icon: BrainCircuit,
+    path: '/settings/integrations/ai',
+    available: true,
+  },
   {
     name: 'Onify',
     description: 'Copie en lecture seule des clients, notes, appels, devis, factures et avoirs vers ce CRM.',
