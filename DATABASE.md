@@ -176,6 +176,17 @@ preuve.
 | estimated_cost_usd | numeric | Estimation du coût de l'appel |
 | created_at | timestamptz | |
 
+`next_action` conserve aussi le niveau de priorité, le canal conseillé,
+l'objectif, une checklist courte et, lorsqu'il est pertinent, un brouillon de
+message. `warnings` contient des alertes structurées par gravité. Les anciennes
+analyses au format texte restent compatibles avec l'interface.
+
+Le radar global ne déclenche pas d'appel OpenAI : il calcule les urgences depuis
+les échéances et les états déjà présents en base. Une analyse explicitement
+lancée qui révèle une priorité haute ou critique crée en revanche une
+notification générique, dédupliquée pendant six heures, afin d'utiliser la
+cloche et le Web Push sans exposer de donnée client sur l'écran verrouillé.
+
 ### google_ads_daily_metrics
 Mesures Google Ads synchronisées toutes les 15 minutes, une ligne par campagne
 et par jour. Les résultats métier ne sont pas copiés ici : la page Marketing
@@ -366,3 +377,15 @@ Trigger automatique pour `updated_at` sur toutes les tables avec timestamps.
 SECURITY DEFINER — vérifie le rôle et le workspace, révoque l'ancien lien
 incomplet, crée une demande avec les pièces par défaut et ne retourne le jeton
 secret qu'une seule fois au collaborateur qui prépare le SMS.
+
+### installer_workflows_alertes() / executer_workflows_alertes()
+SECURITY DEFINER — installe puis contrôle six recettes opérationnelles : premier
+contact d'un lead, tâche en retard, lien documents non consulté, rendez-vous à
+confirmer, facture échue et cadeau ou virement en attente. Le contrôle est
+planifié toutes les 15 minutes par `pg_cron` et peut aussi être lancé depuis la
+page Scénarios par un administrateur ou un responsable.
+
+Le moteur écrit uniquement dans `notifications` et `workflow_runs` : il ne
+modifie jamais les données métier. `notifications.workflow_id` conserve
+l'origine et `notifications.dedup_key`, protégée par un index unique, empêche
+de notifier deux fois le même utilisateur pour la même anomalie le même jour.

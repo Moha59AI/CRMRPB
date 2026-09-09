@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2, Clock3, Copy, ExternalLink, FileText, Loader2, MessageSquare,
+  CheckCircle2, Clock3, Copy, FileText, Loader2, MessageSquare,
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { cn } from '@/lib/utils';
 import {
-  createClientDocumentRequest, createStaffDocumentPreviewUrl,
-  fetchLatestClientDocumentRequest,
+  createClientDocumentRequest, fetchLatestClientDocumentRequest,
 } from '@/services/client-documents-service';
 import type { Lead } from '@/types';
 
@@ -118,19 +118,7 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
                     </p>
                   </div>
                   {uploaded && item.storage_path && (
-                    <Button
-                      size="sm" variant="ghost" className="rounded-full"
-                      onClick={async () => {
-                        try {
-                          const url = await createStaffDocumentPreviewUrl(item.storage_path as string);
-                          window.open(url, '_blank', 'noopener,noreferrer');
-                        } catch (error) {
-                          toast.error((error as Error).message);
-                        }
-                      }}
-                    >
-                      Voir <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                    </Button>
+                    <StaffDocumentLink storagePath={item.storage_path} />
                   )}
                 </div>
               );
@@ -147,4 +135,3 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
     </div>
   );
 }
-

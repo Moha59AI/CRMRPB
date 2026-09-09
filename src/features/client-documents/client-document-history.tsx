@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Clock3, ExternalLink, FileText, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { CheckCircle2, Clock3, FileText, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { LIBELLE_VITRAGE, formatDateTime } from '@/features/leads/lead-shared';
 import {
-  createStaffDocumentPreviewUrl, fetchClientDocumentHistory,
+  fetchClientDocumentHistory,
 } from '@/services/client-documents-service';
 import type { Lead } from '@/types';
 
@@ -80,19 +79,7 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
                       <p className="truncate text-xs text-muted-foreground">{uploaded ? item.original_name ?? 'Document reçu' : 'En attente'}</p>
                     </div>
                     {uploaded && item.storage_path && (
-                      <Button
-                        size="sm" variant="ghost" className="rounded-full"
-                        onClick={async () => {
-                          try {
-                            const url = await createStaffDocumentPreviewUrl(item.storage_path as string);
-                            window.open(url, '_blank', 'noopener,noreferrer');
-                          } catch (error) {
-                            toast.error((error as Error).message);
-                          }
-                        }}
-                      >
-                        Voir <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
+                      <StaffDocumentLink storagePath={item.storage_path} />
                     )}
                   </div>
                 );

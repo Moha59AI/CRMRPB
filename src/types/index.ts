@@ -458,6 +458,8 @@ export interface Notification {
   type: string;
   read: boolean;
   link: string | null;
+  workflow_id?: string | null;
+  dedup_key?: string | null;
   created_at: string;
 }
 
@@ -492,6 +494,12 @@ export interface WorkflowRun {
   started_at: string;
   completed_at: string | null;
   created_at: string;
+}
+
+export interface WorkflowAlertRunResult {
+  workflows_checked: number;
+  notifications_created: number;
+  checked_at: string;
 }
 
 export interface Campaign {

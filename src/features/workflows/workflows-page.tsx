@@ -7,7 +7,7 @@ import {
   Gift, AlertCircle, Wrench, Webhook, Hand, Repeat,
   MessageSquare, Mail, CheckSquare, Phone, UserPlus, StickyNote,
   Bell, Tag, GitBranch, Globe, Code, Workflow as WorkflowIcon,
-  Loader2, ChevronLeft, Save, Play, Sparkles, Search,
+  Loader2, ChevronLeft, Save, Play, Sparkles, Search, ShieldCheck,
   Filter, MapPin, Shield, Users, Calendar,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
@@ -36,7 +36,15 @@ import {
   type OnConnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { createWorkflow, deleteWorkflow, fetchWorkflows, updateWorkflow } from '@/services/automation-service';
+import {
+  createWorkflow,
+  deleteWorkflow,
+  fetchWorkflows,
+  installWorkflowAlerts,
+  runWorkflowAlertsNow,
+  updateWorkflow,
+} from '@/services/automation-service';
+import { useAuth } from '@/features/auth/auth-context';
 import type { Workflow } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -203,12 +211,18 @@ function FlowNode({ data, selected }: NodeProps) {
 
 const nodeTypes = { workflowNode: FlowNode };
 
+function isManagedAlertWorkflow(workflow: Workflow): boolean {
+  return workflow.flow_data?.managed_alert === true
+    && typeof workflow.flow_data?.system_key === 'string';
+}
+
 // ---------------------------------------------------------------------------
 // Main page component
 // ---------------------------------------------------------------------------
 
 export function WorkflowsPage() {
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
   const [builderWorkflow, setBuilderWorkflow] = useState<Workflow | null>(null);
   const [showBuilder, setShowBuilder] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Workflow | null>(null);
@@ -218,43 +232,68 @@ export function WorkflowsPage() {
     queryFn: fetchWorkflows,
   });
 
+  const canManage = profile?.role === 'admin' || profile?.role === 'manager';
+  const canDelete = profile?.role === 'admin';
+  const managedAlertWorkflows = (workflows ?? []).filter(isManagedAlertWorkflow);
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       updateWorkflow(id, { enabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteWorkflow(id),
-    onSuccess: (result) => {
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success('Scénario supprimé');
-        queryClient.invalidateQueries({ queryKey: ['workflows'] });
-      }
+    onSuccess: () => {
+      toast.success('Scénario supprimé');
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
     },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  function handleDuplicate(wf: Workflow) {
+  const installAlertsMutation = useMutation({
+    mutationFn: installWorkflowAlerts,
+    onSuccess: (created) => {
+      toast.success(created > 0 ? `${created} alertes installées` : 'Les alertes sont déjà installées');
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const runAlertsMutation = useMutation({
+    mutationFn: runWorkflowAlertsNow,
+    onSuccess: (result) => {
+      toast.success('Contrôle terminé', {
+        description: result.notifications_created > 0
+          ? `${result.notifications_created} nouvelle${result.notifications_created > 1 ? 's' : ''} notification${result.notifications_created > 1 ? 's' : ''}.`
+          : 'Aucune nouvelle alerte : les dossiers déjà signalés aujourd’hui ne sont pas répétés.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  async function handleDuplicate(wf: Workflow) {
     // Creating a new workflow with the same flow data triggers a list refresh.
-    createWorkflow({
-      name: `${wf.name} (copie)`,
-      description: wf.description,
-      trigger_type: wf.trigger_type,
-      trigger_config: wf.trigger_config,
-      conditions: wf.conditions,
-      actions: wf.actions,
-      flow_data: wf.flow_data,
-      enabled: false,
-    }).then((res) => {
-      if (res.error) {
-        toast.error(res.error);
-      } else {
-        toast.success('Scénario dupliqué');
-        queryClient.invalidateQueries({ queryKey: ['workflows'] });
-      }
-    });
+    try {
+      await createWorkflow({
+        name: `${wf.name} (copie)`,
+        description: wf.description,
+        trigger_type: wf.trigger_type,
+        trigger_config: wf.trigger_config,
+        conditions: wf.conditions,
+        actions: wf.actions,
+        flow_data: wf.flow_data,
+        enabled: false,
+      });
+      toast.success('Scénario dupliqué');
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de dupliquer ce scénario.');
+    }
   }
 
   function openNewBuilder() {
@@ -291,14 +330,24 @@ export function WorkflowsPage() {
         title="Scénarios"
         description="Automatisations"
         action={
-          <Button className="rounded-full" onClick={openNewBuilder}>
+          canManage ? <Button className="rounded-full" onClick={openNewBuilder}>
             <Plus className="mr-2 h-4 w-4" />
             Nouveau scénario
-          </Button>
+          </Button> : undefined
         }
       />
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+        {!isLoading && (
+          <WorkflowAlertOverview
+            workflows={managedAlertWorkflows}
+            canManage={canManage}
+            isInstalling={installAlertsMutation.isPending}
+            isRunning={runAlertsMutation.isPending}
+            onInstall={() => installAlertsMutation.mutate()}
+            onRun={() => runAlertsMutation.mutate()}
+          />
+        )}
         {isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -312,9 +361,11 @@ export function WorkflowsPage() {
             onEdit={openEditBuilder}
             onDuplicate={handleDuplicate}
             onDelete={(wf) => setDeleteTarget(wf)}
+            canManage={canManage}
+            canDelete={canDelete}
           />
         ) : (
-          <EmptyState onCreate={openNewBuilder} />
+          <EmptyState onCreate={openNewBuilder} canManage={canManage} />
         )}
       </div>
 
@@ -330,6 +381,73 @@ export function WorkflowsPage() {
   );
 }
 
+function WorkflowAlertOverview({
+  workflows,
+  canManage,
+  isInstalling,
+  isRunning,
+  onInstall,
+  onRun,
+}: {
+  workflows: Workflow[];
+  canManage: boolean;
+  isInstalling: boolean;
+  isRunning: boolean;
+  onInstall: () => void;
+  onRun: () => void;
+}) {
+  const activeCount = workflows.filter((workflow) => workflow.enabled).length;
+  const latestRun = workflows
+    .map((workflow) => workflow.last_run_at)
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1) ?? null;
+
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-done-soft text-done">
+            <ShieldCheck className="h-5 w-5" strokeWidth={1.8} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold text-foreground">Alertes opérationnelles</h2>
+              {workflows.length > 0 && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {activeCount}/{workflows.length} actives
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {workflows.length > 0
+                ? `Contrôle automatique toutes les 15 minutes${latestRun ? ` · dernier passage ${relativeTime(latestRun)}` : ''}.`
+                : 'Six contrôles prêts à l’emploi pour les leads, relances, documents, rendez-vous et finances.'}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Une même anomalie n’est notifiée qu’une fois par jour. Aucun statut ni champ client n’est modifié.
+            </p>
+          </div>
+        </div>
+
+        {canManage && (
+          workflows.length === 0 ? (
+            <Button className="rounded-full" onClick={onInstall} disabled={isInstalling}>
+              {isInstalling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
+              Installer les alertes
+            </Button>
+          ) : (
+            <Button variant="outline" className="rounded-full" onClick={onRun} disabled={isRunning || activeCount === 0}>
+              {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Contrôler maintenant
+            </Button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // List view
 // ---------------------------------------------------------------------------
@@ -340,12 +458,16 @@ function WorkflowsList({
   onEdit,
   onDuplicate,
   onDelete,
+  canManage,
+  canDelete,
 }: {
   workflows: Workflow[];
   onToggle: (id: string, enabled: boolean) => void;
   onEdit: (wf: Workflow) => void;
   onDuplicate: (wf: Workflow) => void;
   onDelete: (wf: Workflow) => void;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('all');
@@ -418,6 +540,8 @@ function WorkflowsList({
                 onEdit={onEdit}
                 onDuplicate={onDuplicate}
                 onDelete={onDelete}
+                canManage={canManage}
+                canDelete={canDelete}
               />
             ))}
           </TableBody>
@@ -428,14 +552,17 @@ function WorkflowsList({
 }
 
 function WorkflowRow({
-  wf, onToggle, onEdit, onDuplicate, onDelete,
+  wf, onToggle, onEdit, onDuplicate, onDelete, canManage, canDelete,
 }: {
   wf: Workflow;
   onToggle: (id: string, enabled: boolean) => void;
   onEdit: (wf: Workflow) => void;
   onDuplicate: (wf: Workflow) => void;
   onDelete: (wf: Workflow) => void;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
+  const managedAlert = isManagedAlertWorkflow(wf);
   const TriggerIcon = TRIGGER_ICONS[wf.trigger_type] ?? WorkflowIcon;
   const actions = Array.isArray(wf.actions) ? (wf.actions as { type?: string; label?: string }[]) : [];
   const actionLabels = actions
@@ -445,8 +572,17 @@ function WorkflowRow({
   return (
     <TableRow className="group">
       <TableCell className="pl-4">
-        <button onClick={() => onEdit(wf)} className="text-left">
+        <button
+          onClick={() => { if (!managedAlert && canManage) onEdit(wf); }}
+          className="text-left"
+          disabled={managedAlert || !canManage}
+        >
           <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">{wf.name}</p>
+          {managedAlert && (
+            <span className="mt-1 inline-flex rounded-full bg-done-soft px-2 py-0.5 text-[10px] font-medium text-done">
+              Alerte automatique
+            </span>
+          )}
           {wf.description && (
             <p className="mt-0.5 max-w-xs truncate text-xs text-muted-foreground">{wf.description}</p>
           )}
@@ -486,10 +622,11 @@ function WorkflowRow({
         <Switch
           checked={wf.enabled}
           onCheckedChange={(checked) => onToggle(wf.id, checked)}
+          disabled={!canManage}
         />
       </TableCell>
       <TableCell className="pr-4">
-        <DropdownMenu>
+        {canManage && !managedAlert && <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
               <MoreHorizontal className="h-4 w-4" />
@@ -504,12 +641,14 @@ function WorkflowRow({
               <Copy className="mr-2 h-4 w-4" />
               Dupliquer
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(wf)}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Supprimer
-            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(wf)}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Supprimer
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
       </TableCell>
     </TableRow>
   );
@@ -519,7 +658,7 @@ function WorkflowRow({
 // Empty state
 // ---------------------------------------------------------------------------
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, canManage }: { onCreate: () => void; canManage: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center p-12 text-center">
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/50">
@@ -529,10 +668,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
         Créez votre premier scénario d'automatisation pour gagner du temps sur les tâches répétitives.
       </p>
-      <Button className="mt-4 rounded-full" onClick={onCreate}>
-        <Plus className="mr-2 h-4 w-4" />
-        Nouveau scénario
-      </Button>
+      {canManage && (
+        <Button className="mt-4 rounded-full" onClick={onCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nouveau scénario
+        </Button>
+      )}
     </div>
   );
 }
@@ -697,15 +838,12 @@ function WorkflowBuilder({
       }
       return createWorkflow({ ...payload, enabled: false });
     },
-    onSuccess: (result) => {
-      if ('error' in result && result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success(workflow ? 'Scénario mis à jour' : 'Scénario créé');
-        queryClient.invalidateQueries({ queryKey: ['workflows'] });
-        onSaved();
-      }
+    onSuccess: () => {
+      toast.success(workflow ? 'Scénario mis à jour' : 'Scénario créé');
+      queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      onSaved();
     },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   function handleTest() {

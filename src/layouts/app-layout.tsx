@@ -6,6 +6,7 @@ import { navSections, type NavSection } from '@/config/navigation';
 import { cheminAutorise } from '@/config/permissions';
 import { SelecteurTheme } from '@/components/SelecteurTheme';
 import { ClocheNotifications } from '@/components/ClocheNotifications';
+import { CopilotRadar } from '@/features/ai/copilot-radar';
 import { BarreOnglets } from '@/components/BarreOnglets';
 import { useTitrePage } from '@/hooks/use-titre-page';
 import { APP_NAME } from '@/config/constants';
@@ -239,6 +240,8 @@ export function AppLayout() {
             <Outlet />
           </div>
         </ErrorBoundary>
+
+        <CopilotRadar />
 
         <BarreOnglets
           role={profile?.role ?? null}

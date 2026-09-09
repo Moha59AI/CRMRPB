@@ -143,7 +143,7 @@ export async function uploadClientDocument(
 }
 
 export async function createStaffDocumentPreviewUrl(path: string): Promise<string> {
-  const { data, error } = await supabase.storage.from('client-documents').createSignedUrl(path, 300);
+  const { data, error } = await supabase.storage.from('client-documents').createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Aperçu indisponible.');
   return data.signedUrl;
 }

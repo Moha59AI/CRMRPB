@@ -5,12 +5,28 @@ export interface AiDetectedInformation {
   value: string;
   confidence: 'high' | 'medium' | 'low';
   note_id: string | null;
+  category?: 'availability' | 'blocker' | 'insurance' | 'vehicle' | 'glass' | 'gift' | 'preference' | 'other';
 }
+
+export type AiPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type AiActionChannel = 'call' | 'sms' | 'email' | 'task' | 'none';
 
 export interface AiNextAction {
   label: string;
   reason: string;
   suggested_at: string | null;
+  priority?: AiPriority;
+  channel?: AiActionChannel;
+  objective?: string;
+  draft_message?: string | null;
+  checklist?: string[];
+}
+
+export interface AiWarning {
+  severity: 'critical' | 'warning' | 'info';
+  category: string;
+  message: string;
+  note_id: string | null;
 }
 
 export interface AiEvidence {
@@ -27,7 +43,7 @@ export interface LeadAiInsight {
   summary: string;
   detected_information: AiDetectedInformation[];
   next_action: AiNextAction | null;
-  warnings: string[];
+  warnings: AiWarning[];
   evidence: AiEvidence[];
   source_notes_count: number;
   source_latest_note_at: string | null;
@@ -40,6 +56,24 @@ export interface LeadAiInsight {
 
 interface FunctionErrorPayload {
   error?: string;
+}
+
+type RawLeadAiInsight = Omit<LeadAiInsight, 'warnings'> & {
+  warnings: Array<AiWarning | string>;
+};
+
+function normalizeInsight(raw: RawLeadAiInsight): LeadAiInsight {
+  return {
+    ...raw,
+    warnings: (raw.warnings ?? []).map((warning) => typeof warning === 'string'
+      ? {
+          severity: 'warning',
+          category: 'general',
+          message: warning,
+          note_id: null,
+        }
+      : warning),
+  };
 }
 
 async function bearerToken(): Promise<string> {
@@ -85,17 +119,17 @@ export async function fetchLatestLeadInsight(leadId: string): Promise<LeadAiInsi
     if (error.code === '42P01') return null;
     throw new Error(error.message);
   }
-  return data as LeadAiInsight | null;
+  return data ? normalizeInsight(data as RawLeadAiInsight) : null;
 }
 
 export async function analyzeLead(leadId: string): Promise<LeadAiInsight> {
-  const payload = await callAiFunction<{ insight: LeadAiInsight }>(
+  const payload = await callAiFunction<{ insight: RawLeadAiInsight }>(
     'lead-ai-assistant',
     'POST',
     { leadId },
   );
   if (!payload.insight) throw new Error('L’analyse IA n’a retourné aucun résultat');
-  return payload.insight;
+  return normalizeInsight(payload.insight);
 }
 
 export async function fetchAiSettingsStatus(): Promise<{ configured: boolean; model: string }> {

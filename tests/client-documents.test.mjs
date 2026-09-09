@@ -78,3 +78,18 @@ test('la fiche client consolide les documents de toutes ses interventions', asyn
   assert.match(history, /Documents de toutes les interventions/);
   assert.match(service, /fetchClientDocumentHistory/);
 });
+
+test('le document est ouvert par un vrai lien deja signe', async () => {
+  const service = await read('src/services/client-documents-service.ts');
+  const panel = await read('src/features/dossier/documents-client-panel.tsx');
+  const history = await read('src/features/client-documents/client-document-history.tsx');
+  const link = await read('src/features/client-documents/staff-document-link.tsx');
+
+  assert.match(service, /createSignedUrl\(path, 3600\)/);
+  assert.match(link, /createStaffDocumentPreviewUrl\(storagePath\)/);
+  assert.match(link, /href=\{preview\.data\}/);
+  assert.match(panel, /<StaffDocumentLink storagePath=\{item\.storage_path\}/);
+  assert.match(history, /<StaffDocumentLink storagePath=\{item\.storage_path\}/);
+  assert.doesNotMatch(link, /window\.open/);
+  assert.doesNotMatch(link, /target="_blank"/);
+});

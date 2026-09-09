@@ -27,11 +27,33 @@ test('la clé OpenAI reste dans Vault et son écriture est réservée à l admin
 test('l assistant lit les commentaires sans envoyer les identifiants les plus sensibles', async () => {
   const edge = await read('supabase/functions/lead-ai-assistant/index.ts');
   assert.match(edge, /\.from\('notes'\)/);
+  assert.match(edge, /\.from\('appointments'\)/);
+  assert.match(edge, /\.from\('windscreen_cases'\)/);
+  assert.match(edge, /\.from\('client_document_requests'\)/);
   assert.match(edge, /notes: sourceNotes/);
   assert.match(edge, /store: false/);
   assert.match(edge, /type: 'json_schema'/);
   assert.match(edge, /noteIds\.has/);
   assert.doesNotMatch(edge, /\.select\('[^']*(?:phone|email|vehicle_registration)/);
+});
+
+test('la recommandation contient une priorité, un canal et une checklist actionnable', async () => {
+  const edge = await read('supabase/functions/lead-ai-assistant/index.ts');
+  const component = await read('src/features/ai/lead-ai-assistant.tsx');
+  assert.match(edge, /'priority', 'channel'/);
+  assert.match(edge, /'objective', 'draft_message', 'checklist'/);
+  assert.match(component, /Créer la tâche/);
+  assert.match(component, /Copier le message/);
+  assert.match(component, /if \(result\.error\) throw new Error/);
+});
+
+test('une analyse prioritaire alimente les notifications sans exposer le client', async () => {
+  const edge = await read('supabase/functions/lead-ai-assistant/index.ts');
+  assert.match(edge, /\.from\('notifications'\)/);
+  assert.match(edge, /\.eq\('type', 'ai'\)/);
+  assert.match(edge, /Date\.now\(\) - 6 \* 60 \* 60 \* 1000/);
+  assert.match(edge, /Une analyse a détecté une action importante à vérifier dans le CRM/);
+  assert.doesNotMatch(edge, /body:\s*(?:lead\.|nextAction\.)/);
 });
 
 test('l interface présente une suggestion et ne déclenche aucun changement de lead', async () => {

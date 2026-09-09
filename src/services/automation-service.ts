@@ -1,7 +1,7 @@
 // Scenarios et campagnes
 
 import { supabase } from '@/lib/supabase';
-import type { Workflow, WorkflowRun, Campaign } from '@/types';
+import type { Workflow, WorkflowRun, Campaign, WorkflowAlertRunResult } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchWorkflows(): Promise<Workflow[]> {
@@ -13,25 +13,44 @@ export async function fetchWorkflows(): Promise<Workflow[]> {
   return (data as Workflow[]) ?? [];
 }
 
-export async function createWorkflow(wf: Partial<Workflow>): Promise<{ error: string | null; workflow: Workflow | null }> {
+export async function createWorkflow(wf: Partial<Workflow>): Promise<Workflow> {
   const wsId = await getWorkspaceId();
   const { data, error } = await supabase
     .from('workflows')
     .insert({ ...wf, workspace_id: wsId })
     .select('*')
     .maybeSingle();
-  if (error) return { error: error.message, workflow: null };
-  return { error: null, workflow: data as Workflow };
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Le scénario n'a pas été créé.");
+  return data as Workflow;
 }
 
-export async function updateWorkflow(id: string, updates: Partial<Workflow>): Promise<{ error: string | null }> {
+export async function updateWorkflow(id: string, updates: Partial<Workflow>): Promise<void> {
   const { error } = await supabase.from('workflows').update(updates).eq('id', id);
-  return { error: error?.message ?? null };
+  if (error) throw new Error(error.message);
 }
 
-export async function deleteWorkflow(id: string): Promise<{ error: string | null }> {
+export async function deleteWorkflow(id: string): Promise<void> {
   const { error } = await supabase.from('workflows').delete().eq('id', id);
-  return { error: error?.message ?? null };
+  if (error) throw new Error(error.message);
+}
+
+export async function installWorkflowAlerts(): Promise<number> {
+  const { data, error } = await supabase.rpc('installer_workflows_alertes');
+  if (error) throw new Error(error.message);
+  return Number(data ?? 0);
+}
+
+export async function runWorkflowAlertsNow(): Promise<WorkflowAlertRunResult> {
+  const { data, error } = await supabase.rpc('executer_workflows_alertes', {
+    p_workspace_id: null,
+    p_force_log: true,
+  });
+  if (error) throw new Error(error.message);
+  if (!data || typeof data !== 'object') {
+    throw new Error("Le contrôle des alertes n'a renvoyé aucun résultat.");
+  }
+  return data as unknown as WorkflowAlertRunResult;
 }
 
 export async function fetchWorkflowRuns(workflowId: string): Promise<WorkflowRun[]> {

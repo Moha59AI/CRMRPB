@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BrainCircuit, CheckCircle2, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  BellRing, BrainCircuit, CheckCircle2, KeyRound, ListChecks, Loader2,
+  Radar, ShieldCheck,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -48,11 +51,37 @@ export function AiSettingsPage() {
         <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">
           <Alert>
             <ShieldCheck className="h-4 w-4" />
-            <AlertTitle>Le conseiller garde la décision</AlertTitle>
+            <AlertTitle>Le copilote alerte, le conseiller décide</AlertTitle>
             <AlertDescription>
-              L’IA lit la fiche, les commentaires et les échanges uniquement lorsque vous lancez l’analyse. Elle produit une suggestion sourcée, sans modifier le lead.
+              Le radar métier surveille les échéances sans coût OpenAI. L’IA lit le détail d’une fiche uniquement lorsque vous lancez son analyse, puis propose une action sans modifier le lead.
             </AlertDescription>
           </Alert>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                icon: Radar,
+                title: 'Visible partout',
+                description: 'Urgences commerciales, documents, agenda et finance dans un seul radar.',
+              },
+              {
+                icon: ListChecks,
+                title: 'Actions concrètes',
+                description: 'Objectif, canal, date, checklist et brouillon de message quand il est utile.',
+              },
+              {
+                icon: BellRing,
+                title: 'Alertes prioritaires',
+                description: 'Une analyse urgente rejoint la cloche et les notifications déjà activées.',
+              },
+            ].map(({ icon: Icon, title, description }) => (
+              <Card key={title} className="rounded-xl p-4">
+                <Icon className="h-4 w-4 text-primary" />
+                <h2 className="mt-2 text-sm font-semibold">{title}</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+              </Card>
+            ))}
+          </div>
 
           <Card className="rounded-xl p-5">
             <div className="flex items-start gap-3">

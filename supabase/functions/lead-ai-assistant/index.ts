@@ -5,6 +5,8 @@ const INPUT_USD_PER_MILLION = 2;
 const OUTPUT_USD_PER_MILLION = 12;
 const MAX_NOTE_LENGTH = 2_000;
 const MAX_NOTES = 100;
+const MAX_COMMUNICATIONS = 50;
+const MAX_TASKS = 50;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -88,10 +90,13 @@ Deno.serve(async (req: Request) => {
       { data: notes, error: notesError },
       { data: communications, error: communicationsError },
       { data: tasks, error: tasksError },
+      { data: appointments, error: appointmentsError },
+      { data: cases, error: casesError },
+      { data: documentRequests, error: documentRequestsError },
     ] = await Promise.all([
       adminClient
         .from('leads')
-        .select('id, city, postal_code, intervention_city, intervention_postal_code, vehicle_make, vehicle_model, insurance, offer, glass_type, has_adas_camera, franchise_amount, score, source, status, campaign_name, advisor_notes, next_action_at, received_at, created_at, updated_at')
+        .select('id, assigned_user_id, city, postal_code, intervention_city, intervention_postal_code, vehicle_make, vehicle_model, insurance, offer, glass_type, has_adas_camera, franchise_amount, score, source, status, campaign_name, advisor_notes, next_action_at, received_at, created_at, updated_at')
         .eq('workspace_id', workspaceId)
         .eq('id', leadId)
         .maybeSingle(),
@@ -108,20 +113,44 @@ Deno.serve(async (req: Request) => {
         .eq('workspace_id', workspaceId)
         .eq('lead_id', leadId)
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(MAX_COMMUNICATIONS),
       adminClient
         .from('tasks')
         .select('id, title, description, type, priority, status, due_at, created_at')
         .eq('workspace_id', workspaceId)
         .eq('lead_id', leadId)
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(MAX_TASKS),
+      adminClient
+        .from('appointments')
+        .select('id, type, status, start_time, end_time, created_at')
+        .eq('workspace_id', workspaceId)
+        .eq('lead_id', leadId)
+        .order('start_time', { ascending: false })
+        .limit(20),
+      adminClient
+        .from('windscreen_cases')
+        .select('id, status, appointment_date, glass_type, has_sensors, has_adas_camera, insurance_claim_number, franchise_amount, offer, gift_type, gift_amount, created_at, updated_at')
+        .eq('workspace_id', workspaceId)
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      adminClient
+        .from('client_document_requests')
+        .select('id, status, expires_at, last_opened_at, submitted_at, client_document_items(label, required, status, rejection_reason)')
+        .eq('workspace_id', workspaceId)
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(5),
     ]);
     if (leadError) throw new Error('LEAD_READ_FAILED: ' + leadError.message);
     if (!lead) return jsonResponse({ error: 'Lead introuvable' }, 404);
     if (notesError) throw new Error('NOTES_READ_FAILED: ' + notesError.message);
     if (communicationsError) throw new Error('COMMUNICATIONS_READ_FAILED: ' + communicationsError.message);
     if (tasksError) throw new Error('TASKS_READ_FAILED: ' + tasksError.message);
+    if (appointmentsError) throw new Error('APPOINTMENTS_READ_FAILED: ' + appointmentsError.message);
+    if (casesError) throw new Error('CASES_READ_FAILED: ' + casesError.message);
+    if (documentRequestsError) throw new Error('DOCUMENTS_READ_FAILED: ' + documentRequestsError.message);
 
     // La limite porte sur les commentaires les plus récents, puis l'ordre
     // chronologique aide le modèle à reconstruire correctement la conversation.
@@ -144,26 +173,51 @@ Deno.serve(async (req: Request) => {
           items: {
             type: 'object',
             additionalProperties: false,
-            required: ['label', 'value', 'confidence', 'note_id'],
+            required: ['label', 'value', 'confidence', 'note_id', 'category'],
             properties: {
               label: { type: 'string' },
               value: { type: 'string' },
               confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
               note_id: { type: ['string', 'null'] },
+              category: {
+                type: 'string',
+                enum: ['availability', 'blocker', 'insurance', 'vehicle', 'glass', 'gift', 'preference', 'other'],
+              },
             },
           },
         },
         next_action: {
           type: ['object', 'null'],
           additionalProperties: false,
-          required: ['label', 'reason', 'suggested_at'],
+          required: [
+            'label', 'reason', 'suggested_at', 'priority', 'channel',
+            'objective', 'draft_message', 'checklist',
+          ],
           properties: {
             label: { type: 'string' },
             reason: { type: 'string' },
             suggested_at: { type: ['string', 'null'] },
+            priority: { type: 'string', enum: ['urgent', 'high', 'normal', 'low'] },
+            channel: { type: 'string', enum: ['call', 'sms', 'email', 'task', 'none'] },
+            objective: { type: 'string' },
+            draft_message: { type: ['string', 'null'] },
+            checklist: { type: 'array', items: { type: 'string' }, maxItems: 5 },
           },
         },
-        warnings: { type: 'array', items: { type: 'string' } },
+        warnings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['severity', 'category', 'message', 'note_id'],
+            properties: {
+              severity: { type: 'string', enum: ['critical', 'warning', 'info'] },
+              category: { type: 'string' },
+              message: { type: 'string' },
+              note_id: { type: ['string', 'null'] },
+            },
+          },
+        },
         evidence: {
           type: 'array',
           items: {
@@ -189,15 +243,22 @@ Deno.serve(async (req: Request) => {
         model: MODEL,
         reasoning: { effort: 'low' },
         store: false,
-        max_output_tokens: 1_200,
+        max_output_tokens: 1_800,
         instructions: [
           'Tu es un copilote CRM pour un centre de remplacement de vitrage automobile.',
           'Réponds uniquement en français et uniquement à partir des données fournies.',
           'N invente aucune information. Une absence doit rester une absence.',
           'Les commentaires originaux sont des sources immuables : ne propose jamais de les réécrire.',
-          'Repère notamment disponibilités, blocages, assurance, véhicule, vitrage, cadeau et prochaine action.',
+          'Ta réponse doit aider un conseiller à convertir le dossier sans perdre le client.',
+          'Repère les disponibilités, objections, blocages, assurance, véhicule, vitrage, cadeau, documents, rendez-vous et prochaine action.',
+          'Compare les champs structurés avec les notes, communications, tâches, rendez-vous et documents pour signaler les contradictions.',
+          'Classe urgent uniquement ce qui doit être traité aujourd hui ou met concrètement le dossier en risque.',
+          'La prochaine action doit être unique, concrète, datée lorsque les données permettent de proposer une date, et avoir un objectif mesurable.',
+          'Propose un court brouillon de message seulement pour un SMS ou un e-mail. Il doit rester prudent et ne promettre aucune prise en charge.',
+          'La checklist doit contenir au plus cinq vérifications directement utiles pendant cette action.',
           'Ne décide jamais d un changement de statut et ne donne aucun conseil juridique ou assurantiel.',
           'Chaque fait provenant d une note doit référencer exactement son note_id.',
+          'Une alerte provenant d une note doit elle aussi référencer exactement son note_id.',
         ].join(' '),
         input: JSON.stringify({
           current_time: new Date().toISOString(),
@@ -207,6 +268,9 @@ Deno.serve(async (req: Request) => {
           open_tasks: (tasks ?? []).filter(
             (task) => task.status !== 'done' && task.status !== 'cancelled',
           ),
+          recent_appointments: appointments ?? [],
+          cases: cases ?? [],
+          document_requests: documentRequests ?? [],
         }),
         text: {
           format: {
@@ -243,6 +307,14 @@ Deno.serve(async (req: Request) => {
           return typeof entry.note_id === 'string' && !noteIds.has(entry.note_id)
             ? { ...entry, note_id: null }
             : entry;
+      })
+      : [];
+    const warnings = Array.isArray(analysis.warnings)
+      ? analysis.warnings.map((item) => {
+          const entry = asObject(item);
+          return typeof entry.note_id === 'string' && !noteIds.has(entry.note_id)
+            ? { ...entry, note_id: null }
+            : entry;
         })
       : [];
     const usage = asObject(responsePayload.usage);
@@ -264,7 +336,7 @@ Deno.serve(async (req: Request) => {
       summary: typeof analysis.summary === 'string' ? analysis.summary : '',
       detected_information: detectedInformation,
       next_action: analysis.next_action ?? null,
-      warnings: Array.isArray(analysis.warnings) ? analysis.warnings : [],
+      warnings,
       evidence,
       source_notes_count: sourceNotes.length,
       source_latest_note_at: sourceNotes.at(-1)?.created_at ?? null,
@@ -279,6 +351,44 @@ Deno.serve(async (req: Request) => {
       .select('*')
       .single();
     if (insertError) throw new Error('INSIGHT_WRITE_FAILED: ' + insertError.message);
+
+    const nextAction = asObject(analysis.next_action);
+    const priority = typeof nextAction.priority === 'string' ? nextAction.priority : 'normal';
+    const hasCriticalWarning = warnings.some(
+      (warning) => asObject(warning).severity === 'critical',
+    );
+    if (priority === 'urgent' || priority === 'high' || hasCriticalWarning) {
+      try {
+        const targetUserId = typeof lead.assigned_user_id === 'string'
+          ? lead.assigned_user_id
+          : userId;
+        const link = '/interventions/' + leadId;
+        const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+        const { data: existingAlert } = await adminClient
+          .from('notifications')
+          .select('id')
+          .eq('workspace_id', workspaceId)
+          .eq('user_id', targetUserId)
+          .eq('type', 'ai')
+          .eq('link', link)
+          .eq('read', false)
+          .gte('created_at', since)
+          .limit(1)
+          .maybeSingle();
+        if (!existingAlert) {
+          await adminClient.from('notifications').insert({
+            workspace_id: workspaceId,
+            user_id: targetUserId,
+            title: 'Copilote : action prioritaire',
+            body: 'Une analyse a détecté une action importante à vérifier dans le CRM.',
+            type: 'ai',
+            link,
+          });
+        }
+      } catch (notificationError) {
+        console.warn('AI_NOTIFICATION_FAILED', notificationError);
+      }
+    }
 
     return jsonResponse({ insight });
   } catch (error) {
