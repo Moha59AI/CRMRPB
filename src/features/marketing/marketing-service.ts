@@ -69,6 +69,35 @@ export interface MarketingChannelRow {
   estimatedMargin: number;
 }
 
+export interface MarketingInvoiceDetail {
+  id: string;
+  number: string;
+  status: string;
+  amount: number;
+  credited: number;
+  netAmount: number;
+  collected: number;
+}
+
+export interface MarketingTransformedCaseRow {
+  id: string;
+  leadId: string;
+  caseId: string | null;
+  customerName: string;
+  arrivedAt: string;
+  channel: MarketingLeadChannel;
+  channelLabel: string;
+  campaignName: string;
+  caseNumber: string;
+  caseStatus: string | null;
+  glassLabel: string | null;
+  invoices: MarketingInvoiceDetail[];
+  invoicedRevenue: number;
+  creditedRevenue: number;
+  netRevenue: number;
+  collectedRevenue: number;
+}
+
 export interface MarketingSearchTermRow {
   id: string;
   searchTerm: string;
@@ -98,6 +127,7 @@ export interface MarketingDashboardData {
   searchTermsAvailable: boolean;
   channels: MarketingChannelRow[];
   financialAttribution: FinancialAttributionBreakdown;
+  transformedCases: MarketingTransformedCaseRow[];
 }
 
 type MetricRow = {
@@ -114,6 +144,9 @@ type MetricRow = {
 
 type LeadRow = {
   id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
   arrive_le: string;
   status: string;
   google_campaign_id: string | null;
@@ -131,7 +164,13 @@ type LeadRow = {
 
 type CandidateLeadRow = Pick<LeadRow, 'id' | 'arrive_le' | 'contact_id'>;
 
-type CaseRow = { id: string; lead_id: string | null; contact_id: string | null; status: string };
+type CaseRow = {
+  id: string;
+  case_number: string;
+  lead_id: string | null;
+  contact_id: string | null;
+  status: string;
+};
 type AppointmentRow = {
   lead_id: string | null;
   case_id: string | null;
@@ -158,6 +197,7 @@ type SearchTermMetricRow = {
 
 type InvoiceRow = {
   id: string;
+  invoice_number: string;
   case_id: string | null;
   contact_id: string | null;
   status: string;
@@ -185,6 +225,7 @@ type LeadFinance = {
   marginKnownInvoices: number;
   invoicesByCase: number;
   invoicesByContact: number;
+  invoiceDetails: MarketingInvoiceDetail[];
 };
 
 const qualifiedStatuses = new Set([
@@ -235,6 +276,7 @@ const emptyFinance = (): LeadFinance => ({
   marginKnownInvoices: 0,
   invoicesByCase: 0,
   invoicesByContact: 0,
+  invoiceDetails: [],
 });
 
 const channelLabels: Record<MarketingLeadChannel, string> = {
@@ -343,6 +385,15 @@ function reconcileFinance(
     if (margin > 0) finance.marginKnownInvoices++;
     if (exactLeadId) finance.invoicesByCase++;
     else finance.invoicesByContact++;
+    finance.invoiceDetails.push({
+      id: invoice.id,
+      number: invoice.invoice_number,
+      status: invoice.status,
+      amount: numeric(invoice.amount_ttc),
+      credited: 0,
+      netAmount: numeric(invoice.amount_ttc),
+      collected: numeric(invoice.amount_paid),
+    });
   }
 
   for (const credit of credits) {
@@ -350,7 +401,16 @@ function reconcileFinance(
     const leadId = (credit.invoice_id ? invoiceToLead.get(credit.invoice_id) ?? null : null)
       ?? leadForContact(credit.contact_id, credit.issue_date ?? credit.created_at);
     if (!leadId) continue;
-    ensureFinance(leadId).creditedRevenue += numeric(credit.amount_ttc);
+    const finance = ensureFinance(leadId);
+    const amount = numeric(credit.amount_ttc);
+    finance.creditedRevenue += amount;
+    if (credit.invoice_id) {
+      const invoice = finance.invoiceDetails.find((item) => item.id === credit.invoice_id);
+      if (invoice) {
+        invoice.credited += amount;
+        invoice.netAmount = invoice.amount - invoice.credited;
+      }
+    }
   }
 
   return financeByLead;
@@ -381,6 +441,13 @@ function campaignForLead(
   }
   attribution.unresolved++;
   return { id: '__google_non_attribue__', name: 'Google Ads — campagne non identifiée' };
+}
+
+function campaignNameForLead(lead: LeadRow): string {
+  if (lead.google_campaign_id) return lead.campaign_name || `Campagne ${lead.google_campaign_id}`;
+  if (lead.utm_campaign) return lead.campaign_name || lead.utm_campaign;
+  if (lead.gclid || lead.gbraid || lead.wbraid) return 'Clic Google — campagne à résoudre';
+  return lead.campaign_name || 'Google Ads — campagne non identifiée';
 }
 
 function aggregatePeriod(
@@ -593,7 +660,7 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
       .order('metric_date', { ascending: true }),
     supabase
       .from('leads')
-      .select('id,arrive_le,status,contact_id,source,google_campaign_id,campaign_name,utm_source,utm_medium,utm_campaign,gclid,gbraid,wbraid,raw_payload')
+      .select('id,first_name,last_name,phone,arrive_le,status,contact_id,source,google_campaign_id,campaign_name,utm_source,utm_medium,utm_campaign,gclid,gbraid,wbraid,raw_payload')
       .gte('arrive_le', previousStart.toISOString())
       .lt('arrive_le', endExclusive.toISOString())
       .or('source.eq.google_ads,gclid.not.is.null,gbraid.not.is.null,wbraid.not.is.null,google_campaign_id.not.is.null,utm_source.ilike.%google%,utm_medium.ilike.%cpc%'),
@@ -614,7 +681,7 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
   const leadIds = leads.map((lead) => lead.id);
 
   const caseResult = leadIds.length
-    ? await supabase.from('windscreen_cases').select('id,lead_id,contact_id,status').in('lead_id', leadIds)
+    ? await supabase.from('windscreen_cases').select('id,case_number,lead_id,contact_id,status').in('lead_id', leadIds)
     : { data: [] as CaseRow[], error: null };
   if (caseResult.error) throw new Error(caseResult.error.message);
   const cases = (caseResult.data ?? []) as CaseRow[];
@@ -662,7 +729,7 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
   const invoiceResult = financeFilter
     ? await supabase
       .from('invoices')
-      .select('id,case_id,contact_id,status,amount_ttc,amount_paid,estimated_margin,issue_date')
+      .select('id,invoice_number,case_id,contact_id,status,amount_ttc,amount_paid,estimated_margin,issue_date')
       .or(financeFilter)
       .limit(5000)
     : { data: [] as InvoiceRow[], error: null };
@@ -703,6 +770,40 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
     previousMetrics, previousLeads, appointmentLeadIds, transformedLeadIds,
     interventionLeadIds, financeByLead,
   );
+  const caseByLead = new Map(cases
+    .filter((item) => item.lead_id)
+    .map((item) => [item.lead_id as string, item]));
+  const transformedCases = currentLeads
+    .filter((lead) => transformedLeadIds.has(lead.id))
+    .map<MarketingTransformedCaseRow>((lead) => {
+      const dossier = caseByLead.get(lead.id);
+      const finance = financeByLead.get(lead.id) ?? emptyFinance();
+      const payload = lead.raw_payload ?? {};
+      const onifyId = String(payload.onify_glass_dossier_id ?? '').trim();
+      const customerName = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim()
+        || lead.phone
+        || 'Client non identifié';
+      const channel = leadChannel(lead);
+      return {
+        id: dossier?.id ?? `lead:${lead.id}`,
+        leadId: lead.id,
+        caseId: dossier?.id ?? null,
+        customerName,
+        arrivedAt: lead.arrive_le,
+        channel,
+        channelLabel: channelLabels[channel],
+        campaignName: campaignNameForLead(lead),
+        caseNumber: dossier?.case_number || (onifyId ? `Onify #${onifyId}` : 'Dossier sans numéro'),
+        caseStatus: dossier?.status ?? (lead.status === 'converted' ? 'converted' : null),
+        glassLabel: String(payload.onify_glass_label ?? '').trim() || null,
+        invoices: finance.invoiceDetails,
+        invoicedRevenue: finance.invoicedRevenue,
+        creditedRevenue: finance.creditedRevenue,
+        netRevenue: finance.invoicedRevenue - finance.creditedRevenue,
+        collectedRevenue: finance.collectedRevenue,
+      };
+    })
+    .sort((a, b) => b.arrivedAt.localeCompare(a.arrivedAt));
 
   return {
     totals: current.totals,
@@ -715,5 +816,6 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
     searchTermsAvailable,
     channels: current.channels,
     financialAttribution: current.financialAttribution,
+    transformedCases,
   };
 }

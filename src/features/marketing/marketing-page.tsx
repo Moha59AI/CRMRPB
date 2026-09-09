@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  AlertCircle, BadgeEuro, CalendarCheck2, CircleDollarSign, Coins,
+  AlertCircle, ArrowUpRight, BadgeEuro, CalendarCheck2, CircleDollarSign, Coins,
   Download, Gauge, Globe2, Link2, MousePointerClick, PhoneCall,
-  RefreshCw, Settings2, Target, TrendingUp, TriangleAlert, UserCheck,
+  ReceiptText, RefreshCw, Settings2, Target, TrendingUp, TriangleAlert, UserCheck,
   UserPlus, Webhook, Wrench,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
@@ -26,7 +26,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { syncGoogleAds } from '@/features/integrations/google/google-ads-service';
 import {
   fetchMarketingDashboard, type MarketingCampaignRow, type MarketingDashboardData,
-  type MarketingSearchTermRow,
+  type MarketingSearchTermRow, type MarketingTransformedCaseRow,
 } from './marketing-service';
 
 const chartConfig = {
@@ -300,6 +300,8 @@ export function MarketingPage() {
               </div>
 
               <ProfitabilitySection data={data} />
+
+              <TransformedCasesSection cases={data.transformedCases} />
 
               <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
                 <Card className="marketing-card marketing-chart-card rounded-xl p-5">
@@ -622,6 +624,126 @@ function ProfitabilitySection({ data }: { data: MarketingDashboardData }) {
       </div>
     </Card>
   );
+}
+
+function TransformedCasesSection({ cases }: { cases: MarketingTransformedCaseRow[] }) {
+  const withoutInvoice = cases.filter((item) => item.invoices.length === 0).length;
+
+  return (
+    <Card className="marketing-card overflow-hidden rounded-xl">
+      <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-5 w-5 text-primary" />
+            <h2 className="text-sm font-semibold">Dossiers transformés et facturation</h2>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Toutes les transformations Google de la période restent visibles, y compris celles qui attendent encore leur facture.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="rounded-full">{integer.format(cases.length)} dossier{cases.length > 1 ? 's' : ''}</Badge>
+          {withoutInvoice > 0 && (
+            <Badge className="rounded-full border-warning/30 bg-warning/10 text-warning-foreground">
+              {integer.format(withoutInvoice)} sans facture
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {cases.length ? (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="min-w-[190px]">Client</TableHead>
+                <TableHead className="min-w-[150px]">Dossier Glass</TableHead>
+                <TableHead className="min-w-[155px]">Origine</TableHead>
+                <TableHead className="min-w-[210px]">Campagne</TableHead>
+                <TableHead className="min-w-[210px]">Facture</TableHead>
+                <TableHead className="text-right">Facturé</TableHead>
+                <TableHead className="text-right">Avoirs</TableHead>
+                <TableHead className="text-right">CA net</TableHead>
+                <TableHead className="text-right">Encaissé</TableHead>
+                <TableHead className="w-[70px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cases.map((item) => (
+                <TableRow key={item.id} className={item.invoices.length === 0 ? 'bg-warning/5' : undefined}>
+                  <TableCell>
+                    <p className="font-medium">{item.customerName}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Lead du {new Date(item.arrivedAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium">{item.caseNumber}</p>
+                    {item.glassLabel && <p className="mt-1 max-w-[220px] text-[11px] text-muted-foreground">{item.glassLabel}</p>}
+                  </TableCell>
+                  <TableCell><LeadChannelBadge item={item} /></TableCell>
+                  <TableCell>
+                    <p className="max-w-[240px] truncate text-xs" title={item.campaignName}>{item.campaignName}</p>
+                  </TableCell>
+                  <TableCell>
+                    {item.invoices.length ? (
+                      <div className="space-y-1.5">
+                        {item.invoices.map((invoice) => (
+                          <div key={invoice.id}>
+                            <p className="text-xs font-medium">{invoice.number}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {euro.format(invoice.amount)} · {invoiceStatusLabel(invoice.status)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <Badge className="border-warning/30 bg-warning/10 text-warning-foreground">Facture manquante</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{item.invoices.length ? euro.format(item.invoicedRevenue) : '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{item.creditedRevenue > 0 ? `− ${euro.format(item.creditedRevenue)}` : '—'}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{item.invoices.length ? euro.format(item.netRevenue) : '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{item.invoices.length ? euro.format(item.collectedRevenue) : '—'}</TableCell>
+                  <TableCell>
+                    <Button asChild variant="ghost" size="icon" className="rounded-full">
+                      <Link to={`/interventions/${item.leadId}`} aria-label={`Ouvrir le dossier de ${item.customerName}`}>
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="p-10 text-center text-sm text-muted-foreground">Aucun dossier Google transformé sur cette période.</div>
+      )}
+    </Card>
+  );
+}
+
+function LeadChannelBadge({ item }: { item: MarketingTransformedCaseRow }) {
+  const Icon = item.channel === 'telephone' ? PhoneCall : item.channel === 'webhook' ? Webhook : Globe2;
+  return (
+    <Badge variant="secondary" className="gap-1.5 whitespace-nowrap rounded-full">
+      <Icon className="h-3.5 w-3.5" />
+      {item.channelLabel}
+    </Badge>
+  );
+}
+
+function invoiceStatusLabel(status: string): string {
+  switch (status) {
+    case 'paid': return 'Payée';
+    case 'partial': return 'Partiellement payée';
+    case 'sent': return 'Envoyée';
+    case 'overdue': return 'En retard';
+    case 'cancelled': return 'Annulée';
+    case 'draft': return 'Brouillon';
+    default: return status || 'Statut inconnu';
+  }
 }
 
 function ProfitMetric({ icon: Icon, label, value, detail, tone = 'default' }: {

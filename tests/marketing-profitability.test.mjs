@@ -28,3 +28,19 @@ test('la page expose le ROAS, la marge apres publicite et les canaux Google', as
   assert.match(page, /Les dépenses restent au niveau campagne/);
   assert.match(page, /Formulaires \/ webhook|channel\.label/);
 });
+
+test('chaque dossier transforme reste visible avec ses factures et ses montants', async () => {
+  const service = await read('src/features/marketing/marketing-service.ts');
+  const page = await read('src/features/marketing/marketing-page.tsx');
+
+  assert.match(service, /MarketingTransformedCaseRow/);
+  assert.match(service, /invoiceDetails\.push/);
+  assert.match(service, /onify_glass_dossier_id/);
+  assert.match(service, /transformedCases/);
+  assert.match(page, /Dossiers transformés et facturation/);
+  assert.match(page, /Facture manquante/);
+  assert.match(page, /item\.invoicedRevenue/);
+  assert.match(page, /item\.netRevenue/);
+  assert.match(page, /item\.collectedRevenue/);
+  assert.match(page, /\/interventions\/\$\{item\.leadId\}/);
+});
