@@ -30,10 +30,28 @@ test('le navigateur inscrit le PushManager et le worker traite les push applicat
   assert.match(worker, /registration\.showNotification/);
 });
 
-test('le push externe ne contient aucune donnee client', async () => {
+test('le push nouveau lead autorise seulement la source et un code postal valide', async () => {
   const edge = await read('supabase/functions/web-push/index.ts');
-  assert.match(edge, /title: 'Nouvelle notification CRM'/);
-  assert.match(edge, /Ouvrez le CRM pour consulter la nouvelle information/);
+  const migration = await read('supabase/migrations/20260910110000_new_lead_push_postal_code.sql');
+
+  assert.match(migration, /add column if not exists push_title text/);
+  assert.match(migration, /add column if not exists push_body text/);
+  assert.match(migration, /regexp_replace\(coalesce\(new\.postal_code, ''\), '\[\^0-9\]'/);
+  assert.match(migration, /length\(v_code_postal\) <> 5/);
+  assert.match(migration, /'Code postal ' \|\| coalesce\(v_code_postal, 'non renseigné'\)/);
+  assert.match(migration, /if new\.source = 'manual' then/);
+  assert.match(migration, /'\/interventions\/' \|\| new\.id/);
+
+  assert.match(edge, /\.select\('id, user_id, type, link, push_title, push_body'\)/);
+  assert.match(edge, /notification\.type !== 'lead'/);
+  assert.match(edge, /safeLeadPushTitles\.has\(title\)/);
+  assert.match(edge, /\^Code postal \(\?:\[0-9\]\{5\}\|non renseigné\)\$/);
+  assert.match(edge, /title: safePush\?\.title \?\? 'Nouvelle notification CRM'/);
+  assert.match(edge, /body: safePush\?\.body \?\? 'Ouvrez le CRM pour consulter la nouvelle information\.'/);
+});
+
+test('le push externe ne lit jamais le nom, le telephone ou le contenu detaille', async () => {
+  const edge = await read('supabase/functions/web-push/index.ts');
   assert.doesNotMatch(edge, /notification\.title/);
   assert.doesNotMatch(edge, /notification\.body/);
   assert.doesNotMatch(edge, /\.select\([^)]*(?:first_name|last_name|phone)/);

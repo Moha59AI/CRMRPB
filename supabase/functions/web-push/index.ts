@@ -18,6 +18,31 @@ type SubscriptionInput = {
 
 type VapidKeys = { publicKey: string; privateKey: string };
 
+const safeLeadPushTitles = new Set([
+  'Nouveau lead Meta',
+  'Nouveau lead Google Ads',
+  'Nouveau lead CRM',
+]);
+
+function safeLeadPushContent(notification: {
+  type?: unknown;
+  push_title?: unknown;
+  push_body?: unknown;
+}): { title: string; body: string } | null {
+  if (notification.type !== 'lead') return null;
+
+  const title = typeof notification.push_title === 'string'
+    ? notification.push_title.trim()
+    : '';
+  const body = typeof notification.push_body === 'string'
+    ? notification.push_body.trim()
+    : '';
+
+  if (!safeLeadPushTitles.has(title)) return null;
+  if (!/^Code postal (?:[0-9]{5}|non renseigné)$/u.test(body)) return null;
+  return { title, body };
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -79,7 +104,7 @@ async function getOrCreateVapidKeys(): Promise<VapidKeys> {
     proposed_secret: JSON.stringify(generated),
   });
   if (error || typeof data !== 'string') {
-    throw new Error(`Impossible de stocker les cles push : ${error?.message ?? 'reponse invalide'}`);
+    throw new Error('Impossible de stocker les cles push : ' + (error?.message ?? 'reponse invalide'));
   }
   const parsed = JSON.parse(data) as Partial<VapidKeys>;
   if (!parsed.publicKey || !parsed.privateKey) throw new Error('Cles push invalides dans Vault');
@@ -199,11 +224,13 @@ async function dispatch(body: Record<string, unknown>) {
 
   const { data: notification, error: notificationError } = await admin
     .from('notifications')
-    .select('id, user_id, type, link')
+    .select('id, user_id, type, link, push_title, push_body')
     .eq('id', notificationId)
     .maybeSingle();
   if (notificationError) throw new Error(notificationError.message);
   if (!notification?.user_id) return json({ success: true, sent: 0 });
+
+  const safePush = safeLeadPushContent(notification);
 
   const { data: subscriptions, error: subscriptionsError } = await admin
     .from('push_subscriptions')
@@ -214,9 +241,10 @@ async function dispatch(body: Record<string, unknown>) {
   const results = await Promise.all((subscriptions ?? []).map((subscription) =>
     sendToSubscription(subscription, {
       // Le push traverse le service Apple/Google/Mozilla et peut apparaitre
-      // sur un ecran verrouille : aucun nom, telephone ou detail client.
-      title: 'Nouvelle notification CRM',
-      body: 'Ouvrez le CRM pour consulter la nouvelle information.',
+      // sur un ecran verrouille : seuls la source du lead et un code postal
+      // strictement valide sont autorises. Tout autre contenu reste generique.
+      title: safePush?.title ?? 'Nouvelle notification CRM',
+      body: safePush?.body ?? 'Ouvrez le CRM pour consulter la nouvelle information.',
       link: notification.link || '/today',
       tag: notification.id,
     })
