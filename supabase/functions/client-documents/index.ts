@@ -14,6 +14,21 @@ const allowedMime = new Map([
   ['image/heif', 'heif'],
 ]);
 
+const defaultPortalSettings = {
+  page_title: 'Ajoutez les pièces de votre dossier',
+  page_intro: 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.',
+  completion_title: 'Toutes les pièces nécessaires sont bien reçues',
+  completion_message: 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.',
+  show_gift: true,
+};
+
+const defaultDocumentRules = [
+  { document_type: 'registration', enabled: true },
+  { document_type: 'insurance_cert', enabled: true },
+  { document_type: 'technical_inspection', enabled: true },
+  { document_type: 'other', enabled: true },
+];
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -34,7 +49,20 @@ async function sha256(value: string): Promise<string> {
 }
 
 function validToken(value: unknown): value is string {
-  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+  return typeof value === 'string'
+    && /^(?:[0-9a-f]{64}|[A-Za-z0-9_-]{24})$/.test(value);
+}
+
+function visibleDocumentTypes(value: unknown): Set<string> {
+  const rawRules = Array.isArray(value) ? value : defaultDocumentRules;
+  const types = rawRules.flatMap((raw): string[] => {
+    if (!raw || typeof raw !== 'object') return [];
+    const rule = raw as Record<string, unknown>;
+    return rule.enabled === true && typeof rule.document_type === 'string'
+      ? [rule.document_type]
+      : [];
+  });
+  return new Set(types.length > 0 ? types : defaultDocumentRules.map((rule) => rule.document_type));
 }
 
 async function notifyDocumentDeposit(itemId: string, workspaceId: string): Promise<void> {
@@ -111,17 +139,29 @@ async function session(token: string) {
   const request = await findRequest(token);
   if (!request) return json({ error: 'Ce lien est invalide ou a expiré.' }, 404);
 
-  const [{ data: lead, error: leadError }, { data: items, error: itemsError }] = await Promise.all([
+  const [
+    { data: lead, error: leadError },
+    { data: items, error: itemsError },
+    { data: savedSettings, error: settingsError },
+  ] = await Promise.all([
     admin.from('leads').select('first_name, last_name, offer').eq('id', request.lead_id).single(),
     admin.from('client_document_items')
       .select('id, document_type, label, required, status, original_name, mime_type, size_bytes, storage_path, uploaded_at, rejection_reason')
       .eq('request_id', request.id)
       .order('created_at'),
+    admin.from('client_document_portal_settings')
+      .select('page_title, page_intro, completion_title, completion_message, show_gift, document_rules')
+      .eq('workspace_id', request.workspace_id)
+      .maybeSingle(),
   ]);
   if (leadError) throw leadError;
   if (itemsError) throw itemsError;
+  if (settingsError) console.warn('Reglages du portail indisponibles, valeurs par defaut utilisees', settingsError.message);
 
-  const enriched = await Promise.all((items ?? []).map(async (item) => {
+  const visibleTypes = visibleDocumentTypes(savedSettings?.document_rules);
+  const enriched = await Promise.all((items ?? []).filter((item) => (
+    visibleTypes.has(item.document_type)
+  )).map(async (item) => {
     let preview_url: string | null = null;
     if (item.storage_path && ['uploaded', 'validated'].includes(item.status)) {
       const { data } = await admin.storage.from(bucket).createSignedUrl(item.storage_path, 300);
@@ -152,6 +192,11 @@ async function session(token: string) {
     request_status: request.status,
     expires_at: request.expires_at,
     submitted_at: request.submitted_at,
+    page_title: savedSettings?.page_title ?? defaultPortalSettings.page_title,
+    page_intro: savedSettings?.page_intro ?? defaultPortalSettings.page_intro,
+    completion_title: savedSettings?.completion_title ?? defaultPortalSettings.completion_title,
+    completion_message: savedSettings?.completion_message ?? defaultPortalSettings.completion_message,
+    show_gift: savedSettings?.show_gift ?? defaultPortalSettings.show_gift,
     items: enriched,
   });
 }

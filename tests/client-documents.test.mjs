@@ -14,13 +14,18 @@ test('le portail documentaire ne rend ni le bucket ni les tables publics', async
   assert.doesNotMatch(migration, /to anon/);
 });
 
-test('le jeton du client est long et seule son empreinte est conservee', async () => {
-  const migration = await read('supabase/migrations/20260907120000_portail_documents_client.sql');
+test('le lien court conserve un code aleatoire robuste et seule son empreinte est stockee', async () => {
+  const migration = await read('supabase/migrations/20260914150000_client_document_portal_settings.sql');
   const edge = await read('supabase/functions/client-documents/index.ts');
-  assert.match(migration, /gen_random_bytes\(32\)/);
+  const service = await read('src/services/client-documents-service.ts');
+  const routes = await read('src/app/app-routes.tsx');
+  assert.match(migration, /gen_random_bytes\(18\)/);
   assert.match(migration, /digest\(convert_to\(v_token, 'UTF8'\), 'sha256'\)/);
-  assert.match(edge, /\^\[0-9a-f\]\{64\}\$/);
+  assert.match(edge, /\[0-9a-f\]\{64\}/);
+  assert.match(edge, /\[A-Za-z0-9_-\]\{24\}/);
   assert.match(edge, /sha256\(token\)/);
+  assert.match(service, /\/d\/\$\{encodeURIComponent\(token\)\}/);
+  assert.match(routes, /path="\/d\/:token"/);
 });
 
 test('les depots refusent les formats dangereux et les fichiers trop lourds', async () => {
@@ -42,7 +47,8 @@ test('la fiche et les relances envoient le nouveau lien client', async () => {
   assert.match(fiche, /createClientDocumentRequest/);
   assert.match(relances, /createClientDocumentRequest/);
   assert.match(panel, /Collecte des documents/);
-  assert.match(service, /https:\/\/crm\.relaisparebrise\.fr\/documents/);
+  assert.match(service, /https:\/\/crm\.relaisparebrise\.fr/);
+  assert.match(service, /\/d\/\$\{encodeURIComponent\(token\)\}/);
   assert.doesNotMatch(service, /https:\/\/client\.relaisparebrise\.fr\/documents/);
 });
 
@@ -82,6 +88,33 @@ test('la collecte demande les deux pieces obligatoires et propose deux pieces fa
   assert.match(page, /\{item\.required \? 'Obligatoire' : 'Facultatif'\}/);
   assert.match(page, /itemTypes\.has\('technical_inspection'\)/);
   assert.match(page, /itemTypes\.has\('other'\)/);
+});
+
+test('les reglages permettent de personnaliser le portail sans contourner les droits', async () => {
+  const migration = await read('supabase/migrations/20260914150000_client_document_portal_settings.sql');
+  const settingsPage = await read('src/features/client-documents/client-document-settings-page.tsx');
+  const settingsService = await read('src/features/client-documents/client-document-settings-service.ts');
+  const routes = await read('src/app/app-routes.tsx');
+  const navigation = await read('src/config/navigation.ts');
+  const permissions = await read('src/config/permissions.ts');
+  const edge = await read('supabase/functions/client-documents/index.ts');
+
+  assert.match(migration, /client_document_portal_settings enable row level security/);
+  assert.equal((migration.match(/create policy "(?:select|insert|update|delete)_client_document_portal_settings"/g) ?? []).length, 4);
+  assert.match(migration, /valid_client_document_rules/);
+  assert.match(migration, /v_role not in \('admin', 'manager'\)/);
+  assert.match(migration, /request\.status = 'open'/);
+  assert.match(settingsService, /if \(error\) throw new Error\(error\.message\)/);
+  assert.match(settingsService, /save_client_document_portal_settings/);
+  assert.match(settingsPage, /Aperçu client/);
+  assert.match(settingsPage, /Afficher le cadeau choisi/);
+  assert.match(settingsPage, /Obligatoire/);
+  assert.match(settingsPage, /migration des réglages documentaires doit être appliquée/);
+  assert.match(routes, /path="documents" element=\{charger\(<ClientDocumentSettingsPage/);
+  assert.match(navigation, /path: '\/settings\/documents'/);
+  assert.match(permissions, /'\/settings\/documents': \['admin', 'manager'\]/);
+  assert.match(edge, /client_document_portal_settings/);
+  assert.match(edge, /visibleDocumentTypes/);
 });
 
 test('chaque depot prepare une alerte email interne sans transmettre les donnees client', async () => {

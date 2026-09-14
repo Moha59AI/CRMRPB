@@ -94,8 +94,9 @@ Prospects reçus depuis Meta et autres sources.
 Liens privés créés depuis une fiche lead pour collecter les pièces du client.
 Le jeton complet n'est jamais stocké : seule son empreinte SHA-256 reste en base.
 Un nouveau lien révoque la demande ouverte précédente.
-Le portail est provisoirement servi dans `/documents` sur le domaine du CRM,
-afin de conserver `client.relaisparebrise.fr` chez Onify sans interruption.
+Les nouveaux liens utilisent la route courte `/d/<code>` sur le domaine du CRM.
+L'ancienne route `/documents?token=...` reste compatible afin de ne pas casser
+les SMS déjà envoyés et `client.relaisparebrise.fr` reste chez Onify.
 | Colonne | Type | Description |
 |---------|------|-------------|
 | id | uuid PK | |
@@ -128,7 +129,21 @@ demande, afin que la politique Storage cloisonne les aperçus des collaborateurs
 Une nouvelle demande contient toujours quatre emplacements : carte grise et
 attestation d'assurance obligatoires, puis contrôle technique et autre document
 facultatifs. La complétude du dossier dépend uniquement des deux pièces
-obligatoires.
+obligatoires. Cette liste ainsi que les principaux textes du portail sont
+modifiables par les administrateurs et responsables dans Réglages > Documents
+clients. Les changements de pièces sont répercutés sur les demandes ouvertes.
+
+### client_document_portal_settings
+Configuration du portail public, isolée par espace de travail. Les règles de
+documents sont limitées aux quatre types pris en charge et validées en base.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| workspace_id | uuid PK → workspaces | Une configuration par espace |
+| page_title, page_intro | text | Textes d'accueil du portail |
+| completion_title, completion_message | text | Confirmation après réception |
+| show_gift | boolean | Affiche le cadeau réel du lead |
+| document_rules | jsonb | Libellé, visibilité et caractère obligatoire des quatre pièces |
+| updated_by, created_at, updated_at | uuid/timestamptz | Traçabilité du réglage |
 
 ### postal_code_cities
 Référentiel local des couples code postal/commune de France.

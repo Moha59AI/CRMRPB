@@ -31,6 +31,7 @@ Function doit s'y conformer.
 | `case_documents` | LCMS | LCMS | LCM | LC (les siens) | L |
 | `client_document_requests` | LCMS | LCMS | LCM | — | L |
 | `client_document_items` | LCMS | LCMS | LCM | — | L |
+| `client_document_portal_settings` | LCMS | LCM | — | — | — |
 
 Le technicien voit les coordonnées du client de ses interventions : sans le
 téléphone, il ne peut ni prévenir d'un retard ni se faire ouvrir un portail.
@@ -123,6 +124,7 @@ Karim » sans requête privilégiée. Seul l'administrateur y écrit.
 | `meta-lead-webhook`, `inbound-webhook` | Public, protégées par signature ou clé d'endpoint |
 | `meta-process-queue` | `service_role` uniquement (cron) |
 | `create_client_document_request` | Administrateur, responsable, conseiller |
+| `save_client_document_portal_settings` | Administrateur, responsable |
 | `client-documents` | Public avec jeton privé valide ; aucune lecture anonyme directe des tables ou du bucket |
 | `ai-store-secret` | Administrateur — clé stockée dans Supabase Vault |
 | `lead-ai-assistant` | Administrateur, responsable, conseiller — analyse manuelle sans écriture sur le lead |

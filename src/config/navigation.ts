@@ -14,6 +14,7 @@ import {
   ChartNoAxesCombined,
   DatabaseZap,
   BrainCircuit,
+  Files,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react';
@@ -201,6 +202,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/relances',
         icon: BellRing,
         description: 'Quand un lead revient dans la file, et quand il en sort',
+      },
+      {
+        label: 'Documents clients',
+        path: '/settings/documents',
+        icon: Files,
+        description: 'Page client et pièces demandées',
       },
     ],
   },

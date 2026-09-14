@@ -36,6 +36,11 @@ export interface ClientDocumentSession {
   request_status: ClientDocumentRequestSummary['status'];
   expires_at: string;
   submitted_at: string | null;
+  page_title?: string;
+  page_intro?: string;
+  completion_title?: string;
+  completion_message?: string;
+  show_gift?: boolean;
   items: Omit<ClientDocumentItem, 'storage_path'>[];
 }
 
@@ -45,12 +50,16 @@ interface CreatedRequest {
   expires_at: string;
 }
 
-const portalBaseUrl = (
+const configuredPortalUrl = (
   import.meta.env.VITE_CLIENT_PORTAL_URL as string | undefined
-)?.replace(/\/$/, '') || 'https://crm.relaisparebrise.fr/documents';
+)?.replace(/\/$/, '') || 'https://crm.relaisparebrise.fr';
+
+const portalBaseUrl = configuredPortalUrl
+  .replace(/\/documents$/, '')
+  .replace(/\/d$/, '');
 
 export function clientDocumentPortalUrl(token: string): string {
-  return `${portalBaseUrl}?token=${encodeURIComponent(token)}`;
+  return `${portalBaseUrl}/d/${encodeURIComponent(token)}`;
 }
 
 export async function createClientDocumentRequest(leadId: string): Promise<CreatedRequest & { url: string }> {

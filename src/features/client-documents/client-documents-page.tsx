@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams } from 'react-router-dom';
 import {
   AlertCircle, CarFront, Check, CheckCircle2, Clock3, ExternalLink,
   FileCheck2, FileText, Gift, IdCard, Loader2,
@@ -22,6 +23,11 @@ const previewSession: ClientDocumentSession = {
   request_status: 'open',
   expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
   submitted_at: null,
+  page_title: 'Ajoutez les pièces de votre dossier',
+  page_intro: 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.',
+  completion_title: 'Toutes les pièces nécessaires sont bien reçues',
+  completion_message: 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.',
+  show_gift: true,
   items: [
     { id: 'preview-registration', document_type: 'registration', label: 'Carte grise', required: true, status: 'uploaded', original_name: 'carte-grise.pdf', mime_type: 'application/pdf', size_bytes: 842_000, uploaded_at: new Date().toISOString(), rejection_reason: null, preview_url: null },
     { id: 'preview-insurance', document_type: 'insurance_cert', label: 'Attestation d’assurance', required: true, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
@@ -52,8 +58,9 @@ function formatSize(bytes: number | null): string {
 }
 
 export function ClientDocumentsPage() {
+  const route = useParams<{ token?: string }>();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const token = params.get('token') ?? '';
+  const token = route.token ?? params.get('token') ?? '';
   const preview = import.meta.env.DEV && params.get('preview') === '1';
   const completePreview = preview && params.get('complete') === '1';
   const queryClient = useQueryClient();
@@ -70,7 +77,7 @@ export function ClientDocumentsPage() {
   const session = useQuery({
     queryKey: ['client-document-session', token],
     queryFn: () => fetchClientDocumentSession(token),
-    enabled: !preview && /^[0-9a-f]{64}$/.test(token),
+    enabled: !preview && /^(?:[0-9a-f]{64}|[A-Za-z0-9_-]{24})$/.test(token),
     retry: false,
   });
 
@@ -124,9 +131,11 @@ export function ClientDocumentsPage() {
             <p className="text-sm font-medium text-primary">
               Bonjour{data.client_first_name ? ` ${data.client_first_name}` : ''},
             </p>
-            <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">Ajoutez les pièces de votre dossier</h1>
+            <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">
+              {data.page_title || 'Ajoutez les pièces de votre dossier'}
+            </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.
+              {data.page_intro || 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" />Depuis votre téléphone</span>
@@ -146,7 +155,7 @@ export function ClientDocumentsPage() {
           </div>
         </section>
 
-        {data.selected_offer && (
+        {data.show_gift !== false && data.selected_offer && (
           <section className="mb-6 flex items-center gap-4 overflow-hidden rounded-xl border border-primary/25 bg-accent p-4 sm:p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Gift className="h-5 w-5" />
@@ -172,9 +181,11 @@ export function ClientDocumentsPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-done">Envoi terminé</p>
-                <h2 className="mt-1 text-xl font-semibold text-foreground">Toutes les pièces nécessaires sont bien reçues</h2>
+                <h2 className="mt-1 text-xl font-semibold text-foreground">
+                  {data.completion_title || 'Toutes les pièces nécessaires sont bien reçues'}
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.
+                  {data.completion_message || 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.'}
                 </p>
               </div>
             </div>

@@ -44,6 +44,7 @@ const UsersPage = lazy(() => import('@/features/settings/users-page').then((m) =
 const InsurersPage = lazy(() => import('@/features/settings/insurers-page').then((m) => ({ default: m.InsurersPage })));
 const CadencesPage = lazy(() => import('@/features/settings/cadences-page').then((m) => ({ default: m.CadencesPage })));
 const ClientDocumentsPage = lazy(() => import('@/features/client-documents/client-documents-page').then((m) => ({ default: m.ClientDocumentsPage })));
+const ClientDocumentSettingsPage = lazy(() => import('@/features/client-documents/client-document-settings-page').then((m) => ({ default: m.ClientDocumentSettingsPage })));
 const BancListe = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancListe })));
 const BancFiche = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancFiche })));
 
@@ -87,6 +88,7 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={charger(<ForgotPasswordPage />)} />
         <Route path="/update-password" element={charger(<UpdatePasswordPage />)} />
         <Route path="/documents" element={charger(<ClientDocumentsPage />)} />
+        <Route path="/d/:token" element={charger(<ClientDocumentsPage />)} />
 
         {/* Le banc de diagnostic ne doit jamais devenir une page publique du
             CRM de production. */}
@@ -131,6 +133,7 @@ export function AppRoutes() {
             <Route path="users" element={charger(<UsersPage />)} />
             <Route path="insurers" element={charger(<InsurersPage />)} />
             <Route path="relances" element={charger(<CadencesPage />)} />
+            <Route path="documents" element={charger(<ClientDocumentSettingsPage />)} />
           </Route>
         </Route>
 
