@@ -31,6 +31,7 @@ import { fetchContacts, fetchInsurers } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
 import { createTask, fetchAppointments, fetchTasks } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { useEstMobile } from '@/hooks/use-media-query';
 
 // ============ CONSTANTS ============
 
@@ -140,6 +141,7 @@ function formatDateTime(date: string | null | undefined): string {
 // ============ MAIN PAGE ============
 
 export function CasesPage() {
+  const estMobile = useEstMobile();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
@@ -186,7 +188,7 @@ export function CasesPage() {
         title="Dossiers"
         description="Dossiers de vitrage en cours"
         action={
-          <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
+          <Button className="w-full rounded-full sm:w-auto" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Nouveau dossier
           </Button>
@@ -195,7 +197,7 @@ export function CasesPage() {
 
       {/* Search + Filters */}
       <div className="flex flex-wrap items-end gap-3 gutter-x border-b border-border py-4">
-        <div className="flex-1 min-w-[200px] space-y-1.5">
+        <div className="w-full min-w-0 space-y-1.5 sm:min-w-[200px] sm:flex-1">
           <Label className="text-xs text-muted-foreground">Recherche</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -208,10 +210,10 @@ export function CasesPage() {
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="w-full space-y-1.5 sm:w-auto">
           <Label className="text-xs text-muted-foreground">Statut</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px] rounded-lg">
+            <SelectTrigger className="w-full rounded-lg sm:w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -223,10 +225,10 @@ export function CasesPage() {
           </Select>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="w-full space-y-1.5 sm:w-auto">
           <Label className="text-xs text-muted-foreground">Conseiller</Label>
           <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
-            <SelectTrigger className="w-[180px] rounded-lg">
+            <SelectTrigger className="w-full rounded-lg sm:w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -256,7 +258,7 @@ export function CasesPage() {
       {/* Table */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {isLoading && (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full rounded-lg" />
@@ -291,7 +293,23 @@ export function CasesPage() {
           </div>
         )}
 
-        {!isLoading && !isError && cases && cases.length > 0 && (
+        {!isLoading && !isError && cases && cases.length > 0 && estMobile && (
+          <ul className="divide-y divide-border">
+            {cases.map((c) => (
+              <CaseMobileRow
+                key={c.id}
+                caseData={c}
+                leadMap={leadMap}
+                contactMap={contactMap}
+                profileMap={profileMap}
+                insurerMap={insurerMap}
+                onOpen={() => setSelectedCaseId(c.id)}
+              />
+            ))}
+          </ul>
+        )}
+
+        {!isLoading && !isError && cases && cases.length > 0 && !estMobile && (
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -345,6 +363,70 @@ export function CasesPage() {
         insurers={insurers ?? []}
       />
     </>
+  );
+}
+
+function CaseMobileRow({
+  caseData, leadMap, contactMap, profileMap, insurerMap, onOpen,
+}: {
+  caseData: WindscreenCase;
+  leadMap: Map<string, Lead>;
+  contactMap: Map<string, Contact>;
+  profileMap: Map<string, Profile>;
+  insurerMap: Map<string, Insurer>;
+  onOpen: () => void;
+}) {
+  const clientName = useMemo(() => {
+    const contact = caseData.contact_id ? contactMap.get(caseData.contact_id) : null;
+    if (contact) return `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim();
+    const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
+    return lead ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'Client non renseigné';
+  }, [caseData.contact_id, caseData.lead_id, contactMap, leadMap]);
+
+  const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
+  const vehicleInfo = lead
+    ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ')
+    : '';
+  const insurerName = caseData.insurer_id
+    ? insurerMap.get(caseData.insurer_id)?.name
+    : lead?.insurance;
+  const advisor = caseData.assigned_user_id
+    ? profileMap.get(caseData.assigned_user_id)
+    : null;
+  const advisorName = advisor
+    ? `${advisor.first_name ?? ''} ${advisor.last_name ?? ''}`.trim()
+    : '';
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full px-4 py-3 text-left transition-colors active:bg-muted/50"
+        aria-label={`Ouvrir le dossier ${caseData.case_number}`}
+      >
+        <span className="flex items-start justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-muted-foreground">{caseData.case_number}</span>
+            <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">{clientName}</span>
+          </span>
+          <StatusBadge status={caseData.status} className="shrink-0" />
+        </span>
+
+        <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span className="truncate">{vehicleInfo || 'Véhicule non renseigné'}</span>
+          <span className="truncate text-right">{insurerName || 'Assurance non renseignée'}</span>
+          <span className="truncate">{advisorName || 'Non attribué'}</span>
+          <span className="text-right tabular">RDV {formatDate(caseData.appointment_date)}</span>
+        </span>
+
+        {caseData.franchise_amount != null && caseData.franchise_amount !== 0 && (
+          <span className="mt-2 block text-right text-sm font-semibold text-foreground tabular">
+            {formatEuro(caseData.franchise_amount)}
+          </span>
+        )}
+      </button>
+    </li>
   );
 }
 

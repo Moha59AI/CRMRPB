@@ -180,14 +180,14 @@ export function AppLayout() {
             <SheetTrigger asChild>
               <Button
                 variant="ghost" size="sm"
-                className="h-9 w-9 shrink-0 rounded-lg p-0"
+                className="h-11 w-11 shrink-0 rounded-lg p-0"
                 aria-label="Ouvrir le menu"
               >
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
 
-            <SheetContent side="left" className="w-72 p-0">
+            <SheetContent side="left" className="w-72 p-0 sm:p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <TiroirNavigation
                 sections={sectionsVisibles}
@@ -210,7 +210,7 @@ export function AppLayout() {
             </span>
           </div>
 
-          <div className="w-9 shrink-0">
+          <div className="w-11 shrink-0">
             <ClocheNotifications reduit />
           </div>
 

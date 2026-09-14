@@ -109,21 +109,49 @@ export async function accessToken(
 
   const clientSecret = await readGoogleSecret(workspaceId, 'client_secret');
   const refreshToken = await readGoogleSecret(workspaceId, 'refresh_token');
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
   });
-  const payload = await response.json();
-  if (!response.ok || !payload.access_token) {
-    throw new Error(payload.error_description ?? payload.error ?? `OAuth HTTP ${response.status}`);
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    let response: Response;
+    try {
+      response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      if (attempt < 2) {
+        console.warn(`OAuth Google indisponible, nouvelle tentative (${attempt}/2)`);
+        continue;
+      }
+      const timedOut = error instanceof DOMException && error.name === 'AbortError';
+      throw new Error(timedOut
+        ? 'Le service OAuth Google ne repond pas dans le delai imparti'
+        : `Connexion OAuth Google impossible : ${error instanceof Error ? error.message : String(error)}`);
+    }
+    clearTimeout(timeout);
+
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.access_token) return payload.access_token as string;
+
+    const message = payload.error_description ?? payload.error ?? `OAuth HTTP ${response.status}`;
+    if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
+      console.warn(`OAuth Google HTTP ${response.status}, nouvelle tentative (${attempt}/2)`);
+      continue;
+    }
+    throw new Error(message);
   }
-  return payload.access_token as string;
+
+  throw new Error('Connexion OAuth Google impossible');
 }
 
 export async function createGoogleAdsSession(

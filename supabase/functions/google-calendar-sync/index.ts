@@ -33,8 +33,6 @@ type GoogleEvent = {
   extendedProperties?: { private?: Record<string, string> };
 };
 
-type CalendarMetadata = { id?: string; summary?: string; timeZone?: string };
-
 type SyncResult = {
   created: number;
   updatedInGoogle: number;
@@ -47,29 +45,55 @@ function calendarUrl(calendarId: string, suffix = ''): string {
 }
 
 async function googleRequest<T>(token: string, url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-  const responseText = await response.text();
-  let payload: unknown = {};
-  try {
-    payload = responseText ? JSON.parse(responseText) : {};
-  } catch {
-    payload = { message: responseText.slice(0, 1000) };
-  }
-  if (!response.ok) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(init.headers ?? {}),
+        },
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      if (attempt < 2) {
+        console.warn(`Google Agenda indisponible, nouvelle tentative (${attempt}/2)`);
+        continue;
+      }
+      const timedOut = error instanceof DOMException && error.name === 'AbortError';
+      throw new Error(timedOut
+        ? 'Google Agenda ne repond pas dans le delai imparti'
+        : `Connexion Google Agenda impossible : ${error instanceof Error ? error.message : String(error)}`);
+    }
+    clearTimeout(timeout);
+
+    const responseText = await response.text();
+    let payload: unknown = {};
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      payload = { message: responseText.slice(0, 1000) };
+    }
+    if (response.ok) return payload as T;
+
     const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
     const error = root.error && typeof root.error === 'object'
       ? root.error as Record<string, unknown>
       : {};
-    throw new Error(String(error.message ?? root.message ?? `Google Agenda HTTP ${response.status}`));
+    const message = String(error.message ?? root.message ?? `Google Agenda HTTP ${response.status}`);
+    if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
+      console.warn(`Google Agenda HTTP ${response.status}, nouvelle tentative (${attempt}/2)`);
+      continue;
+    }
+    throw new Error(message);
   }
-  return payload as T;
+
+  throw new Error('Connexion Google Agenda impossible');
 }
 
 /**
@@ -167,14 +191,17 @@ async function saveCalendarError(workspaceId: string, message: string): Promise<
 }
 
 async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
+  console.info(`[google-calendar-sync] Demarrage workspace ${workspaceId}`);
   const connection = await getGoogleConnection(workspaceId);
   const settings = (connection.settings ?? {}) as Record<string, unknown>;
   if (!settings.calendar_authorized_at) throw new Error('Google Agenda n est pas encore autorise');
 
   const calendarId = String(settings.calendar_id || DEFAULT_CALENDAR_ID);
+  console.info('[google-calendar-sync] Recuperation du jeton OAuth');
   const token = await accessToken(workspaceId, settings);
-  const calendar = await googleRequest<CalendarMetadata>(token, calendarUrl(calendarId));
+  console.info('[google-calendar-sync] Jeton OAuth obtenu');
   const googleEvents = await listCrmEvents(token, calendarId, workspaceId);
+  console.info(`[google-calendar-sync] ${googleEvents.length} evenement(s) CRM trouve(s) chez Google`);
   const eventsById = new Map(
     googleEvents.filter((event) => event.id).map((event) => [event.id as string, event]),
   );
@@ -199,6 +226,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
     .order('start_time', { ascending: true })
     .limit(2000);
   if (error) throw new Error(error.message);
+  console.info(`[google-calendar-sync] ${(data ?? []).length} rendez-vous CRM a traiter`);
 
   const result: SyncResult = { created: 0, updatedInGoogle: 0, updatedInCrm: 0, cancelled: 0 };
 
@@ -336,15 +364,20 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
     .update({
       settings: {
         ...currentSettings,
-        calendar_id: calendar.id ?? calendarId,
-        calendar_name: calendar.summary ?? 'Agenda principal Google',
-        calendar_time_zone: calendar.timeZone ?? TIME_ZONE,
+        // L'API Calendars.get exige calendar.readonly, alors que la
+        // synchronisation n'a besoin que de calendar.events. Garder ces
+        // valeurs locales évite de demander un droit Google plus large.
+        calendar_id: calendarId,
+        calendar_name: String(settings.calendar_name || 'Agenda principal Google'),
+        calendar_time_zone: String(settings.calendar_time_zone || TIME_ZONE),
         calendar_last_synced_at: new Date().toISOString(),
         calendar_last_error: null,
       },
     })
     .eq('id', currentConnection.id);
   if (connectionError) throw new Error(connectionError.message);
+
+  console.info(`[google-calendar-sync] Termine : ${JSON.stringify(result)}`);
 
   return result;
 }

@@ -448,7 +448,7 @@ function WeekView({
   );
 
   return (
-    <div>
+    <div className="min-w-[700px] md:min-w-0">
       {/* Day headers */}
       <div className="flex border-b border-border">
         <div className="w-16 shrink-0" />
@@ -529,7 +529,7 @@ function MonthView({
   }, [appts]);
 
   return (
-    <div>
+    <div className="min-w-[640px] md:min-w-0">
       {/* Weekday headers */}
       <div className="grid grid-cols-7 border-b border-border">
         {WEEKDAY_LABELS.map((label) => (
@@ -1319,7 +1319,13 @@ export function CalendarPage() {
   const location = useLocation();
   const today = useMemo(() => new Date(), []);
 
-  const [view, setView] = useState<View>('week');
+  // Sur téléphone, sept colonnes rendent les rendez-vous illisibles. La vue
+  // jour est donc le point d'entrée, sans empêcher de choisir semaine ensuite.
+  const [view, setView] = useState<View>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+      ? 'day'
+      : 'week'
+  );
   const [currentDate, setCurrentDate] = useState<Date>(today);
   const [advisorFilter, setAdvisorFilter] = useState('all');
   const [techFilter, setTechFilter] = useState('all');
@@ -1635,12 +1641,12 @@ export function CalendarPage() {
         title="Agenda"
         description="Planning et rendez-vous"
         action={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             <GoogleCalendarControl onSynced={() => {
               queryClient.invalidateQueries({ queryKey: ['appointments'] });
               queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
             }} />
-            <Button className="rounded-full gap-1.5" onClick={() => setCreateOpen(true)}>
+            <Button className="gap-1.5 rounded-full" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               Nouveau rendez-vous
             </Button>
@@ -1650,33 +1656,33 @@ export function CalendarPage() {
 
       {/* Toolbar */}
       <div className="gutter-x border-b border-border py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* Navigation */}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={goPrev}>
+          <div className="flex w-full items-center gap-2 lg:w-auto">
+            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goPrev}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[160px] text-center text-sm font-medium text-foreground">
+            <span className="min-w-0 flex-1 text-center text-sm font-medium text-foreground lg:min-w-[160px] lg:flex-none">
               {periodLabel}
             </span>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={goNext}>
+            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goNext}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="ml-1 h-8" onClick={goToday}>
+            <Button variant="outline" size="sm" className="shrink-0 md:h-8" onClick={goToday}>
               Aujourd'hui
             </Button>
           </div>
 
           {/* View toggle + filters */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap lg:w-auto">
             {/* View toggle */}
-            <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+            <div className="col-span-2 grid grid-cols-4 items-center rounded-lg border border-border bg-muted/40 p-0.5 sm:inline-flex">
               {(['day', 'week', 'month', 'carte'] as View[]).map((v) => (
                 <button
                   key={v}
                   type="button"
                   className={cn(
-                    'rounded-md px-3 py-1 text-sm font-medium transition-colors',
+                    'min-h-11 rounded-md px-2 py-1 text-sm font-medium transition-colors md:min-h-0 md:px-3',
                     view === v
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
@@ -1696,7 +1702,7 @@ export function CalendarPage() {
                 setTechFilter('all');
               }}
             >
-              <SelectTrigger className="h-8 w-[160px]">
+              <SelectTrigger className="w-full sm:w-[160px] md:h-8">
                 <SelectValue placeholder="Conseiller" />
               </SelectTrigger>
               <SelectContent>
@@ -1717,7 +1723,7 @@ export function CalendarPage() {
                 setAdvisorFilter('all');
               }}
             >
-              <SelectTrigger className="h-8 w-[160px]">
+              <SelectTrigger className="w-full sm:w-[160px] md:h-8">
                 <SelectValue placeholder="Technicien" />
               </SelectTrigger>
               <SelectContent>
@@ -1732,7 +1738,7 @@ export function CalendarPage() {
 
             {/* Status filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-[150px]">
+              <SelectTrigger className="col-span-2 w-full sm:w-[150px] md:h-8">
                 <SelectValue placeholder="Statut" />
               </SelectTrigger>
               <SelectContent>
@@ -1749,7 +1755,7 @@ export function CalendarPage() {
       </div>
 
       {/* Calendar body */}
-      <div className="flex-1 overflow-x-auto p-6">
+      <div className="flex-1 overflow-x-auto p-2 sm:p-4 lg:p-6">
         {isLoading ? (
           <div className="space-y-3">
             <div className="flex gap-2">

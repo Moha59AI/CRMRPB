@@ -251,13 +251,13 @@ export function LeadsPage() {
         title="Leads"
         description="Prospects reçus depuis Meta et autres sources"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             {/* Outil de developpement : jamais visible en production, et la
                 fonction SQL est en plus reservee aux administrateurs. */}
             {OUTILS_DEMO_ACTIFS && (
               <Button
                 variant="outline"
-                className="rounded-full"
+                className="flex-1 rounded-full sm:flex-none"
                 disabled={seeding}
                 onClick={() => seedMutation.mutate()}
               >
@@ -266,7 +266,7 @@ export function LeadsPage() {
               </Button>
             )}
             <Button
-              className="rounded-full"
+              className="flex-1 rounded-full sm:flex-none"
               onClick={() => setNewLeadOpen(true)}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -285,14 +285,14 @@ export function LeadsPage() {
           <ViewToggleButton active={view === 'compact'} onClick={() => setView('compact')} icon={List} label="Liste compacte" />
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border md:block" />
 
         {/* Archives : consulter, et ranger. */}
-        <div className="flex items-center gap-1.5">
+        <div className="order-first flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:order-none md:w-auto">
           <Button
             variant={voirArchives ? 'default' : 'outline'}
             size="sm"
-            className="rounded-full"
+            className="shrink-0 rounded-full"
             onClick={afficherArchives}
           >
             {voirArchives
@@ -304,7 +304,7 @@ export function LeadsPage() {
           {!voirArchives && (
             <Button
               variant={voirAArchiver ? 'default' : 'outline'}
-              size="sm" className="rounded-full"
+              size="sm" className="shrink-0 rounded-full"
               onClick={afficherAArchiver}
             >
               <Clock3 className="mr-1.5 h-3.5 w-3.5" />
@@ -315,7 +315,7 @@ export function LeadsPage() {
           {voirArchives && peutSupprimer(profileCourant?.role ?? null) && (
             <Button
               variant="outline" size="sm"
-              className="rounded-full text-destructive hover:text-destructive"
+              className="shrink-0 rounded-full text-destructive hover:text-destructive"
               onClick={() => setSuppressionOuverte(true)}
             >
               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
@@ -324,10 +324,10 @@ export function LeadsPage() {
           )}
         </div>
 
-        <div className="h-6 w-px bg-border" />
+        <div className="hidden h-6 w-px bg-border md:block" />
 
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative w-full min-w-0 sm:min-w-[200px] sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Nom, téléphone, email, ville..."
@@ -339,7 +339,7 @@ export function LeadsPage() {
 
         {/* Source filter */}
         <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[130px] rounded-lg">
+          <SelectTrigger className="w-[calc(50vw-1.75rem)] rounded-lg sm:w-[130px]">
             <SelectValue placeholder="Source" />
           </SelectTrigger>
           <SelectContent>
@@ -352,7 +352,7 @@ export function LeadsPage() {
 
         {/* Status filter */}
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px] rounded-lg">
+          <SelectTrigger className="w-[calc(50vw-1.75rem)] rounded-lg sm:w-[150px]">
             <SelectValue placeholder="Statut" />
           </SelectTrigger>
           <SelectContent>
@@ -365,7 +365,7 @@ export function LeadsPage() {
 
         {/* Advisor filter */}
         <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
-          <SelectTrigger className="w-[160px] rounded-lg">
+          <SelectTrigger className="w-full rounded-lg sm:w-[160px]">
             <SelectValue placeholder="Conseiller" />
           </SelectTrigger>
           <SelectContent>
@@ -695,11 +695,11 @@ function ListeMobile({
               onClick={() => onOuvrir(lead)}
               className="min-w-0 flex-1 px-4 py-3 text-left active:bg-muted/50"
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0 truncate text-sm font-medium text-foreground">
+              <div className="min-w-0">
+                <span className="block truncate text-sm font-medium text-foreground">
                   {leadName(lead)}
                 </span>
-                <div className="flex shrink-0 flex-col items-end gap-1">
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1">
                   <SourceBadge source={lead.source} />
                   <StatusBadge status={lead.status} />
                 </div>

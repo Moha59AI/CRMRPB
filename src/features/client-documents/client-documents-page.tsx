@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertCircle, Camera, CarFront, Check, CheckCircle2, ExternalLink,
-  FileCheck2, FileSignature, FileText, Gift, IdCard, Loader2,
-  LockKeyhole, ShieldCheck, Smartphone, UploadCloud,
+  AlertCircle, CarFront, Check, CheckCircle2, Clock3, ExternalLink,
+  FileCheck2, FileText, Gift, IdCard, Loader2,
+  LockKeyhole, PhoneCall, ShieldCheck, Smartphone, UploadCloud,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -25,9 +25,23 @@ const previewSession: ClientDocumentSession = {
   items: [
     { id: 'preview-registration', document_type: 'registration', label: 'Carte grise', required: true, status: 'uploaded', original_name: 'carte-grise.pdf', mime_type: 'application/pdf', size_bytes: 842_000, uploaded_at: new Date().toISOString(), rejection_reason: null, preview_url: null },
     { id: 'preview-insurance', document_type: 'insurance_cert', label: 'Attestation d’assurance', required: true, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
-    { id: 'preview-photo', document_type: 'photo_windscreen', label: 'Photo du pare-brise', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
-    { id: 'preview-claim', document_type: 'claim_declaration', label: 'Déclaration de sinistre', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
+    { id: 'preview-technical-inspection', document_type: 'technical_inspection', label: 'Contrôle technique', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
+    { id: 'preview-other', document_type: 'other', label: 'Autre document', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
   ],
+};
+
+const previewCompleteSession: ClientDocumentSession = {
+  ...previewSession,
+  request_status: 'complete',
+  submitted_at: new Date().toISOString(),
+  items: previewSession.items.map((item) => item.required ? {
+    ...item,
+    status: 'uploaded',
+    original_name: item.original_name ?? 'attestation-assurance.pdf',
+    mime_type: item.mime_type ?? 'application/pdf',
+    size_bytes: item.size_bytes ?? 640_000,
+    uploaded_at: item.uploaded_at ?? new Date().toISOString(),
+  } : item),
 };
 
 function formatSize(bytes: number | null): string {
@@ -41,7 +55,13 @@ export function ClientDocumentsPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const token = params.get('token') ?? '';
   const preview = import.meta.env.DEV && params.get('preview') === '1';
+  const completePreview = preview && params.get('complete') === '1';
   const queryClient = useQueryClient();
+  const [lastReceipt, setLastReceipt] = useState<{
+    itemId: string;
+    label: string;
+    complete: boolean;
+  } | null>(null);
 
   useEffect(() => {
     document.title = 'Mes documents — Relais Pare-Brise';
@@ -60,16 +80,27 @@ export function ClientDocumentsPage() {
       if (file.size > maxBytes) throw new Error('Le fichier dépasse 12 Mo.');
       return uploadClientDocument(token, item.id, file);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client-document-session', token] }),
+    onMutate: () => setLastReceipt(null),
+    onSuccess: async (result, { item }) => {
+      setLastReceipt({ itemId: item.id, label: item.label, complete: result.complete });
+      await queryClient.invalidateQueries({ queryKey: ['client-document-session', token] });
+    },
   });
 
   if (!token && !preview) return <PortalMessage title="Lien nécessaire" detail="Ouvrez le lien privé reçu par SMS. Si vous ne l’avez plus, contactez Relais Pare-Brise pour en recevoir un nouveau." />;
   if (!preview && session.isLoading) return <PortalMessage loading title="Ouverture de votre espace" detail="Nous vérifions votre lien sécurisé…" />;
   if (!preview && (session.isError || !session.data)) return <PortalMessage error title="Lien indisponible" detail="Ce lien est invalide, expiré ou a été remplacé. Demandez un nouveau lien à Relais Pare-Brise." />;
 
-  const data = preview ? previewSession : session.data as ClientDocumentSession;
+  const data = preview
+    ? completePreview ? previewCompleteSession : previewSession
+    : session.data as ClientDocumentSession;
 
-  const required = data.items.filter((item) => item.required);
+  const itemTypes = new Set(data.items.map((item) => item.document_type));
+  const visibleItems = data.items.filter((item) => (
+    !(item.document_type === 'photo_windscreen' && itemTypes.has('technical_inspection'))
+    && !(item.document_type === 'claim_declaration' && itemTypes.has('other'))
+  ));
+  const required = visibleItems.filter((item) => item.required);
   const uploadedCount = required.filter((item) => ['uploaded', 'validated'].includes(item.status)).length;
   const progress = required.length ? Math.round((uploadedCount / required.length) * 100) : 100;
   const complete = data.request_status === 'complete' || progress === 100;
@@ -133,19 +164,60 @@ export function ClientDocumentsPage() {
           </section>
         )}
 
-        <section className={cn(
-          'mb-6 rounded-xl border p-4',
-          complete ? 'border-done/30 bg-done-soft' : 'border-border bg-card',
-        )}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium">{complete ? 'Pièces obligatoires reçues' : 'Avancement du dossier'}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{uploadedCount} sur {required.length} pièce{required.length > 1 ? 's' : ''}</p>
+        {complete ? (
+          <section className="mb-6 overflow-hidden rounded-2xl border border-done/35 bg-done-soft shadow-sm" role="status">
+            <div className="flex items-start gap-4 p-5 sm:p-6">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-done text-white shadow-sm">
+                <CheckCircle2 className="h-7 w-7" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-done">Envoi terminé</p>
+                <h2 className="mt-1 text-xl font-semibold text-foreground">Toutes les pièces nécessaires sont bien reçues</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.
+                </p>
+              </div>
             </div>
-            {complete ? <CheckCircle2 className="h-6 w-6 text-done" /> : <span className="text-sm font-semibold tabular">{progress}%</span>}
+
+            <div className="grid border-t border-done/20 bg-card/60 sm:grid-cols-3">
+              <ReceiptStep icon={CheckCircle2} title="1. Documents reçus" detail="Les fichiers sont enregistrés." done />
+              <ReceiptStep icon={Clock3} title="2. Vérification" detail="Notre équipe contrôle les pièces." />
+              <ReceiptStep icon={PhoneCall} title="3. Prochaine étape" detail="Nous vous recontactons si nécessaire." />
+            </div>
+          </section>
+        ) : (
+          <section className="mb-6 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Avancement du dossier</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{uploadedCount} sur {required.length} pièce{required.length > 1 ? 's' : ''} obligatoire{required.length > 1 ? 's' : ''} reçue{required.length > 1 ? 's' : ''}</p>
+              </div>
+              <span className="text-sm font-semibold tabular">{progress}%</span>
+            </div>
+            <Progress value={progress} className="mt-3" />
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              Chaque pièce marquée « Bien reçu » est déjà enregistrée. Quand les pièces obligatoires seront complètes, notre équipe vérifiera votre dossier et vous contactera pour la suite.
+            </p>
+          </section>
+        )}
+
+        {lastReceipt && (
+          <div
+            className="mb-4 flex items-start gap-3 rounded-xl border border-done/35 bg-done-soft p-4 text-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-done" />
+            <div>
+              <p className="font-semibold text-foreground">Document bien reçu</p>
+              <p className="mt-1 leading-5 text-muted-foreground">
+                « {lastReceipt.label} » est enregistré. {lastReceipt.complete
+                  ? 'Toutes les pièces nécessaires sont maintenant disponibles pour notre équipe.'
+                  : 'Vous pouvez poursuivre avec les pièces restantes.'}
+              </p>
+            </div>
           </div>
-          <Progress value={progress} className="mt-3" />
-        </section>
+        )}
 
         {upload.isError && (
           <div className="mb-4 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -155,11 +227,12 @@ export function ClientDocumentsPage() {
         )}
 
         <div className="space-y-3">
-          {data.items.map((item) => (
+          {visibleItems.map((item) => (
             <DocumentUploadCard
               key={item.id}
               item={item as ClientDocumentItem}
               pending={upload.isPending && upload.variables?.item.id === item.id}
+              recentlyReceived={lastReceipt?.itemId === item.id}
               onFile={(file) => upload.mutate({ item: item as ClientDocumentItem, file })}
               preview={preview}
             />
@@ -176,10 +249,11 @@ export function ClientDocumentsPage() {
 }
 
 function DocumentUploadCard({
-  item, pending, onFile, preview,
+  item, pending, recentlyReceived, onFile, preview,
 }: {
   item: ClientDocumentItem;
   pending: boolean;
+  recentlyReceived: boolean;
   onFile: (file: File) => void;
   preview: boolean;
 }) {
@@ -187,12 +261,15 @@ function DocumentUploadCard({
   const received = ['uploaded', 'validated'].includes(item.status);
   const DocumentIcon = item.document_type === 'registration' ? IdCard
     : item.document_type === 'insurance_cert' ? ShieldCheck
-      : item.document_type === 'photo_windscreen' ? Camera
-        : item.document_type === 'claim_declaration' ? FileSignature
-          : FileText;
+      : item.document_type === 'technical_inspection' ? FileCheck2
+        : FileText;
 
   return (
-    <section className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+    <section className={cn(
+      'rounded-xl border bg-card p-4 shadow-sm transition-colors sm:p-5',
+      received ? 'border-done/35' : item.status === 'rejected' ? 'border-destructive/30' : 'border-border',
+      recentlyReceived && 'ring-2 ring-done/20',
+    )}>
       <div className="flex items-start gap-3">
         <div className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
@@ -203,14 +280,29 @@ function DocumentUploadCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold">{item.label}</h2>
+            {(received || item.status === 'rejected') && (
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                received ? 'bg-done-soft text-done' : 'bg-destructive/10 text-destructive',
+              )}>
+                {item.status === 'validated' ? 'Vérifié' : received ? 'Bien reçu' : 'À remplacer'}
+              </span>
+            )}
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {item.required ? 'Obligatoire' : 'Si disponible'}
+              {item.required ? 'Obligatoire' : 'Facultatif'}
             </span>
           </div>
           {received ? (
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {item.original_name} {item.size_bytes ? `· ${formatSize(item.size_bytes)}` : ''}
-            </p>
+            <>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {item.original_name} {item.size_bytes ? `· ${formatSize(item.size_bytes)}` : ''}
+              </p>
+              <p className="mt-2 text-xs font-medium leading-5 text-done">
+                {item.status === 'validated'
+                  ? 'Cette pièce a été vérifiée par notre équipe.'
+                  : 'Le fichier est enregistré et sera vérifié par notre équipe.'}
+              </p>
+            </>
           ) : (
             <p className="mt-1 text-xs text-muted-foreground">PDF ou photo, 12 Mo maximum</p>
           )}
@@ -232,12 +324,12 @@ function DocumentUploadCard({
             event.target.value = '';
           }}
         />
-        <Button className="rounded-full" disabled={pending || preview} onClick={() => input.current?.click()}>
+        <Button className="w-full rounded-full sm:w-auto" disabled={pending || preview} onClick={() => input.current?.click()}>
           {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-          {pending ? 'Envoi en cours…' : received ? 'Remplacer' : 'Ajouter le document'}
+          {pending ? 'Envoi en cours…' : received ? 'Remplacer ce document' : 'Ajouter le document'}
         </Button>
         {received && item.preview_url && (
-          <Button variant="outline" className="rounded-full" asChild>
+          <Button variant="outline" className="w-full rounded-full sm:w-auto" asChild>
             <a href={item.preview_url} target="_blank" rel="noreferrer">
               Voir <ExternalLink className="ml-2 h-3.5 w-3.5" />
             </a>
@@ -245,6 +337,25 @@ function DocumentUploadCard({
         )}
       </div>
     </section>
+  );
+}
+
+function ReceiptStep({
+  icon: Icon, title, detail, done = false,
+}: {
+  icon: typeof CheckCircle2;
+  title: string;
+  detail: string;
+  done?: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3 border-b border-done/15 p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', done ? 'text-done' : 'text-primary')} />
+      <div>
+        <p className="text-xs font-semibold text-foreground">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+      </div>
+    </div>
   );
 }
 

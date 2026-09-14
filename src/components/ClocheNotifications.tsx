@@ -178,7 +178,7 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
           variant="ghost"
           className={cn(
             'relative rounded-lg text-muted-foreground hover:text-foreground',
-            reduit ? 'h-9 w-full p-0' : 'h-9 w-full justify-start gap-3 px-3',
+            reduit ? 'h-11 w-full p-0 md:h-9' : 'h-11 w-full justify-start gap-3 px-3 md:h-9',
           )}
           aria-label={compte > 0 ? `${compte} notification(s) non lue(s)` : 'Notifications'}
         >

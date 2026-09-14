@@ -125,6 +125,11 @@ demande, afin que la politique Storage cloisonne les aperçus des collaborateurs
 | rejection_reason | text | Motif visible par le client |
 | notification_email_sent_at, notification_email_error | timestamptz/text | Trace l'alerte email sans transmettre de donnée client au fournisseur |
 
+Une nouvelle demande contient toujours quatre emplacements : carte grise et
+attestation d'assurance obligatoires, puis contrôle technique et autre document
+facultatifs. La complétude du dossier dépend uniquement des deux pièces
+obligatoires.
+
 ### postal_code_cities
 Référentiel local des couples code postal/commune de France.
 Il sert à compléter la ville lorsqu'un formulaire ne transmet que le code

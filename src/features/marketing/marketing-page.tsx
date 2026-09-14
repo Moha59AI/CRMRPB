@@ -181,9 +181,9 @@ export function MarketingPage() {
         title="Marketing"
         description="Du clic publicitaire à l'intervention réalisée"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Select value={String(days)} onValueChange={(value) => setDays(Number(value))}>
-              <SelectTrigger className="w-[132px] rounded-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[132px] flex-1 rounded-full sm:flex-none"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="7">7 jours</SelectItem>
                 <SelectItem value="30">30 jours</SelectItem>
@@ -193,7 +193,7 @@ export function MarketingPage() {
             {data && data.campaigns.length > 0 && (
               <Button
                 variant="outline"
-                className="rounded-full"
+                className="flex-1 rounded-full sm:flex-none"
                 onClick={() => exportCampaigns(data.campaigns, days)}
               >
                 <Download className="mr-2 h-4 w-4" />
@@ -201,9 +201,10 @@ export function MarketingPage() {
               </Button>
             )}
             {profile?.role === 'admin' && (
-              <Button variant="outline" className="rounded-full" onClick={() => sync.mutate()} disabled={sync.isPending}>
+              <Button variant="outline" className="flex-1 rounded-full sm:flex-none" onClick={() => sync.mutate()} disabled={sync.isPending}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${sync.isPending ? 'animate-spin' : ''}`} />
-                Actualiser Google
+                <span className="sm:hidden">Actualiser</span>
+                <span className="hidden sm:inline">Actualiser Google</span>
               </Button>
             )}
             {profile?.role === 'admin' && (

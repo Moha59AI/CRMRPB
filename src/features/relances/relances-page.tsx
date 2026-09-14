@@ -318,7 +318,7 @@ export function RelancesPage() {
       <ResumeRelances compteurs={compteurs} filtre={filtre} onFiltrer={changerFiltre} />
 
       {/* Filtres compacts et cliquables, avec compteurs réels */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-border px-4 py-2">
+      <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-b border-border px-4 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {FILTRES.map(({ cle, label, compteur }) => {
           const n = compteur && compteurs ? compteurs[compteur] : undefined;
           const actif = filtre === cle;
@@ -328,7 +328,7 @@ export function RelancesPage() {
               type="button"
               onClick={() => changerFiltre(cle)}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors duration-100',
+                'flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors duration-100 md:min-h-0 md:px-2.5 md:py-1.5',
                 actif ? 'bg-secondary text-secondary-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
@@ -345,19 +345,19 @@ export function RelancesPage() {
       </div>
 
       {/* Barre d'outils */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
+      <div className="grid grid-cols-2 items-center gap-2 border-b border-border px-4 py-3 sm:flex sm:flex-wrap sm:py-2">
+        <div className="relative col-span-2 min-w-0 sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
             placeholder="Nom, téléphone, immatriculation…"
-            className="h-8 rounded-lg pl-8 text-sm"
+            className="rounded-lg pl-9 pr-11 text-sm md:h-8"
           />
           {recherche && (
             <button
               type="button" onClick={() => setRecherche('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground md:h-8 md:w-8"
             >
               <X className="h-3.5 w-3.5" />
               <span className="sr-only">Effacer la recherche</span>
@@ -366,7 +366,7 @@ export function RelancesPage() {
         </div>
 
         <Select value={tri} onValueChange={(v) => { setTri(v as RelanceSort); setPage(0); }}>
-          <SelectTrigger className="h-8 w-48 rounded-lg text-sm">
+          <SelectTrigger className="w-full rounded-lg text-sm sm:w-48 md:h-8">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -376,8 +376,8 @@ export function RelancesPage() {
           </SelectContent>
         </Select>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" className="h-8 rounded-full"
+        <div className="flex min-w-0 items-center justify-end gap-2 sm:ml-auto">
+          <Button size="sm" className="w-full rounded-full sm:w-auto md:h-8"
             onClick={() => void demarrerSession()} disabled={preparationSession || total === 0}>
             {preparationSession
               ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -386,7 +386,7 @@ export function RelancesPage() {
           </Button>
           {isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           {total > 0 && (
-            <span className="text-xs text-muted-foreground tabular">
+            <span className="hidden whitespace-nowrap text-xs text-muted-foreground tabular sm:inline">
               {page * PAR_PAGE + 1}–{Math.min((page + 1) * PAR_PAGE, total)} sur {total}
             </span>
           )}
@@ -395,24 +395,24 @@ export function RelancesPage() {
 
       {/* Actions groupées */}
       {selection.size > 0 && (
-        <div className="flex items-center gap-3 border-b border-border bg-accent/40 px-4 py-2 animate-slide-in">
-          <span className="text-sm font-medium tabular">
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-border bg-accent/40 px-4 py-2 animate-slide-in [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 text-sm font-medium tabular">
             {selection.size} sélectionnée{selection.size > 1 ? 's' : ''}
           </span>
-          <Button variant="outline" size="sm" className="h-7 rounded-full" onClick={reporterSelection}>
+          <Button variant="outline" size="sm" className="shrink-0 rounded-full md:h-7" onClick={reporterSelection}>
             Reporter à demain
           </Button>
           {nbLeadsSelectionnes > 0 && (
             <Button
               variant="outline" size="sm"
-              className="h-7 rounded-full"
+              className="shrink-0 rounded-full md:h-7"
               disabled={archiver.isPending}
               onClick={() => archiver.mutate(relancesSelectionnees)}
             >
               Archiver {nbLeadsSelectionnes} lead{nbLeadsSelectionnes > 1 ? 's' : ''}
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="h-7 rounded-full"
+          <Button variant="ghost" size="sm" className="shrink-0 rounded-full md:h-7"
             onClick={() => setSelection(new Set())}>
             Annuler
           </Button>
@@ -459,14 +459,14 @@ export function RelancesPage() {
 
             {pageMax > 0 && (
               <div className="flex items-center justify-center gap-2 py-4">
-                <Button variant="outline" size="sm" className="h-8 rounded-full"
+                <Button variant="outline" size="sm" className="rounded-full md:h-8"
                   disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
                   Précédent
                 </Button>
                 <span className="text-xs text-muted-foreground tabular">
                   Page {page + 1} / {pageMax + 1}
                 </span>
-                <Button variant="outline" size="sm" className="h-8 rounded-full"
+                <Button variant="outline" size="sm" className="rounded-full md:h-8"
                   disabled={page >= pageMax} onClick={() => setPage((p) => p + 1)}>
                   Suivant
                 </Button>
@@ -559,19 +559,17 @@ function ResumeRelances({
           type="button"
           onClick={() => onFiltrer(cle)}
           className={cn(
-            'flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+            'flex min-h-[116px] min-w-0 items-start gap-2 rounded-xl border px-3 py-3 text-left transition-colors sm:min-h-0 sm:items-center sm:gap-3 sm:py-2.5',
             filtre === cle ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40',
           )}
         >
           <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', style)}>
             <Icone className="h-4 w-4" />
           </span>
-          <span className="min-w-0">
-            <span className="flex items-baseline gap-2">
-              <span className="text-xl font-semibold tabular text-foreground">{valeur}</span>
-              <span className="truncate text-sm font-medium text-foreground">{label}</span>
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">{aide}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xl font-semibold tabular text-foreground">{valeur}</span>
+            <span className="block text-sm font-medium leading-tight text-foreground">{label}</span>
+            <span className="mt-1 hidden text-xs leading-tight text-muted-foreground sm:block">{aide}</span>
           </span>
         </button>
       ))}

@@ -57,6 +57,33 @@ test('le portail rassure le client sur le cadeau reellement choisi', async () =>
   assert.match(page, /data\.selected_offer/);
 });
 
+test('le client voit que chaque document est recu puis traite par l equipe', async () => {
+  const page = await read('src/features/client-documents/client-documents-page.tsx');
+
+  assert.match(page, /Document bien reçu/);
+  assert.match(page, /Toutes les pièces nécessaires sont bien reçues/);
+  assert.match(page, /Vous n’avez rien d’autre à faire pour le moment/);
+  assert.match(page, /Le fichier est enregistré et sera vérifié par notre équipe/);
+  assert.match(page, /aria-live="polite"/);
+  assert.match(page, /1\. Documents reçus/);
+  assert.match(page, /2\. Vérification/);
+  assert.match(page, /3\. Prochaine étape/);
+});
+
+test('la collecte demande les deux pieces obligatoires et propose deux pieces facultatives', async () => {
+  const migration = await read('supabase/migrations/20260914120000_client_document_types.sql');
+  const page = await read('src/features/client-documents/client-documents-page.tsx');
+
+  assert.match(migration, /'registration', 'Carte grise', true/);
+  assert.match(migration, /'insurance_cert', 'Attestation d’assurance', true/);
+  assert.match(migration, /'technical_inspection', 'Contrôle technique', false/);
+  assert.match(migration, /'other', 'Autre document', false/);
+  assert.match(migration, /document_type in \([\s\S]*'technical_inspection'[\s\S]*'other'/);
+  assert.match(page, /\{item\.required \? 'Obligatoire' : 'Facultatif'\}/);
+  assert.match(page, /itemTypes\.has\('technical_inspection'\)/);
+  assert.match(page, /itemTypes\.has\('other'\)/);
+});
+
 test('chaque depot prepare une alerte email interne sans transmettre les donnees client', async () => {
   const edge = await read('supabase/functions/client-documents/index.ts');
   const migration = await read('supabase/migrations/20260907120000_portail_documents_client.sql');
