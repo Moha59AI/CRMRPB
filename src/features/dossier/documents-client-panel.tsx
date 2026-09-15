@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { cn } from '@/lib/utils';
 import {
-  createClientDocumentRequest, fetchLatestClientDocumentRequest,
+  createClientDocumentRequest, fetchClientDocumentRequests,
 } from '@/services/client-documents-service';
 import type { Lead } from '@/types';
 
@@ -18,9 +18,9 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
   const queryClient = useQueryClient();
   const [latestUrl, setLatestUrl] = useState<string | null>(null);
 
-  const request = useQuery({
+  const requests = useQuery({
     queryKey: ['client-document-request', lead.id],
-    queryFn: () => fetchLatestClientDocumentRequest(lead.id),
+    queryFn: () => fetchClientDocumentRequests(lead.id),
   });
 
   const create = useMutation({
@@ -45,11 +45,27 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
     window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
   };
 
-  if (request.isLoading) {
+  if (requests.isLoading) {
     return <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  const current = request.data;
+  if (requests.isError) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-10 text-center">
+        <p className="text-sm font-medium text-destructive">Impossible de charger les documents.</p>
+        <Button variant="outline" className="mt-3 rounded-full" onClick={() => requests.refetch()}>
+          Réessayer
+        </Button>
+      </div>
+    );
+  }
+
+  const current = requests.data?.[0] ?? null;
+  const previousReceived = (requests.data ?? []).slice(1).flatMap((previousRequest) => (
+    previousRequest.items
+      .filter((item) => ['uploaded', 'validated'].includes(item.status) && item.storage_path)
+      .map((item) => ({ item, requestCreatedAt: previousRequest.created_at }))
+  ));
   const received = current?.items.filter((item) => ['uploaded', 'validated'].includes(item.status)).length ?? 0;
   const total = current?.items.length ?? 0;
   const progress = total ? Math.round((received / total) * 100) : 0;
@@ -131,6 +147,31 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
           <p className="mt-3 text-sm font-medium">Aucune demande envoyée</p>
           <p className="mt-1 text-xs text-muted-foreground">Créez le premier lien sécurisé pour ce client.</p>
         </div>
+      )}
+
+      {previousReceived.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+          <div>
+            <h3 className="text-sm font-semibold">Documents déjà reçus</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Ces pièces restent disponibles même lorsqu’un nouveau lien a été créé.
+            </p>
+          </div>
+          <div className="mt-4 divide-y divide-border">
+            {previousReceived.map(({ item, requestCreatedAt }) => (
+              <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-done" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.label}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {item.original_name ?? 'Document reçu'} · demande du {new Date(requestCreatedAt).toLocaleDateString('fr-FR')}
+                  </p>
+                </div>
+                {item.storage_path && <StaffDocumentLink storagePath={item.storage_path} />}
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

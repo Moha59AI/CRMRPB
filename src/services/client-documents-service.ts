@@ -71,24 +71,30 @@ export async function createClientDocumentRequest(leadId: string): Promise<Creat
 }
 
 export async function fetchLatestClientDocumentRequest(leadId: string): Promise<ClientDocumentRequestSummary | null> {
-  const { data: request, error: requestError } = await supabase
+  const requests = await fetchClientDocumentRequests(leadId);
+  return requests[0] ?? null;
+}
+
+export async function fetchClientDocumentRequests(leadId: string): Promise<ClientDocumentRequestSummary[]> {
+  const { data: requests, error: requestsError } = await supabase
     .from('client_document_requests')
     .select('id, status, expires_at, submitted_at, created_at')
     .eq('lead_id', leadId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (requestError) throw new Error(requestError.message);
-  if (!request) return null;
+    .order('created_at', { ascending: false });
+  if (requestsError) throw new Error(requestsError.message);
+  if (!requests?.length) return [];
 
   const { data: items, error: itemsError } = await supabase
     .from('client_document_items')
-    .select('id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
-    .eq('request_id', request.id)
+    .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
+    .in('request_id', requests.map((request) => request.id))
     .order('created_at');
   if (itemsError) throw new Error(itemsError.message);
 
-  return { ...request, items: (items ?? []) as ClientDocumentItem[] } as ClientDocumentRequestSummary;
+  return requests.map((request) => ({
+    ...request,
+    items: (items ?? []).filter((item) => item.request_id === request.id),
+  })) as ClientDocumentRequestSummary[];
 }
 
 export async function fetchClientDocumentHistory(leadIds: string[]): Promise<ClientDocumentRequestHistory[]> {

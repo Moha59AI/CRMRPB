@@ -153,3 +153,14 @@ test('le document est ouvert par un vrai lien deja signe', async () => {
   assert.doesNotMatch(link, /window\.open/);
   assert.doesNotMatch(link, /target="_blank"/);
 });
+
+test('un nouveau lien ne masque pas les documents deja recus', async () => {
+  const service = await read('src/services/client-documents-service.ts');
+  const panel = await read('src/features/dossier/documents-client-panel.tsx');
+
+  assert.match(service, /fetchClientDocumentRequests/);
+  assert.match(service, /requests\.map\(\(request\) =>/);
+  assert.match(panel, /slice\(1\)\.flatMap/);
+  assert.match(panel, /Documents déjà reçus/);
+  assert.match(panel, /restent disponibles même lorsqu’un nouveau lien a été créé/);
+});
