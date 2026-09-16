@@ -25,3 +25,13 @@ test("l'adresse existante ne declenche aucune recherche avant une interaction", 
   assert.match(champ, /setInteractionUtilisateur\(true\)/);
   assert.match(champ, /setInteractionUtilisateur\(false\)/);
 });
+
+test("un ancien onglet recupere automatiquement les modules remplaces par un deploiement", async () => {
+  const boundary = await read('src/components/ErrorBoundary.tsx');
+
+  assert.match(boundary, /failed to fetch dynamically imported module/i);
+  assert.match(boundary, /chunkloaderror/i);
+  assert.match(boundary, /window\.sessionStorage\.getItem\(MODULE_RELOAD_KEY\)/);
+  assert.match(boundary, /MODULE_RELOAD_COOLDOWN_MS/);
+  assert.match(boundary, /window\.location\.reload\(\)/);
+});

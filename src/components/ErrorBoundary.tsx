@@ -1,6 +1,32 @@
 import { Component, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
+const MODULE_RELOAD_KEY = 'crmrpb:last-module-reload';
+const MODULE_RELOAD_COOLDOWN_MS = 60_000;
+const MODULE_LOAD_ERROR = /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|loading chunk .+ failed|chunkloaderror/i;
+
+function recupererApresMiseAJour(error: Error): boolean {
+  if (!MODULE_LOAD_ERROR.test(`${error.name} ${error.message}`)) return false;
+
+  try {
+    const dernierRechargement = Number.parseInt(
+      window.sessionStorage.getItem(MODULE_RELOAD_KEY) ?? '0',
+      10,
+    );
+
+    // Une seule tentative automatique : si le serveur est vraiment en panne,
+    // l'ecran de diagnostic doit rester accessible et ne pas boucler.
+    if (Date.now() - dernierRechargement < MODULE_RELOAD_COOLDOWN_MS) return false;
+
+    window.sessionStorage.setItem(MODULE_RELOAD_KEY, String(Date.now()));
+    window.location.reload();
+    return true;
+  } catch {
+    // Un navigateur qui bloque sessionStorage garde le parcours manuel normal.
+    return false;
+  }
+}
+
 interface Props {
   children: ReactNode;
   /** Message métier affiché à l'utilisateur. */
@@ -38,6 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('ErrorBoundary:', error, info);
+    recupererApresMiseAJour(error);
   }
 
   componentDidUpdate(prev: Props) {
