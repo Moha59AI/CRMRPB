@@ -8,6 +8,8 @@ export interface GoogleCalendarStatus {
   calendarName: string | null;
   /** Compte Google qui a autorise le CRM. Connu apres la premiere synchronisation. */
   accountEmail: string | null;
+  /** Les rendez-vous crees dans Google sont repris dans le CRM. */
+  importAll: boolean;
   lastSyncedAt: string | null;
   lastError: string | null;
 }
@@ -17,6 +19,7 @@ export interface GoogleCalendarSyncResult {
   updatedInGoogle: number;
   updatedInCrm: number;
   cancelled: number;
+  imported: number;
 }
 
 async function bearerToken(): Promise<string> {
@@ -35,12 +38,31 @@ export async function fetchGoogleCalendarStatus(): Promise<GoogleCalendarStatus>
     calendarId: String(settings.calendar_id || 'primary'),
     calendarName: settings.calendar_name ? String(settings.calendar_name) : null,
     accountEmail: settings.calendar_account_email ? String(settings.calendar_account_email) : null,
+    importAll: settings.calendar_import_all === true,
     lastSyncedAt: settings.calendar_last_synced_at ? String(settings.calendar_last_synced_at) : null,
     lastError: settings.calendar_last_error ? String(settings.calendar_last_error) : null,
   };
 }
 
 export const startGoogleCalendarOAuth = startGoogleAdsOAuth;
+
+/**
+ * Active ou coupe la reprise des rendez-vous crees dans Google.
+ *
+ * Fusion avec les reglages existants : la ligne porte aussi la configuration
+ * Google Ads, qu'on ne doit pas ecraser.
+ */
+export async function setGoogleCalendarImportAll(enabled: boolean): Promise<void> {
+  const connection = await getGoogleAdsConnection();
+  if (!connection) throw new Error('Connexion Google introuvable');
+
+  const settings = { ...((connection.settings ?? {}) as Record<string, unknown>), calendar_import_all: enabled };
+  const { error } = await supabase
+    .from('integration_connections')
+    .update({ settings, updated_at: new Date().toISOString() })
+    .eq('id', connection.id);
+  if (error) throw new Error(error.message);
+}
 
 export async function syncGoogleCalendar(): Promise<GoogleCalendarSyncResult> {
   const response = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {

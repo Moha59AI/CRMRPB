@@ -8,8 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
-  fetchGoogleCalendarStatus, startGoogleCalendarOAuth, syncGoogleCalendar,
+  fetchGoogleCalendarStatus, setGoogleCalendarImportAll, startGoogleCalendarOAuth, syncGoogleCalendar,
 } from './google-calendar-service';
 import { interpreterErreurGoogle } from './erreur-google';
 
@@ -30,7 +32,11 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
       await queryClient.invalidateQueries({ queryKey: ['google-calendar-status'] });
       onSynced();
       toast.success('Google Agenda synchronisé', {
-        description: `${result.created} ajouté(s), ${result.updatedInGoogle + result.updatedInCrm} mis à jour`,
+        description: [
+          `${result.created} envoyé(s) à Google`,
+          result.imported ? `${result.imported} repris depuis Google` : null,
+          `${result.updatedInGoogle + result.updatedInCrm} mis à jour`,
+        ].filter(Boolean).join(', '),
       });
     },
     onError: (error) => toast.error('Synchronisation Google Agenda impossible', {
@@ -39,6 +45,19 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
   });
 
   const synchronize = useCallback(() => sync.mutate(), [sync]);
+
+  const importAll = useMutation({
+    mutationFn: setGoogleCalendarImportAll,
+    onSuccess: async (_, enabled) => {
+      await queryClient.invalidateQueries({ queryKey: ['google-calendar-status'] });
+      toast.success(enabled
+        ? 'Les rendez-vous créés dans Google seront repris à la prochaine synchronisation'
+        : 'Seuls les rendez-vous créés dans le CRM seront synchronisés');
+    },
+    onError: (error) => toast.error('Réglage non enregistré', {
+      description: error instanceof Error ? error.message : String(error),
+    }),
+  });
 
   useEffect(() => {
     const receiveOAuth = (event: MessageEvent) => {
@@ -89,7 +108,9 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
           <DialogHeader>
             <DialogTitle>Google Agenda</DialogTitle>
             <DialogDescription>
-              Les rendez-vous CRM sont copiés dans votre agenda. Seuls ces événements sont relus : vos rendez-vous personnels restent privés.
+              {status.data?.importAll
+                ? 'Les rendez-vous circulent dans les deux sens : ceux du CRM vont dans votre agenda, ceux créés dans Google apparaissent dans le CRM.'
+                : 'Les rendez-vous CRM sont copiés dans votre agenda. Seuls ces événements sont relus : vos rendez-vous personnels restent privés.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -181,6 +202,27 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
                   <AlertTitle>Identifiants Google requis</AlertTitle>
                   <AlertDescription>Configurez d'abord l'accès Google dans Réglages → Intégrations → Google Ads.</AlertDescription>
                 </Alert>
+              )}
+
+              {value?.authorized && (
+                <div className="flex items-start justify-between gap-4 rounded-xl border border-border p-4">
+                  <div className="min-w-0">
+                    <Label htmlFor="google-import-all" className="text-sm font-medium">
+                      Reprendre les rendez-vous créés dans Google
+                    </Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Tout événement de cet agenda devient un rendez-vous CRM de type « autre »,
+                      sans lead ni technicien. Les événements « journée entière » sont ignorés.
+                      Désactivé, seuls les rendez-vous nés dans le CRM sont relus.
+                    </p>
+                  </div>
+                  <Switch
+                    id="google-import-all"
+                    checked={value.importAll}
+                    disabled={importAll.isPending}
+                    onCheckedChange={(enabled) => importAll.mutate(enabled)}
+                  />
+                </div>
               )}
 
               <Separator />

@@ -51,6 +51,8 @@ type SyncResult = {
   updatedInGoogle: number;
   updatedInCrm: number;
   cancelled: number;
+  /** Rendez-vous nes dans Google et repris dans le CRM. */
+  imported: number;
 };
 
 function calendarUrl(calendarId: string, suffix = ''): string {
@@ -170,11 +172,20 @@ function retenirCompte(identite: IdentiteAgenda, events: GoogleEvent[]): void {
   }
 }
 
+/**
+ * Evenements de l'agenda sur la fenetre de synchronisation.
+ *
+ * Par defaut, seuls les evenements nes dans le CRM (marques d'une propriete
+ * privee) sont lus : les rendez-vous personnels restent chez Google. Avec
+ * `toutLire`, la lecture porte sur tout l'agenda -- c'est le reglage
+ * « importer les rendez-vous crees dans Google », choisi explicitement.
+ */
 async function listCrmEvents(
   token: string,
   calendarId: string,
   workspaceId: string,
   identite: IdentiteAgenda,
+  toutLire = false,
 ): Promise<GoogleEvent[]> {
   const events: GoogleEvent[] = [];
   let pageToken = '';
@@ -183,13 +194,13 @@ async function listCrmEvents(
 
   do {
     const params = new URLSearchParams({
-      privateExtendedProperty: `crmrpb_workspace_id=${workspaceId}`,
       timeMin,
       timeMax,
       maxResults: '2500',
       showDeleted: 'true',
       singleEvents: 'true',
     });
+    if (!toutLire) params.set('privateExtendedProperty', `crmrpb_workspace_id=${workspaceId}`);
     if (pageToken) params.set('pageToken', pageToken);
     const page = await googleRequest<{ items?: GoogleEvent[]; nextPageToken?: string; summary?: string }>(
       token,
@@ -230,7 +241,8 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
   const token = await accessToken(workspaceId, settings);
   console.info('[google-calendar-sync] Jeton OAuth obtenu');
   const identite: IdentiteAgenda = { nom: null, compte: null };
-  const googleEvents = await listCrmEvents(token, calendarId, workspaceId, identite);
+  const importerTout = settings.calendar_import_all === true;
+  const googleEvents = await listCrmEvents(token, calendarId, workspaceId, identite, importerTout);
   console.info(`[google-calendar-sync] ${googleEvents.length} evenement(s) CRM trouve(s) chez Google`);
   const eventsById = new Map(
     googleEvents.filter((event) => event.id).map((event) => [event.id as string, event]),
@@ -258,7 +270,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
   if (error) throw new Error(error.message);
   console.info(`[google-calendar-sync] ${(data ?? []).length} rendez-vous CRM a traiter`);
 
-  const result: SyncResult = { created: 0, updatedInGoogle: 0, updatedInCrm: 0, cancelled: 0 };
+  const result: SyncResult = { created: 0, updatedInGoogle: 0, updatedInCrm: 0, cancelled: 0, imported: 0 };
 
   for (const rawAppointment of data ?? []) {
     const appointment = rawAppointment as AppointmentRow;
@@ -385,6 +397,63 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
       .eq('workspace_id', workspaceId);
     if (createError) throw new Error(createError.message);
     result.created++;
+  }
+
+  // ── Import des rendez-vous nes dans Google ─────────────────────────────
+  //
+  // Un evenement Google qui ne porte pas la marque du CRM et n'est rattache a
+  // aucun rendez-vous devient un rendez-vous CRM de type « autre » : il
+  // apparait dans l'agenda sans passer pour une intervention, sans lead, sans
+  // technicien. Les tours suivants le traitent comme n'importe quel
+  // rendez-vous lie -- modifie d'un cote, repris de l'autre.
+  //
+  // Les evenements « journee entiere » sont laisses de cote : anniversaires,
+  // jours feries, blocages -- ce ne sont pas des rendez-vous, et c'est
+  // precisement le bruit qu'on ne veut pas dans l'agenda de travail.
+  if (importerTout) {
+    const dejaLies = new Set(
+      ((data ?? []) as AppointmentRow[])
+        .map((a) => a.google_calendar_event_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    for (const event of googleEvents) {
+      if (!event.id || event.status === 'cancelled') continue;
+      if (event.extendedProperties?.private?.crmrpb_appointment_id) continue;
+      if (dejaLies.has(event.id)) continue;
+      if (!event.start?.dateTime || !event.end?.dateTime) continue; // journee entiere
+
+      const startTime = eventDateTime(event.start);
+      const endTime = eventDateTime(event.end);
+      if (!startTime || !endTime) continue;
+
+      const importe = {
+        workspace_id: workspaceId,
+        title: event.summary?.trim() || 'Rendez-vous Google',
+        address: event.location?.trim() || null,
+        start_time: startTime,
+        end_time: endTime,
+      };
+
+      const { error: importError } = await adminClient
+        .from('appointments')
+        .insert({
+          ...importe,
+          type: 'other',
+          status: 'scheduled',
+          google_calendar_event_id: event.id,
+          google_calendar_html_link: event.htmlLink ?? null,
+          google_calendar_updated_at: event.updated ?? new Date().toISOString(),
+          // Hash volontairement absent : au tour suivant, le CRM verra une
+          // difference, poussera l'evenement vers Google et le marquera de sa
+          // propriete privee. Apres ce cycle, il est lie comme les autres.
+          google_calendar_payload_hash: null,
+          google_calendar_origin: 'google',
+        });
+      if (importError) throw new Error(importError.message);
+      result.imported++;
+    }
+    if (result.imported) console.info(`[google-calendar-sync] ${result.imported} rendez-vous importe(s) depuis Google`);
   }
 
   // Relire les réglages avant de les enrichir évite d'écraser une modification
