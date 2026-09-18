@@ -28,6 +28,7 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/settings/integrations/meta': ['admin'],
   '/settings/integrations/google': ['admin'],
   '/settings/integrations/onify': ['admin'],
+  '/settings/integrations/email': ['admin'],
   '/settings/integrations/ai': ['admin'],
   '/settings/webhooks': ['admin'],
   '/settings/insurers': ['admin', 'manager'],

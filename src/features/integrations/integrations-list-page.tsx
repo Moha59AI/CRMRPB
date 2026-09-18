@@ -1,4 +1,4 @@
-import { BarChart3, BrainCircuit, DatabaseZap, Megaphone as MetaIcon, Webhook, Plus } from 'lucide-react';
+import { BarChart3, BrainCircuit, DatabaseZap, Mail, Megaphone as MetaIcon, Webhook, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,13 @@ const integrations: IntegrationCard[] = [
     description: 'Copie en lecture seule des clients, notes, appels, devis, factures et avoirs vers ce CRM.',
     icon: DatabaseZap,
     path: '/settings/integrations/onify',
+    available: true,
+  },
+  {
+    name: 'Boîte mail IONOS',
+    description: 'Envoi réel depuis le CRM et rattachement automatique des nouveaux emails aux clients.',
+    icon: Mail,
+    path: '/settings/integrations/email',
     available: true,
   },
   {

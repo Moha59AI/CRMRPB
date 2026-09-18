@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, PhoneMissed, MessageSquare, Mail, StickyNote,
   ArrowUpRight, ArrowDownLeft, Plus, Clock, AlertCircle,
-  Voicemail, Settings, Loader2,
+  Voicemail, Settings, Loader2, CheckCircle2, Paperclip,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,9 @@ import type {
 import { createCommunication, createSmsTemplate, fetchCommunications, fetchSmsTemplates } from '@/services/activity-service';
 import { fetchContacts } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
+import {
+  getIonosMailboxStatus, sendIonosEmail, type IonosMailboxStatus,
+} from '@/features/integrations/email/email-service';
 
 // ============ LABELS ============
 
@@ -163,6 +166,11 @@ export function CommunicationsPage() {
   const { data: leads } = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
   const { data: contacts } = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const { data: templates } = useQuery({ queryKey: ['sms-templates'], queryFn: fetchSmsTemplates });
+  const { data: mailboxStatus } = useQuery({
+    queryKey: ['ionos-email-status'],
+    queryFn: getIonosMailboxStatus,
+    retry: false,
+  });
 
   const leadMap = useMemo(() => {
     const m = new Map<string, Lead>();
@@ -211,13 +219,17 @@ export function CommunicationsPage() {
         description="SMS, appels et emails"
         action={
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="rounded-full border-due/25 bg-due-soft text-due text-[10px] font-medium"
-            >
-              <AlertCircle className="mr-1 h-3 w-3" />
-              Mode démonstration
-            </Badge>
+            {mailboxStatus?.configured ? (
+              <Badge variant="outline" className="rounded-full border-done/25 bg-done-soft text-done text-[10px] font-medium">
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                Email IONOS actif
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="rounded-full border-due/25 bg-due-soft text-due text-[10px] font-medium">
+                <AlertCircle className="mr-1 h-3 w-3" />
+                Email à configurer
+              </Badge>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -288,12 +300,11 @@ export function CommunicationsPage() {
           <div className="mx-3 mb-3 rounded-lg border border-due/25 bg-due-soft/60 p-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-due">
               <AlertCircle className="h-3.5 w-3.5" />
-              Mode démonstration
+              SMS et appels en démonstration
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-due">
-              Les SMS, appels et emails sont enregistrés en base mais ne sont pas
-              réellement envoyés. Configurez les clés API (Twilio, Ringover…) pour
-              activer l'envoi réel.
+              Les SMS et appels sont seulement enregistrés. Les emails sont réellement
+              envoyés dès que la boîte IONOS est configurée dans les réglages.
             </p>
           </div>
         </aside>
@@ -378,6 +389,7 @@ export function CommunicationsPage() {
         onOpenChange={setEmailOpen}
         leads={leads ?? []}
         contacts={contacts ?? []}
+        mailboxStatus={mailboxStatus}
       />
       <NoteDialog
         open={noteOpen}
@@ -428,6 +440,11 @@ function CommunicationRow({ comm, name }: { comm: Communication; name: string | 
           {comm.content && (
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{comm.content}</p>
           )}
+          {(comm.sender_email || comm.recipient_email) && (
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {isOutbound ? `À : ${comm.recipient_email ?? 'adresse inconnue'}` : `De : ${comm.sender_email ?? 'adresse inconnue'}`}
+            </p>
+          )}
 
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span title={formatFull(comm.created_at)}>{formatRelative(comm.created_at)}</span>
@@ -439,6 +456,12 @@ function CommunicationRow({ comm, name }: { comm: Communication; name: string | 
             )}
             {comm.provider && comm.provider !== 'demo' && (
               <span className="uppercase">{comm.provider}</span>
+            )}
+            {comm.email_attachments?.length > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Paperclip className="h-3 w-3" />
+                {comm.email_attachments.length} pièce{comm.email_attachments.length > 1 ? 's' : ''} jointe{comm.email_attachments.length > 1 ? 's' : ''}
+              </span>
             )}
           </div>
         </div>
@@ -482,6 +505,17 @@ function buildOptions(leads: Lead[], contacts: Contact[]): ContactOption[] {
       sub: l.phone ?? l.email ?? null,
     }),
   );
+  return opts;
+}
+
+function buildEmailOptions(leads: Lead[], contacts: Contact[]): ContactOption[] {
+  const opts: ContactOption[] = [];
+  contacts.forEach((contact) => {
+    if (contact.email) opts.push({ id: `contact:${contact.id}`, label: personLabel(contact), sub: contact.email });
+  });
+  leads.forEach((lead) => {
+    if (lead.email) opts.push({ id: `lead:${lead.id}`, label: personLabel(lead), sub: lead.email });
+  });
   return opts;
 }
 
@@ -837,12 +871,13 @@ function SmsDialog({
 // ============ EMAIL DIALOG ============
 
 function EmailDialog({
-  open, onOpenChange, leads, contacts,
+  open, onOpenChange, leads, contacts, mailboxStatus,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   leads: Lead[];
   contacts: Contact[];
+  mailboxStatus?: IonosMailboxStatus;
 }) {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState('');
@@ -850,7 +885,7 @@ function EmailDialog({
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
 
-  const options = useMemo(() => buildOptions(leads, contacts), [leads, contacts]);
+  const options = useMemo(() => buildEmailOptions(leads, contacts), [leads, contacts]);
 
   const reset = () => {
     setTarget('');
@@ -862,22 +897,18 @@ function EmailDialog({
   const mutation = useMutation({
     mutationFn: async () => {
       const parsed = parseOption(target);
-      const base: Partial<Communication> = {
-        type: 'email_outbound',
-        direction: 'outbound',
-        status: 'sent',
-        subject: subject || null,
-        content: content || null,
-      };
-      if (parsed?.kind === 'contact') base.contact_id = parsed.id;
-      if (parsed?.kind === 'lead') base.lead_id = parsed.id;
-      const res = await createCommunication(base);
-      if (res.error) throw new Error(res.error);
-      return res;
+      return sendIonosEmail({
+        to: email.trim() || undefined,
+        contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
+        lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
+        subject: subject.trim(),
+        content: content.trim(),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communications'] });
-      toast.success('Email envoyé (mode démo)');
+      queryClient.invalidateQueries({ queryKey: ['ionos-email-status'] });
+      toast.success('Email envoyé depuis votre boîte IONOS');
       reset();
       onOpenChange(false);
     },
@@ -906,7 +937,9 @@ function EmailDialog({
         <DialogHeader>
           <DialogTitle>Envoyer un email</DialogTitle>
           <DialogDescription>
-            En mode démo, l'email est enregistré en base mais n'est pas réellement envoyé.
+            {mailboxStatus?.configured
+              ? `Envoi réel depuis ${mailboxStatus.email_address ?? 'votre boîte IONOS'}.`
+              : "La boîte IONOS doit d'abord être configurée par un administrateur dans Réglages > Intégrations."}
           </DialogDescription>
         </DialogHeader>
 
@@ -933,7 +966,7 @@ function EmailDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">Email (si non lié)</Label>
+            <Label className="text-sm">Adresse directe ou de remplacement</Label>
             <Input
               type="email"
               placeholder="exemple@email.com"
@@ -969,7 +1002,7 @@ function EmailDialog({
           <Button variant="ghost" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button className="rounded-full" disabled={mutation.isPending} onClick={handleSubmit}>
+          <Button className="rounded-full" disabled={mutation.isPending || !mailboxStatus?.configured} onClick={handleSubmit}>
             {mutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (

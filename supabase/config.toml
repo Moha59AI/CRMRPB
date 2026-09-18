@@ -54,3 +54,9 @@ verify_jwt = true
 
 [functions.lead-ai-assistant]
 verify_jwt = true
+
+[functions.email-send]
+verify_jwt = true
+
+[functions.email-inbound-webhook]
+verify_jwt = false

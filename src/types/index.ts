@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'manager' | 'advisor' | 'technician' | 'accountant';
 
-export type IntegrationProvider = 'meta' | 'google' | 'onify' | 'custom';
+export type IntegrationProvider = 'meta' | 'google' | 'onify' | 'ionos' | 'custom';
 export type IntegrationStatus = 'connected' | 'error' | 'not_configured';
 
 export type WebhookDirection = 'inbound' | 'outbound';
@@ -436,6 +436,16 @@ export interface Communication {
   provider: string;
   external_id: string | null;
   delivered_at: string | null;
+  sender_email: string | null;
+  recipient_email: string | null;
+  email_message_id: string | null;
+  email_in_reply_to: string | null;
+  email_attachments: Array<{
+    id: string;
+    filename: string;
+    content_type: string | null;
+    size?: number | null;
+  }>;
   created_at: string;
 }
 

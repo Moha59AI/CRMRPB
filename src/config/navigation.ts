@@ -16,6 +16,7 @@ import {
   BrainCircuit,
   Files,
   WalletCards,
+  Mail,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -243,6 +244,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/integrations/onify',
         icon: DatabaseZap,
         description: 'Import en lecture seule vers le nouveau CRM',
+      },
+      {
+        label: 'Boîte mail IONOS',
+        path: '/settings/integrations/email',
+        icon: Mail,
+        description: 'Envoi et réception des emails clients',
       },
       {
         label: 'Webhooks',

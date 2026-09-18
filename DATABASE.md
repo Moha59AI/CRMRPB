@@ -162,7 +162,7 @@ Connexions aux services externes.
 |---------|------|-------------|
 | id | uuid PK | |
 | workspace_id | uuid → workspaces | |
-| provider | text | meta, google, custom |
+| provider | text | meta, google, onify, ionos, custom |
 | name | text | Nom de la connexion |
 | status | text | connected, error, not_configured |
 | settings | jsonb | Configuration non-secrète |
@@ -173,6 +173,26 @@ Connexions aux services externes.
 | updated_at | timestamptz | |
 
 **Note** : Les secrets (App Secret, tokens) ne sont JAMAIS stockés dans `settings`. Ils sont stockés via Supabase Vault avec une référence dans `settings`.
+
+Pour `ionos`, `settings` contient uniquement l'adresse professionnelle, le nom
+d'expéditeur et l'adresse de transfert Resend Inbound. Le mot de passe de la
+boîte IONOS n'entre jamais dans le CRM. L'envoi passe par Resend ; IONOS
+transfère une copie des nouveaux messages vers Resend pour les rattacher aux
+clients et aux leads.
+
+### communications — champs email
+Les emails réels utilisent le même historique que les appels et SMS.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| sender_email | text | Adresse d'expédition réelle |
+| recipient_email | text | Adresse de destination réelle |
+| email_message_id | text | Identifiant RFC du message reçu |
+| email_in_reply_to | text | Identifiant du message auquel une réponse se rattache |
+| email_attachments | jsonb | Métadonnées des pièces jointes ; aucune URL temporaire conservée |
+
+Les emails sortants ont le provider `resend-ionos`. Les emails entrants sont
+créés par le webhook signé Resend avec la service role, puis associés par
+adresse email à un client et, si possible, à son lead le plus récent.
 
 ### lead_ai_insights
 Historique immuable des analyses IA demandées depuis une fiche lead. Les
