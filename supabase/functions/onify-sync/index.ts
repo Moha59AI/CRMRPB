@@ -291,20 +291,44 @@ async function syncContacts(
     .map((row) => [normalizeEmail(row.email), row]));
   const updateRows: Json[] = [];
   const insertRows: Json[] = [];
+  const syncedAt = new Date().toISOString();
+
+  // Une meme fiche Onify peut revenir deux fois si la pagination glisse
+  // pendant la lecture. Deux lignes pour un meme identifiant dans un lot,
+  // et Postgres refuse tout le lot.
+  const uniques = new Map<string, OnifyCustomer>();
+  for (const customer of customers) uniques.set(String(customer.id), customer);
+
   // Plusieurs fiches Onify peuvent partager un telephone ou un email. Une
   // ligne CRM existante ne peut absorber qu'un seul identifiant Onify : les
   // autres fiches restent distinctes afin de conserver leurs documents et
   // appels sans provoquer deux mises a jour du meme contact dans un batch.
+  //
+  // Deux passes, et l'ordre compte. Une fiche rapprochee par telephone
+  // pouvait reclamer un contact avant que la fiche qui le possede par
+  // identifiant ne soit traitee : deux mises a jour visaient la meme ligne,
+  // et la synchronisation entiere echouait -- « cannot affect row a second
+  // time ». Les correspondances exactes sont donc reservees en premier ; le
+  // rapprochement par identite ne se fait que sur ce qui reste.
   const claimedContactIds = new Set<string>();
-  const syncedAt = new Date().toISOString();
+  const exactByCustomer = new Map<string, (typeof existing)[number]>();
+  for (const [onifyId] of uniques) {
+    const exact = byOnifyId.get(onifyId);
+    if (exact) {
+      exactByCustomer.set(onifyId, exact);
+      claimedContactIds.add(exact.id);
+    }
+  }
 
-  for (const customer of customers) {
+  for (const customer of uniques.values()) {
     const onifyId = String(customer.id);
     const phone = cleanText(customer.telephones?.[0]);
     const email = cleanText(customer.email);
-    const exactMatch = byOnifyId.get(onifyId);
-    const identityMatch = (phone ? byPhone.get(normalizePhone(phone)) : undefined)
-      ?? (email ? byEmail.get(normalizeEmail(email)) : undefined);
+    const exactMatch = exactByCustomer.get(onifyId);
+    const identityMatch = exactMatch ? undefined : (
+      (phone ? byPhone.get(normalizePhone(phone)) : undefined)
+      ?? (email ? byEmail.get(normalizeEmail(email)) : undefined)
+    );
     const match = exactMatch
       ?? (identityMatch && !claimedContactIds.has(identityMatch.id) ? identityMatch : undefined);
     const address = customer.adresse ?? {};
