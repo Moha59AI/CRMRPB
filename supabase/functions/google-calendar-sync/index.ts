@@ -53,6 +53,8 @@ type SyncResult = {
   cancelled: number;
   /** Rendez-vous nes dans Google et repris dans le CRM. */
   imported: number;
+  /** Rendez-vous rattaches a un client via la plaque du titre. */
+  linked: number;
 };
 
 function calendarUrl(calendarId: string, suffix = ''): string {
@@ -270,7 +272,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
   if (error) throw new Error(error.message);
   console.info(`[google-calendar-sync] ${(data ?? []).length} rendez-vous CRM a traiter`);
 
-  const result: SyncResult = { created: 0, updatedInGoogle: 0, updatedInCrm: 0, cancelled: 0, imported: 0 };
+  const result: SyncResult = { created: 0, updatedInGoogle: 0, updatedInCrm: 0, cancelled: 0, imported: 0, linked: 0 };
 
   for (const rawAppointment of data ?? []) {
     const appointment = rawAppointment as AppointmentRow;
@@ -455,6 +457,15 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
     }
     if (result.imported) console.info(`[google-calendar-sync] ${result.imported} rendez-vous importe(s) depuis Google`);
   }
+
+  // Un rendez-vous repris de Google arrive sans client. Son titre porte la
+  // plaque, et la plaque suffit a retrouver le lead ou le contact -- donc
+  // l'adresse et le telephone que l'agenda doit montrer.
+  const { data: rattaches, error: rattachementError } = await adminClient
+    .rpc('rattacher_rendez_vous_clients', { p_workspace_id: workspaceId });
+  if (rattachementError) throw new Error(`rattachement clients: ${rattachementError.message}`);
+  result.linked = Number(rattaches ?? 0);
+  if (result.linked) console.info(`[google-calendar-sync] ${result.linked} rendez-vous rattache(s) a un client`);
 
   // Relire les réglages avant de les enrichir évite d'écraser une modification
   // Google Ads enregistrée pendant une synchronisation Agenda un peu longue.

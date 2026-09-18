@@ -31,7 +31,10 @@ test('la synchronisation ne lit que les evenements CRM et limite les donnees env
   const selectionEnd = source.indexOf(".eq('workspace_id'", selectionStart);
   const selection = source.slice(selectionStart, selectionEnd);
 
-  assert.match(source, /privateExtendedProperty: `crmrpb_workspace_id=\$\{workspaceId\}`/);
+  // Par defaut seuls les evenements nes dans le CRM sont lus ; la lecture de
+  // tout l'agenda est un reglage explicite, jamais le comportement implicite.
+  assert.match(source, /if \(!toutLire\) params\.set\('privateExtendedProperty', `crmrpb_workspace_id=\$\{workspaceId\}`\)/);
+  assert.match(source, /settings\.calendar_import_all === true/);
   assert.match(payload, /summary: appointment\.title/);
   assert.match(payload, /location: appointment\.address/);
   assert.match(payload, /start: \{ dateTime: appointment\.start_time/);

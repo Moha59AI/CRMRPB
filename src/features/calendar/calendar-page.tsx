@@ -82,7 +82,11 @@ import { cn } from '@/lib/utils';
 
 import { fetchCases } from '@/services/cases-service';
 import { fetchLeads, updateLead } from '@/services/leads-service';
-import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from '@/services/planning-service';
+import {
+  clientDuRendezVous, createAppointment, deleteAppointment, fetchAppointments, updateAppointment,
+  type AppointmentAvecClient,
+} from '@/services/planning-service';
+import { lienItineraire } from '@/services/adresse-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import type {
@@ -296,6 +300,7 @@ function AppointmentBlock({
   const { appt, top, height, colIndex, colCount } = placed;
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
   const isCancelled = appt.status === 'cancelled';
+  const { adresse: adresseBloc } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -321,10 +326,10 @@ function AppointmentBlock({
           {formatTime(appt.start_time)} – {formatTime(appt.end_time)}
         </div>
       )}
-      {height > 56 && appt.address && (
+      {height > 56 && adresseBloc && (
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] opacity-70">
           <MapPin className="h-2.5 w-2.5 shrink-0" />
-          <span className="truncate">{appt.address}</span>
+          <span className="truncate">{adresseBloc}</span>
         </div>
       )}
     </button>
@@ -643,6 +648,11 @@ function AppointmentDetailSheet({
 
   const Icon = TYPE_ICONS[appointment.type] ?? CalendarIcon;
   const assigned = profiles.find((p) => p.id === appointment.assigned_user_id);
+  const client = clientDuRendezVous(appointment as AppointmentAvecClient);
+  // L'itineraire part de l'adresse en texte : un rendez-vous repris de Google
+  // n'a pas ses propres coordonnees, et celles du lead peuvent designer un
+  // autre lieu que l'adresse affichee.
+  const itineraire = client.adresse ? lienItineraire({ address: client.adresse }) : null;
   const start = new Date(appointment.start_time);
   const end = new Date(appointment.end_time);
   const isPast = end.getTime() < Date.now();
@@ -701,12 +711,49 @@ function AppointmentDetailSheet({
             )}
           </div>
 
-          {/* Address */}
-          {appointment.address && (
-            <div className="flex items-start gap-2 text-sm">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <span>{appointment.address}</span>
+          {/* Client : ou aller, qui appeler. C'est ce que le technicien
+              regarde avant de partir ; ca ne doit dependre ni du champ
+              adresse du rendez-vous, ni de ce que Google en savait. */}
+          {(client.adresse || client.telephone || client.nom) ? (
+            <div className="rounded-xl border border-border p-3 text-sm">
+              {client.nom && (
+                <p className="font-medium text-foreground">{client.nom}</p>
+              )}
+              {client.adresse && (
+                <div className="mt-1.5 flex items-start gap-2 text-muted-foreground">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{client.adresse}</span>
+                </div>
+              )}
+              {client.telephone && (
+                <div className="mt-1 flex items-center gap-2 text-muted-foreground">
+                  <Phone className="h-4 w-4 shrink-0" />
+                  <a href={`tel:${client.telephone}`} className="hover:underline">{client.telephone}</a>
+                </div>
+              )}
+              {(itineraire || client.telephone) && (
+                <div className="mt-3 flex gap-2">
+                  {itineraire && (
+                    <Button asChild size="sm" className="flex-1 rounded-full">
+                      <a href={itineraire} target="_blank" rel="noopener noreferrer">
+                        <MapPin className="mr-1.5 h-3.5 w-3.5" />Itinéraire
+                      </a>
+                    </Button>
+                  )}
+                  {client.telephone && (
+                    <Button asChild size="sm" variant="outline" className="flex-1 rounded-full">
+                      <a href={`tel:${client.telephone}`}>
+                        <Phone className="mr-1.5 h-3.5 w-3.5" />Appeler
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Aucun client rattaché : ni adresse ni téléphone à afficher.
+            </p>
           )}
 
           {/* Description */}
