@@ -101,6 +101,8 @@ type OnifyCall = Json & {
 
 type SyncCounts = {
   contacts: number;
+  /** Leads ayant recu l'adresse de leur contact. */
+  leadAddresses: number;
   notes: number;
   calls: number;
   invoices: number;
@@ -595,6 +597,13 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   ]);
 
   const contactIds = await syncContacts(workspaceId, customers);
+
+  // L'adresse arrive sur le contact ; le travail se fait dans la fiche du
+  // lead. Sans ce report, un lead ne au webhook garde « CP Ville » alors que
+  // le client a donne sa rue chez Onify. Ne remplit que ce qui manque.
+  const { data: leadAddresses, error: propagationError } = await adminClient
+    .rpc('propager_adresses_contacts', { p_workspace_id: workspaceId });
+  if (propagationError) throw new Error(`propagation adresses: ${propagationError.message}`);
   // Une synchronisation incrementale peut ne renvoyer aucun contact. On relit
   // alors la correspondance complete nécessaire aux documents et aux appels.
   if (!contactIds.size) {
@@ -619,6 +628,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
 
   const counts: SyncCounts = {
     contacts: customers.length,
+    leadAddresses: Number(leadAddresses ?? 0),
     notes: notes.count,
     calls: calls.length,
     invoices: invoices.length,
