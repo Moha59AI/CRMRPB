@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldCheck,
   UserRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -22,11 +23,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchContacts } from '@/services/contacts-service';
+import { fetchInsurers } from '@/services/insurers-service';
 import { fetchLeads } from '@/services/leads-service';
 import type { Communication, Contact, Lead } from '@/types';
+import {
+  classifyEmailParty,
+  type EmailPartyClassification,
+} from './email-classification';
 import { fetchMailboxEmails } from './email-service';
 
-type MailboxView = 'inbound' | 'outbound' | 'all' | 'unlinked';
+type MailboxView = 'inbound' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
 const mailboxViews: Array<{
   key: MailboxView;
@@ -34,10 +40,18 @@ const mailboxViews: Array<{
   Icon: typeof Mail;
 }> = [
   { key: 'inbound', label: 'Reçus', Icon: Inbox },
+  { key: 'insurers', label: 'Assureurs', Icon: ShieldCheck },
+  { key: 'experts', label: 'Experts', Icon: Search },
   { key: 'outbound', label: 'Envoyés', Icon: Send },
   { key: 'all', label: 'Tous', Icon: Mail },
   { key: 'unlinked', label: 'Non rattachés', Icon: Link2 },
 ];
+
+const OTHER_CLASSIFICATION: EmailPartyClassification = {
+  category: 'other',
+  organization: null,
+  confidence: 'confirmed',
+};
 
 function formatMailboxDate(iso: string): string {
   const date = new Date(iso);
@@ -82,11 +96,39 @@ function resolvePerson(
   return null;
 }
 
-function matchesMailboxView(email: Communication, view: MailboxView): boolean {
+function matchesMailboxView(
+  email: Communication,
+  view: MailboxView,
+  classification: EmailPartyClassification,
+): boolean {
   if (view === 'inbound') return email.direction === 'inbound';
+  if (view === 'insurers') return email.direction === 'inbound' && classification.category === 'insurer';
+  if (view === 'experts') return email.direction === 'inbound' && classification.category === 'expert';
   if (view === 'outbound') return email.direction === 'outbound';
   if (view === 'unlinked') return !email.contact_id && !email.lead_id;
   return true;
+}
+
+function EmailPartyBadge({ classification }: { classification: EmailPartyClassification }) {
+  if (classification.category === 'other') return null;
+  const insurer = classification.category === 'insurer';
+  const label = insurer ? 'Assureur' : 'Expert';
+  const title = classification.organization ? `${label} · ${classification.organization}` : `${label} probable`;
+
+  return (
+    <Badge
+      variant="outline"
+      title={classification.confidence === 'confirmed' ? 'Correspondant reconnu' : 'Détection probable à vérifier'}
+      className={`max-w-full gap-1 rounded-full text-[10px] ${
+        insurer
+          ? 'border-primary/25 bg-primary/5 text-primary'
+          : 'border-upcoming/25 bg-upcoming-soft text-upcoming'
+      }`}
+    >
+      {insurer ? <ShieldCheck className="h-3 w-3 shrink-0" /> : <Search className="h-3 w-3 shrink-0" />}
+      <span className="truncate">{title}</span>
+    </Badge>
+  );
 }
 
 function statusLabel(email: Communication): string {
@@ -117,6 +159,11 @@ export function EmailInboxPage() {
   });
   const contactsQuery = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const leadsQuery = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
+  const insurersQuery = useQuery({
+    queryKey: ['mailbox-insurers'],
+    queryFn: () => fetchInsurers({ inclureInactifs: true }),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const contactMap = useMemo(() => {
     const map = new Map<string, Contact>();
@@ -130,20 +177,35 @@ export function EmailInboxPage() {
     return map;
   }, [leadsQuery.data]);
 
+  const classificationMap = useMemo(() => {
+    const map = new Map<string, EmailPartyClassification>();
+    (emailsQuery.data ?? []).forEach((email) => {
+      map.set(email.id, classifyEmailParty(email, insurersQuery.data ?? []));
+    });
+    return map;
+  }, [emailsQuery.data, insurersQuery.data]);
+
   const counts = useMemo(() => {
     const emails = emailsQuery.data ?? [];
     return {
       inbound: emails.filter((email) => email.direction === 'inbound').length,
+      insurers: emails.filter((email) => (
+        email.direction === 'inbound' && classificationMap.get(email.id)?.category === 'insurer'
+      )).length,
+      experts: emails.filter((email) => (
+        email.direction === 'inbound' && classificationMap.get(email.id)?.category === 'expert'
+      )).length,
       outbound: emails.filter((email) => email.direction === 'outbound').length,
       all: emails.length,
       unlinked: emails.filter((email) => !email.contact_id && !email.lead_id).length,
     } satisfies Record<MailboxView, number>;
-  }, [emailsQuery.data]);
+  }, [emailsQuery.data, classificationMap]);
 
   const filteredEmails = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('fr-FR');
     return (emailsQuery.data ?? []).filter((email) => {
-      if (!matchesMailboxView(email, view)) return false;
+      const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
+      if (!matchesMailboxView(email, view, classification)) return false;
       if (!needle) return true;
       const person = resolvePerson(email, contactMap, leadMap) ?? '';
       return [
@@ -152,9 +214,12 @@ export function EmailInboxPage() {
         email.sender_email,
         email.recipient_email,
         person,
+        classification.category === 'insurer' ? 'assureur assurance' : null,
+        classification.category === 'expert' ? 'expert expertise' : null,
+        classification.organization,
       ].some((value) => value?.toLocaleLowerCase('fr-FR').includes(needle));
     });
-  }, [emailsQuery.data, search, view, contactMap, leadMap]);
+  }, [emailsQuery.data, search, view, contactMap, leadMap, classificationMap]);
 
   useEffect(() => {
     if (filteredEmails.length === 0) {
@@ -284,6 +349,7 @@ export function EmailInboxPage() {
                 const inbound = email.direction === 'inbound';
                 const person = resolvePerson(email, contactMap, leadMap);
                 const address = inbound ? email.sender_email : email.recipient_email;
+                const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
                 return (
                   <button
                     key={email.id}
@@ -315,6 +381,7 @@ export function EmailInboxPage() {
                           {email.content || 'Aucun contenu texte disponible.'}
                         </p>
                         <div className="mt-2 flex items-center gap-2">
+                          <EmailPartyBadge classification={classification} />
                           {!email.contact_id && !email.lead_id && (
                             <span className="rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due">
                               À rattacher
@@ -341,6 +408,7 @@ export function EmailInboxPage() {
             <EmailDetail
               email={selectedEmail}
               person={resolvePerson(selectedEmail, contactMap, leadMap)}
+              classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
               onBack={() => setMobileDetailOpen(false)}
             />
           ) : (
@@ -361,10 +429,12 @@ export function EmailInboxPage() {
 function EmailDetail({
   email,
   person,
+  classification,
   onBack,
 }: {
   email: Communication;
   person: string | null;
+  classification: EmailPartyClassification;
   onBack: () => void;
 }) {
   const inbound = email.direction === 'inbound';
@@ -388,6 +458,7 @@ function EmailDetail({
               <Badge variant="outline" className={`rounded-full text-[10px] ${statusClass(email)}`}>
                 {statusLabel(email)}
               </Badge>
+              <EmailPartyBadge classification={classification} />
               {email.provider && (
                 <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{email.provider}</span>
               )}
@@ -423,6 +494,16 @@ function EmailDetail({
 
               <span className="text-muted-foreground">Date</span>
               <p className="capitalize text-foreground">{formatFullDate(email.created_at)}</p>
+
+              {classification.category !== 'other' && (
+                <>
+                  <span className="text-muted-foreground">Correspondant</span>
+                  <p className="font-medium text-foreground">
+                    {classification.category === 'insurer' ? 'Assureur' : 'Cabinet d’expertise'}
+                    {classification.organization ? ` · ${classification.organization}` : ' · à confirmer'}
+                  </p>
+                </>
+              )}
 
               {!email.contact_id && !email.lead_id && (
                 <>

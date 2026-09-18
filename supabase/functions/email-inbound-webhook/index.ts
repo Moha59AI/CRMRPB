@@ -75,6 +75,97 @@ function htmlVersTexte(html: string): string {
     .trim();
 }
 
+type CorrespondantEmail = {
+  type: 'assureur' | 'expert' | 'autre';
+  nom: string | null;
+};
+
+const domainesGeneriques = new Set([
+  'gmail.com', 'hotmail.com', 'icloud.com', 'laposte.net', 'live.fr', 'orange.fr',
+  'outlook.com', 'outlook.fr', 'sfr.fr', 'wanadoo.fr', 'yahoo.com', 'yahoo.fr',
+]);
+
+const domainesExperts: Array<{ domaine: string; nom: string }> = [
+  { domaine: 'solutions-expertises.com', nom: 'Solutions Expertises' },
+  { domaine: 'bca-expertise.com', nom: 'BCA Expertise' },
+  { domaine: 'bca-expertise.fr', nom: 'BCA Expertise' },
+  { domaine: 'eurexo.fr', nom: 'Eurexo' },
+  { domaine: 'polyexpert.fr', nom: 'Polyexpert' },
+  { domaine: 'saretec.fr', nom: 'Saretec' },
+  { domaine: 'texa.fr', nom: 'Groupe Texa' },
+  { domaine: 'adenes.eu', nom: 'Adenes' },
+  { domaine: 'cabinet-roux.com', nom: 'Cabinet Roux' },
+];
+
+function extraireAdresses(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  return (value.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) ?? [])
+    .map((adresse) => adresse.toLowerCase());
+}
+
+function domaineDe(adresse: string): string {
+  return adresse.split('@')[1] ?? '';
+}
+
+function correspondAuDomaine(domaine: string, attendu: string): boolean {
+  return domaine === attendu || domaine.endsWith(`.${attendu}`);
+}
+
+function classifierCorrespondant(
+  sender: string,
+  subject: string,
+  assureurs: Array<{ name: string; email: string | null; claims_email: string | null }>,
+): CorrespondantEmail {
+  const domaine = domaineDe(sender);
+  for (const assureur of assureurs) {
+    const adresses = [
+      ...extraireAdresses(assureur.email),
+      ...extraireAdresses(assureur.claims_email),
+    ];
+    if (adresses.includes(sender)) return { type: 'assureur', nom: assureur.name };
+  }
+
+  if (domaine && !domainesGeneriques.has(domaine)) {
+    for (const assureur of assureurs) {
+      const domaines = [
+        ...extraireAdresses(assureur.email),
+        ...extraireAdresses(assureur.claims_email),
+      ].map(domaineDe);
+      if (domaines.some((connu) => correspondAuDomaine(domaine, connu))) {
+        return { type: 'assureur', nom: assureur.name };
+      }
+    }
+  }
+
+  const expertConnu = domainesExperts.find((expert) => correspondAuDomaine(domaine, expert.domaine));
+  if (expertConnu) return { type: 'expert', nom: expertConnu.nom };
+
+  const texte = `${sender} ${subject}`.toLowerCase();
+  const expressionsExpert = [
+    'ordre de mission', 'mission d’expertise', "mission d'expertise",
+    'rapport d’expertise', "rapport d'expertise", 'rapport expert',
+    'mandat expert', 'expert automobile',
+  ];
+  if (
+    domaine.includes('expert')
+    || sender.split('@')[0]?.includes('expert')
+    || expressionsExpert.some((expression) => texte.includes(expression))
+  ) {
+    return { type: 'expert', nom: null };
+  }
+
+  return { type: 'autre', nom: null };
+}
+
+function normaliserImmatriculation(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function extraireImmatriculations(value: string): string[] {
+  const trouvees = value.toUpperCase().match(/\b[A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2}\b/g) ?? [];
+  return [...new Set(trouvees.map(normaliserImmatriculation))];
+}
+
 async function traiterStatut(event: Record<string, unknown>): Promise<void> {
   const type = typeof event.type === 'string' ? event.type : '';
   if (!['email.delivered', 'email.failed', 'email.bounced'].includes(type)) return;
@@ -145,7 +236,19 @@ async function traiterEmailRecu(event: Record<string, unknown>): Promise<void> {
       })
     : [];
 
-  const [{ data: contact, error: contactError }, { data: lead, error: leadError }] = await Promise.all([
+  const { data: insurers, error: insurersError } = await admin
+    .from('insurers')
+    .select('name, email, claims_email')
+    .eq('workspace_id', workspaceId)
+    .eq('actif', true);
+  if (insurersError) console.warn('Classification email sans referentiel assureurs', insurersError.message);
+  const correspondant = classifierCorrespondant(
+    sender,
+    subject,
+    (insurers ?? []) as Array<{ name: string; email: string | null; claims_email: string | null }>,
+  );
+
+  const [{ data: contact, error: contactError }, { data: leadByEmail, error: leadError }] = await Promise.all([
     admin.from('contacts')
       .select('id')
       .eq('workspace_id', workspaceId)
@@ -164,10 +267,35 @@ async function traiterEmailRecu(event: Record<string, unknown>): Promise<void> {
   if (contactError) throw new Error(contactError.message);
   if (leadError) throw new Error(leadError.message);
 
+  let linkedLead = leadByEmail;
+  if (!linkedLead) {
+    const immatriculations = new Set(extraireImmatriculations(`${subject}\n${textBody}`));
+    if (immatriculations.size > 0) {
+      const filtresImmatriculation = [...immatriculations].map((immatriculation) => (
+        `vehicle_registration.ilike.${immatriculation.slice(0, 2)}%${immatriculation.slice(2, 5)}%${immatriculation.slice(5)}`
+      ));
+      const { data: candidates, error: candidatesError } = await admin
+        .from('leads')
+        .select('id, contact_id, vehicle_registration')
+        .eq('workspace_id', workspaceId)
+        .or(filtresImmatriculation.join(','))
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (candidatesError) {
+        console.warn('Rattachement email par immatriculation impossible', candidatesError.message);
+      } else {
+        linkedLead = (candidates ?? []).find((candidate) => (
+          typeof candidate.vehicle_registration === 'string'
+          && immatriculations.has(normaliserImmatriculation(candidate.vehicle_registration))
+        )) ?? null;
+      }
+    }
+  }
+
   // Si un lead récent existe, son contact fait autorité. Cela évite de lier
   // le même email à un ancien doublon de contact trouvé indépendamment.
-  const contactId = lead?.contact_id ?? contact?.id ?? null;
-  const leadId = lead?.id ?? null;
+  const contactId = linkedLead?.contact_id ?? contact?.id ?? null;
+  const leadId = linkedLead?.id ?? null;
   const { error: insertError } = await admin.from('communications').insert({
     workspace_id: workspaceId,
     contact_id: contactId,
@@ -185,7 +313,22 @@ async function traiterEmailRecu(event: Record<string, unknown>): Promise<void> {
     email_attachments: attachments,
     created_at: typeof email.created_at === 'string' ? email.created_at : new Date().toISOString(),
   });
-  if (insertError?.code === '23505') return;
+  if (insertError?.code === '23505') {
+    if (leadId || contactId) {
+      const rattachement = {
+        ...(leadId ? { lead_id: leadId } : {}),
+        ...(contactId ? { contact_id: contactId } : {}),
+      };
+      const { error: linkError } = await admin.from('communications')
+        .update(rattachement)
+        .eq('workspace_id', workspaceId)
+        .eq('provider', 'resend-ionos')
+        .eq('external_id', emailId)
+        .is('lead_id', null);
+      if (linkError) throw new Error(linkError.message);
+    }
+    return;
+  }
   if (insertError) throw new Error(insertError.message);
 
   const { data: recipients, error: recipientsError } = await admin
@@ -196,12 +339,17 @@ async function traiterEmailRecu(event: Record<string, unknown>): Promise<void> {
   if (recipientsError) throw new Error(recipientsError.message);
 
   const link = leadId ? `/interventions/${leadId}` : contactId ? `/clients/${contactId}` : '/communications';
+  const notificationTitle = correspondant.type === 'assureur'
+    ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
+    : correspondant.type === 'expert'
+      ? `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
+      : 'Nouvel email reçu';
   if ((recipients ?? []).length > 0) {
     const { error: notificationError } = await admin.from('notifications').insert(
       (recipients ?? []).map((profile) => ({
         workspace_id: workspaceId,
         user_id: profile.id,
-        title: 'Nouvel email reçu',
+        title: notificationTitle,
         body: `${sender} — ${subject}`,
         type: 'email_received',
         link,

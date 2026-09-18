@@ -43,6 +43,11 @@ test('le webhook entrant verifie la signature et rattache le message au client',
   assert.match(edge, /\.from\('leads'\)/);
   assert.match(edge, /\.from\('notifications'\)/);
   assert.match(edge, /type: 'email_inbound'/);
+  assert.match(edge, /classifierCorrespondant/);
+  assert.match(edge, /extraireImmatriculations/);
+  assert.match(edge, /vehicle_registration/);
+  assert.match(edge, /Email assureur/);
+  assert.match(edge, /Email expert/);
   assert.match(config, /\[functions\.email-send\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.email-inbound-webhook\][\s\S]*verify_jwt = false/);
 });
@@ -64,21 +69,27 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.match(settings, /email-inbound-webhook/);
 });
 
-test('la boite mail separe les recus des envoyes et ouvre le message complet', async () => {
-  const [routes, navigation, inbox, service] = await Promise.all([
+test('la boite mail separe les recus des envoyes et detecte assureurs et experts', async () => {
+  const [routes, navigation, inbox, service, classification] = await Promise.all([
     read('src/app/app-routes.tsx'),
     read('src/config/navigation.ts'),
     read('src/features/integrations/email/email-inbox-page.tsx'),
     read('src/features/integrations/email/email-service.ts'),
+    read('src/features/integrations/email/email-classification.ts'),
   ]);
 
   assert.match(routes, /path="\/emails"/);
   assert.match(navigation, /label: 'Boîte mail'/);
   assert.match(inbox, /key: 'inbound', label: 'Reçus'/);
+  assert.match(inbox, /key: 'insurers', label: 'Assureurs'/);
+  assert.match(inbox, /key: 'experts', label: 'Experts'/);
   assert.match(inbox, /key: 'outbound', label: 'Envoyés'/);
   assert.match(inbox, /key: 'unlinked', label: 'Non rattachés'/);
   assert.match(inbox, /Voir la fiche/);
   assert.match(inbox, /Pièces jointes/);
   assert.match(service, /\.in\('type', \['email_inbound', 'email_outbound'\]\)/);
   assert.match(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
+  assert.match(classification, /insurer\.claims_email/);
+  assert.match(classification, /solutions-expertises\.com/);
+  assert.match(classification, /Détection probable à vérifier|probable/);
 });

@@ -192,7 +192,12 @@ Les emails réels utilisent le même historique que les appels et SMS.
 
 Les emails sortants ont le provider `resend-ionos`. Les emails entrants sont
 créés par le webhook signé Resend avec la service role, puis associés par
-adresse email à un client et, si possible, à son lead le plus récent.
+adresse email à un client et, si possible, à son lead le plus récent. Quand
+l'expéditeur n'est pas le client, le webhook recherche aussi une immatriculation
+SIV dans l'objet ou le corps afin de rattacher les retours d'assureurs et
+d'experts au bon lead. La boîte mail classe visuellement ces correspondants à
+partir du référentiel `insurers` et d'une liste prudente de cabinets d'expertise ;
+les correspondances seulement textuelles restent signalées comme probables.
 
 ### lead_ai_insights
 Historique immuable des analyses IA demandées depuis une fiche lead. Les
