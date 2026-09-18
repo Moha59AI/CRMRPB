@@ -373,6 +373,11 @@ export interface Appointment {
   google_calendar_updated_at: string | null;
   google_calendar_payload_hash: string | null;
   google_calendar_origin: 'crm' | 'google' | null;
+  /**
+   * Cadeau / offre annoncé pour ce rendez-vous. Ne sert que sans lead
+   * rattaché : sinon `leads.offer` fait foi.
+   */
+  offer: string | null;
   created_at: string;
   updated_at: string;
 }

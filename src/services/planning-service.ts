@@ -87,9 +87,13 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   const nom = personne ? joindre(personne.first_name, personne.last_name) : null;
   const telephone = lead?.phone?.trim() || contact?.phone?.trim() || null;
 
+  // Le lead fait foi quand il existe ; le champ du rendez-vous ne sert que
+  // sans lead -- typiquement un rendez-vous repris de Google.
+  const offre = (lead ? lead.offer?.trim() : null) || appt.offer?.trim() || null;
+
   return {
     nom, adresse, telephone,
-    offre: lead?.offer?.trim() || null,
+    offre,
     leadId: lead?.id ?? appt.lead_id ?? null,
   };
 }

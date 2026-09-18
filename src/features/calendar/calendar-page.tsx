@@ -629,18 +629,23 @@ function MonthView({
 // ---------------------------------------------------------------------------
 
 function OffreCommerciale({
-  leadId, offre, onEnregistree,
-}: { leadId: string; offre: string | null; onEnregistree: () => void }) {
+  leadId, appointmentId, offre, onEnregistree,
+}: { leadId: string | null; appointmentId: string; offre: string | null; onEnregistree: () => void }) {
   const [edition, setEdition] = useState(false);
   const [saisie, setSaisie] = useState(offre ?? '');
 
   // Un autre rendez-vous ouvert dans le meme panneau doit repartir de sa
   // propre offre, pas de la saisie precedente.
-  useEffect(() => { setSaisie(offre ?? ''); setEdition(false); }, [leadId, offre]);
+  useEffect(() => { setSaisie(offre ?? ''); setEdition(false); }, [appointmentId, leadId, offre]);
 
   const enregistrer = useMutation({
+    // Le lead fait foi quand il existe. Sans lead -- rendez-vous repris de
+    // Google -- l'offre n'a nulle part ou vivre sinon sur le rendez-vous.
     mutationFn: async (valeur: string) => {
-      const { error } = await updateLead(leadId, { offer: valeur.trim() || null });
+      const offer = valeur.trim() || null;
+      const { error } = leadId
+        ? await updateLead(leadId, { offer })
+        : await updateAppointment(appointmentId, { offer });
       if (error) throw new Error(error);
     },
     onSuccess: () => {
@@ -657,7 +662,7 @@ function OffreCommerciale({
         <div className="flex min-w-0 items-start gap-2">
           <Gift className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Offre commerciale</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cadeau / offre annoncé</p>
             {offre ? (
               <p className="mt-0.5 font-medium text-foreground">{offre}</p>
             ) : (
@@ -678,7 +683,7 @@ function OffreCommerciale({
       onSubmit={(e) => { e.preventDefault(); enregistrer.mutate(saisie); }}
     >
       <Label htmlFor="rdv-offre" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Offre commerciale
+        Cadeau / offre annoncé
       </Label>
       <Input
         id="rdv-offre" autoFocus
@@ -841,13 +846,12 @@ function AppointmentDetailSheet({
               Le technicien doit l'avoir en tete avant de sonner. Elle vit sur
               le lead -- une offre par intervention -- et se saisit ici sans
               rouvrir la fiche. */}
-          {client.leadId && (
-            <OffreCommerciale
-              leadId={client.leadId}
-              offre={client.offre}
-              onEnregistree={onOffreEnregistree}
-            />
-          )}
+          <OffreCommerciale
+            leadId={client.leadId}
+            appointmentId={appointment.id}
+            offre={client.offre}
+            onEnregistree={onOffreEnregistree}
+          />
 
           {/* Description */}
           {appointment.description && (
