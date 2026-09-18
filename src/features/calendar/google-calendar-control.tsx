@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   fetchGoogleCalendarStatus, startGoogleCalendarOAuth, syncGoogleCalendar,
 } from './google-calendar-service';
+import { interpreterErreurGoogle } from './erreur-google';
 
 export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
   const { profile } = useAuth();
@@ -118,13 +119,49 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
                 </div>
               </div>
 
-              {value?.lastError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Dernière erreur</AlertTitle>
-                  <AlertDescription>{value.lastError}</AlertDescription>
-                </Alert>
-              )}
+              {value?.lastError && (() => {
+                // Le message brut de Google, en anglais et sans lien cliquable,
+                // se lit comme « ca ne marche pas » sous un badge « Connecte ».
+                // La plupart de ces erreurs se reglent en un clic, hors du CRM.
+                const erreur = interpreterErreurGoogle(value.lastError);
+                return (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>{erreur.titre}</AlertTitle>
+                    <AlertDescription className="space-y-2">
+                      <p>{erreur.explication}</p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {erreur.lien && (
+                          <Button asChild size="sm" variant="outline" className="h-8 rounded-full bg-background">
+                            <a href={erreur.lien.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />{erreur.lien.label}
+                            </a>
+                          </Button>
+                        )}
+                        {erreur.suite === 'synchroniser' && (
+                          <Button size="sm" variant="outline" className="h-8 rounded-full bg-background"
+                            onClick={() => sync.mutate()} disabled={sync.isPending}>
+                            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${sync.isPending ? 'animate-spin' : ''}`} />
+                            Réessayer la synchronisation
+                          </Button>
+                        )}
+                        {erreur.suite === 'reautoriser' && (
+                          <Button size="sm" variant="outline" className="h-8 rounded-full bg-background"
+                            onClick={authorize} disabled={authorizing}>
+                            <Link2 className="mr-1.5 h-3.5 w-3.5" />Renouveler l’autorisation
+                          </Button>
+                        )}
+                      </div>
+                      {erreur.explication !== erreur.brut && (
+                        <details className="pt-1 text-xs opacity-80">
+                          <summary className="cursor-pointer">Message d’origine</summary>
+                          <p className="mt-1 break-words">{erreur.brut}</p>
+                        </details>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
 
               {!value?.configured && (
                 <Alert>
