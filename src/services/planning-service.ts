@@ -15,9 +15,12 @@ export interface ClientRendezVous {
 }
 
 export interface LeadRendezVous extends ClientRendezVous {
+  id: string;
   intervention_address: string | null;
   intervention_postal_code: string | null;
   intervention_city: string | null;
+  /** Offre ou cadeau annonce au client. Vit sur le lead : une offre par intervention. */
+  offer: string | null;
 }
 
 /**
@@ -41,7 +44,7 @@ export async function fetchAppointments(params: {
 }): Promise<AppointmentAvecClient[]> {
   let query = supabase
     .from('appointments')
-    .select(`*, leads(${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city), contacts(${CHAMPS_CLIENT})`)
+    .select(`*, leads(id, ${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city, offer), contacts(${CHAMPS_CLIENT})`)
     .order('start_time', { ascending: true });
   if (params.startDate) query = query.gte('start_time', params.startDate);
   if (params.endDate) query = query.lte('start_time', params.endDate);
@@ -63,6 +66,10 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   nom: string | null;
   adresse: string | null;
   telephone: string | null;
+  /** Offre commerciale, connue seulement quand un lead est rattache. */
+  offre: string | null;
+  /** Lead rattache, pour ecrire l'offre depuis l'agenda. */
+  leadId: string | null;
 } {
   const lead = appt.leads ?? null;
   const contact = appt.contacts ?? null;
@@ -80,7 +87,11 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   const nom = personne ? joindre(personne.first_name, personne.last_name) : null;
   const telephone = lead?.phone?.trim() || contact?.phone?.trim() || null;
 
-  return { nom, adresse, telephone };
+  return {
+    nom, adresse, telephone,
+    offre: lead?.offer?.trim() || null,
+    leadId: lead?.id ?? appt.lead_id ?? null,
+  };
 }
 
 export async function createAppointment(appt: Partial<Appointment>): Promise<{ error: string | null; appointment: Appointment | null }> {

@@ -18,6 +18,7 @@ import {
   XCircle,
   Trash2,
   CircleAlert,
+  Gift,
 } from 'lucide-react';
 import {
   format,
@@ -300,7 +301,7 @@ function AppointmentBlock({
   const { appt, top, height, colIndex, colCount } = placed;
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
   const isCancelled = appt.status === 'cancelled';
-  const { adresse: adresseBloc } = clientDuRendezVous(appt as AppointmentAvecClient);
+  const { adresse: adresseBloc, offre: offreBloc } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -330,6 +331,12 @@ function AppointmentBlock({
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] opacity-70">
           <MapPin className="h-2.5 w-2.5 shrink-0" />
           <span className="truncate">{adresseBloc}</span>
+        </div>
+      )}
+      {height > 80 && offreBloc && (
+        <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium opacity-90">
+          <Gift className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{offreBloc}</span>
         </div>
       )}
     </button>
@@ -621,6 +628,77 @@ function MonthView({
 // Appointment detail sheet
 // ---------------------------------------------------------------------------
 
+function OffreCommerciale({
+  leadId, offre, onEnregistree,
+}: { leadId: string; offre: string | null; onEnregistree: () => void }) {
+  const [edition, setEdition] = useState(false);
+  const [saisie, setSaisie] = useState(offre ?? '');
+
+  // Un autre rendez-vous ouvert dans le meme panneau doit repartir de sa
+  // propre offre, pas de la saisie precedente.
+  useEffect(() => { setSaisie(offre ?? ''); setEdition(false); }, [leadId, offre]);
+
+  const enregistrer = useMutation({
+    mutationFn: async (valeur: string) => {
+      const { error } = await updateLead(leadId, { offer: valeur.trim() || null });
+      if (error) throw new Error(error);
+    },
+    onSuccess: () => {
+      setEdition(false);
+      toast.success('Offre enregistrée');
+      onEnregistree();
+    },
+    onError: (e: Error) => toast.error("L'offre n'a pas été enregistrée", { description: e.message }),
+  });
+
+  if (!edition) {
+    return (
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3 text-sm">
+        <div className="flex min-w-0 items-start gap-2">
+          <Gift className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Offre commerciale</p>
+            {offre ? (
+              <p className="mt-0.5 font-medium text-foreground">{offre}</p>
+            ) : (
+              <p className="mt-0.5 text-muted-foreground">Aucune offre annoncée</p>
+            )}
+          </div>
+        </div>
+        <Button variant="ghost" size="sm" className="h-7 shrink-0 rounded-full text-xs" onClick={() => setEdition(true)}>
+          {offre ? 'Modifier' : 'Renseigner'}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="rounded-xl border border-border p-3"
+      onSubmit={(e) => { e.preventDefault(); enregistrer.mutate(saisie); }}
+    >
+      <Label htmlFor="rdv-offre" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Offre commerciale
+      </Label>
+      <Input
+        id="rdv-offre" autoFocus
+        value={saisie} onChange={(e) => setSaisie(e.target.value)}
+        placeholder="ex. Virement jusqu'à 300 €, PS5…"
+        className="mt-1.5 h-9 rounded-lg"
+      />
+      <div className="mt-2 flex gap-2">
+        <Button type="submit" size="sm" className="rounded-full" disabled={enregistrer.isPending}>
+          Enregistrer
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="rounded-full"
+          onClick={() => { setSaisie(offre ?? ''); setEdition(false); }}>
+          Annuler
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function AppointmentDetailSheet({
   open,
   onOpenChange,
@@ -632,6 +710,7 @@ function AppointmentDetailSheet({
   onDelete,
   updating,
   deleting,
+  onOffreEnregistree,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -643,6 +722,8 @@ function AppointmentDetailSheet({
   onDelete: () => void;
   updating: boolean;
   deleting: boolean;
+  /** L'offre est ecrite sur le lead : les rendez-vous doivent etre relus. */
+  onOffreEnregistree: () => void;
 }) {
   if (!appointment) return null;
 
@@ -754,6 +835,18 @@ function AppointmentDetailSheet({
             <p className="text-xs text-muted-foreground">
               Aucun client rattaché : ni adresse ni téléphone à afficher.
             </p>
+          )}
+
+          {/* Offre commerciale : ce que le client attend en plus de la pose.
+              Le technicien doit l'avoir en tete avant de sonner. Elle vit sur
+              le lead -- une offre par intervention -- et se saisit ici sans
+              rouvrir la fiche. */}
+          {client.leadId && (
+            <OffreCommerciale
+              leadId={client.leadId}
+              offre={client.offre}
+              onEnregistree={onOffreEnregistree}
+            />
           )}
 
           {/* Description */}
@@ -1876,6 +1969,12 @@ export function CalendarPage() {
         onDelete={handleDelete}
         updating={updateMutation.isPending}
         deleting={deleteMutation.isPending}
+        onOffreEnregistree={() => {
+          queryClient.invalidateQueries({ queryKey: ['appointments'] });
+          queryClient.invalidateQueries({ queryKey: ['leads'] });
+          // Prefixe : couvre aussi ['lead', id], la fiche ouverte a cote.
+          queryClient.invalidateQueries({ queryKey: ['lead'] });
+        }}
       />
 
       <ConfirmerSuppression
