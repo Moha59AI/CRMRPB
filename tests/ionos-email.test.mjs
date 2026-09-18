@@ -63,3 +63,22 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.match(settings, /Votre mot de passe IONOS reste privé/);
   assert.match(settings, /email-inbound-webhook/);
 });
+
+test('la boite mail separe les recus des envoyes et ouvre le message complet', async () => {
+  const [routes, navigation, inbox, service] = await Promise.all([
+    read('src/app/app-routes.tsx'),
+    read('src/config/navigation.ts'),
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/integrations/email/email-service.ts'),
+  ]);
+
+  assert.match(routes, /path="\/emails"/);
+  assert.match(navigation, /label: 'Boîte mail'/);
+  assert.match(inbox, /key: 'inbound', label: 'Reçus'/);
+  assert.match(inbox, /key: 'outbound', label: 'Envoyés'/);
+  assert.match(inbox, /key: 'unlinked', label: 'Non rattachés'/);
+  assert.match(inbox, /Voir la fiche/);
+  assert.match(inbox, /Pièces jointes/);
+  assert.match(service, /\.in\('type', \['email_inbound', 'email_outbound'\]\)/);
+  assert.match(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
+});

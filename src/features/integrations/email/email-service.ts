@@ -23,6 +23,8 @@ export interface SendIonosEmailInput {
   in_reply_to?: string;
 }
 
+const EMAIL_PAGE_SIZE = 500;
+
 type EmailFunctionResponse = {
   success?: boolean;
   error?: string;
@@ -109,6 +111,33 @@ export async function getIonosMailboxStatus(): Promise<IonosMailboxStatus> {
     email_address: result.email_address ?? null,
     connection_status: result.connection_status ?? 'not_configured',
   };
+}
+
+/**
+ * Charge l'historique complet par lots pour que la boite mail ne masque pas
+ * les anciens messages derriere la limite implicite de Supabase.
+ */
+export async function fetchMailboxEmails(): Promise<Communication[]> {
+  const emails: Communication[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('communications')
+      .select('*')
+      .in('type', ['email_inbound', 'email_outbound'])
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + EMAIL_PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+
+    const page = (data as Communication[] | null) ?? [];
+    emails.push(...page);
+    if (page.length < EMAIL_PAGE_SIZE) break;
+    offset += EMAIL_PAGE_SIZE;
+  }
+
+  return emails;
 }
 
 export async function sendIonosEmail(input: SendIonosEmailInput): Promise<Communication> {

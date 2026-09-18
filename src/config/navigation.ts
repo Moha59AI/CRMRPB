@@ -17,6 +17,7 @@ import {
   Files,
   WalletCards,
   Mail,
+  FileLock2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -63,6 +64,12 @@ export const navSections: NavSection[] = [
         path: '/relances',
         icon: BellRing,
         description: 'Ce qui attend une action',
+      },
+      {
+        label: 'Boîte mail',
+        path: '/emails',
+        icon: Mail,
+        description: 'Emails reçus et envoyés',
       },
     ],
   },
@@ -137,6 +144,12 @@ export const navSections: NavSection[] = [
         path: '/billing',
         icon: Receipt,
         description: 'Devis, factures et paiements',
+      },
+      {
+        label: 'Masquer les prix',
+        path: '/outils/masquer-prix',
+        icon: FileLock2,
+        description: 'Copie fournisseur sans prix pour les experts',
       },
       {
         label: 'Réglages',

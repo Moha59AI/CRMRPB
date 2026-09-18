@@ -30,8 +30,10 @@ const WorkflowsPage = lazy(() => import('@/features/workflows/workflows-page').t
 const MarketingPage = lazy(() => import('@/features/marketing/marketing-page').then((m) => ({ default: m.MarketingPage })));
 const CampaignsPage = lazy(() => import('@/features/campaigns/campaigns-page').then((m) => ({ default: m.CampaignsPage })));
 const CommunicationsPage = lazy(() => import('@/features/communications/communications-page').then((m) => ({ default: m.CommunicationsPage })));
+const EmailInboxPage = lazy(() => import('@/features/integrations/email/email-inbox-page').then((m) => ({ default: m.EmailInboxPage })));
 const BillingPage = lazy(() => import('@/features/billing/billing-page').then((m) => ({ default: m.BillingPage })));
 const FinancialDashboardPage = lazy(() => import('@/features/finance/financial-dashboard-page').then((m) => ({ default: m.FinancialDashboardPage })));
+const SupplierRedactionPage = lazy(() => import('@/features/supplier-redaction/supplier-redaction-page').then((m) => ({ default: m.SupplierRedactionPage })));
 const SettingsLayout = lazy(() => import('@/features/settings/settings-layout').then((m) => ({ default: m.SettingsLayout })));
 const SettingsPage = lazy(() => import('@/features/settings/settings-page').then((m) => ({ default: m.SettingsPage })));
 const IntegrationsListPage = lazy(() => import('@/features/integrations/integrations-list-page').then((m) => ({ default: m.IntegrationsListPage })));
@@ -120,8 +122,10 @@ export function AppRoutes() {
           <Route path="/marketing" element={charger(<MarketingPage />)} />
           <Route path="/campaigns" element={charger(<CampaignsPage />)} />
           <Route path="/communications" element={charger(<CommunicationsPage />)} />
+          <Route path="/emails" element={charger(<EmailInboxPage />)} />
           <Route path="/billing" element={charger(<BillingPage />)} />
           <Route path="/finance" element={charger(<FinancialDashboardPage />)} />
+          <Route path="/outils/masquer-prix" element={charger(<SupplierRedactionPage />)} />
 
           <Route path="/settings" element={charger(<SettingsLayout />)}>
             <Route index element={charger(<SettingsPage />)} />
