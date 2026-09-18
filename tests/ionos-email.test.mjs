@@ -106,7 +106,10 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
   assert.match(inbox, /sendIonosEmail/);
   assert.match(inbox, /in_reply_to: email\.email_message_id/);
   assert.match(inbox, /Répondre à ce message/);
-  assert.match(inbox, /window\.open\('about:blank', '_blank'\)/);
+  assert.match(inbox, /Aperçu sécurisé de la pièce jointe reçue par email/);
+  assert.match(inbox, /Télécharger/);
+  assert.match(inbox, /link\.download = attachmentViewer\.attachment\.filename/);
+  assert.doesNotMatch(inbox, /window\.open\(/);
   assert.match(service, /functions\/v1\/email-attachment/);
   assert.match(attachmentEdge, /admin\.auth\.getUser\(token\)/);
   assert.match(attachmentEdge, /\['admin', 'manager', 'advisor'\]/);
@@ -117,4 +120,23 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
   assert.match(attachmentEdge, /download_url/);
   assert.match(attachmentEdge, /Cache-Control': 'private, no-store'/);
   assert.match(config, /\[functions\.email-attachment\][\s\S]*verify_jwt = true/);
+});
+
+test('la signature est personnalisable visible pendant la redaction et jointe aux emails', async () => {
+  const [service, settings, communications, inbox] = await Promise.all([
+    read('src/features/integrations/email/email-service.ts'),
+    read('src/features/integrations/email/email-settings-page.tsx'),
+    read('src/features/communications/communications-page.tsx'),
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+  ]);
+
+  assert.match(service, /signature: string/);
+  assert.match(service, /buildDefaultEmailSignature/);
+  assert.match(service, /buildSignedEmailContent/);
+  assert.match(settings, /Signature automatique/);
+  assert.match(settings, /Aperçu de la signature/);
+  assert.match(communications, /Signature ajoutée à l’envoi/);
+  assert.match(communications, /buildSignedEmailContent\(content, signature\)/);
+  assert.match(inbox, /Signature ajoutée à l’envoi/);
+  assert.match(inbox, /buildSignedEmailContent\(content, signature\)/);
 });

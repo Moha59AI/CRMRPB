@@ -6,6 +6,7 @@ export interface IonosEmailSettings {
   email_address: string;
   sender_name: string;
   inbound_address: string;
+  signature: string;
 }
 
 export interface IonosMailboxStatus {
@@ -29,6 +30,18 @@ export interface FetchEmailAttachmentInput {
 }
 
 const EMAIL_PAGE_SIZE = 500;
+
+export function buildDefaultEmailSignature(senderName: string, emailAddress: string): string {
+  const identity = senderName.trim() || 'Relais Pare-Brise';
+  const details = [identity, emailAddress.trim(), 'www.relaisparebrise.fr'].filter(Boolean);
+  return `Cordialement,\n\n${details.join('\n')}`;
+}
+
+export function buildSignedEmailContent(content: string, signature: string): string {
+  const body = content.trim();
+  const footer = signature.trim();
+  return footer ? `${body}\n\n${footer}` : body;
+}
 
 type EmailFunctionResponse = {
   success?: boolean;
@@ -77,10 +90,15 @@ export async function getIonosConnection(): Promise<IntegrationConnection | null
 
 export function parseIonosSettings(connection: IntegrationConnection | null): IonosEmailSettings {
   const settings = (connection?.settings ?? {}) as Record<string, unknown>;
+  const emailAddress = typeof settings.email_address === 'string' ? settings.email_address : '';
+  const senderName = typeof settings.sender_name === 'string' ? settings.sender_name : 'Relais Pare-Brise';
   return {
-    email_address: typeof settings.email_address === 'string' ? settings.email_address : '',
-    sender_name: typeof settings.sender_name === 'string' ? settings.sender_name : 'Relais Pare-Brise',
+    email_address: emailAddress,
+    sender_name: senderName,
     inbound_address: typeof settings.inbound_address === 'string' ? settings.inbound_address : '',
+    signature: typeof settings.signature === 'string'
+      ? settings.signature
+      : buildDefaultEmailSignature(senderName, emailAddress),
   };
 }
 
@@ -92,11 +110,13 @@ export async function saveIonosSettings(settings: IonosEmailSettings): Promise<I
     email_address: settings.email_address.trim().toLowerCase(),
     sender_name: settings.sender_name.trim(),
     inbound_address: settings.inbound_address.trim().toLowerCase(),
+    signature: settings.signature.trim().slice(0, 2_000),
   };
   const unchanged = current
     && previous.email_address === normalized.email_address
     && previous.sender_name === normalized.sender_name
-    && previous.inbound_address === normalized.inbound_address;
+    && previous.inbound_address === normalized.inbound_address
+    && previous.signature === normalized.signature;
   const payload = {
     workspace_id: workspaceId,
     provider: 'ionos' as const,

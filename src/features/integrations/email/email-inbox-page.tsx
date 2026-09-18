@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowDownLeft,
   ArrowLeft,
   ArrowUpRight,
+  Download,
   ExternalLink,
+  FileText,
   Inbox,
   Link2,
   Loader2,
@@ -24,6 +26,14 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,7 +45,14 @@ import {
   classifyEmailParty,
   type EmailPartyClassification,
 } from './email-classification';
-import { fetchEmailAttachment, fetchMailboxEmails, sendIonosEmail } from './email-service';
+import {
+  buildSignedEmailContent,
+  fetchEmailAttachment,
+  fetchMailboxEmails,
+  getIonosConnection,
+  parseIonosSettings,
+  sendIonosEmail,
+} from './email-service';
 
 type MailboxView = 'inbound' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -56,6 +73,16 @@ const OTHER_CLASSIFICATION: EmailPartyClassification = {
   category: 'other',
   organization: null,
   confidence: 'confirmed',
+};
+
+type EmailAttachment = Communication['email_attachments'][number];
+
+type AttachmentViewerState = {
+  attachment: EmailAttachment;
+  contentType: string;
+  error: string | null;
+  status: 'loading' | 'ready' | 'error';
+  url: string | null;
 };
 
 function formatMailboxDate(iso: string): string {
@@ -162,6 +189,10 @@ export function EmailInboxPage() {
     queryKey: ['mailbox-emails'],
     queryFn: fetchMailboxEmails,
   });
+  const ionosConnectionQuery = useQuery({
+    queryKey: ['ionos-email-connection'],
+    queryFn: getIonosConnection,
+  });
   const contactsQuery = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const leadsQuery = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
   const insurersQuery = useQuery({
@@ -238,6 +269,7 @@ export function EmailInboxPage() {
   }, [filteredEmails, selectedId]);
 
   const selectedEmail = filteredEmails.find((email) => email.id === selectedId) ?? null;
+  const emailSignature = parseIonosSettings(ionosConnectionQuery.data ?? null).signature;
 
   const openEmail = (id: string) => {
     setSelectedId(id);
@@ -415,6 +447,7 @@ export function EmailInboxPage() {
               email={selectedEmail}
               person={resolvePerson(selectedEmail, contactMap, leadMap)}
               classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
+              signature={emailSignature}
               onBack={() => setMobileDetailOpen(false)}
             />
           ) : (
@@ -436,17 +469,21 @@ function EmailDetail({
   email,
   person,
   classification,
+  signature,
   onBack,
 }: {
   email: Communication;
   person: string | null;
   classification: EmailPartyClassification;
+  signature: string;
   onBack: () => void;
 }) {
   const inbound = email.direction === 'inbound';
   const queryClient = useQueryClient();
   const [replyContent, setReplyContent] = useState('');
-  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+  const [attachmentViewer, setAttachmentViewer] = useState<AttachmentViewerState | null>(null);
+  const attachmentRequestId = useRef(0);
+  const attachmentUrl = useRef<string | null>(null);
   const recipient = inbound ? email.sender_email?.trim() || null : null;
   const originalSubject = email.subject?.trim() || '(Sans objet)';
   const replySubject = /^re\s*:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
@@ -464,7 +501,7 @@ function EmailDetail({
         contact_id: email.contact_id ?? undefined,
         lead_id: email.lead_id ?? undefined,
         subject: replySubject,
-        content,
+        content: buildSignedEmailContent(content, signature),
         in_reply_to: email.email_message_id ?? undefined,
       });
     },
@@ -477,43 +514,76 @@ function EmailDetail({
     onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer la réponse"),
   });
 
-  const openAttachment = async (attachment: Communication['email_attachments'][number]) => {
-    const previewWindow = window.open('about:blank', '_blank');
-    if (previewWindow) {
-      previewWindow.opener = null;
-      previewWindow.document.title = 'Ouverture de la pièce jointe…';
-    }
+  const clearAttachmentUrl = () => {
+    if (!attachmentUrl.current) return;
+    URL.revokeObjectURL(attachmentUrl.current);
+    attachmentUrl.current = null;
+  };
 
-    setOpeningAttachmentId(attachment.id);
+  const closeAttachmentViewer = () => {
+    attachmentRequestId.current += 1;
+    clearAttachmentUrl();
+    setAttachmentViewer(null);
+  };
+
+  useEffect(() => () => {
+    attachmentRequestId.current += 1;
+    clearAttachmentUrl();
+  }, []);
+
+  const openAttachment = async (attachment: EmailAttachment) => {
+    const requestId = attachmentRequestId.current + 1;
+    attachmentRequestId.current = requestId;
+    clearAttachmentUrl();
+    setAttachmentViewer({
+      attachment,
+      contentType: attachment.content_type?.toLowerCase() || '',
+      error: null,
+      status: 'loading',
+      url: null,
+    });
     try {
       const blob = await fetchEmailAttachment({
         communicationId: email.id,
         attachmentId: attachment.id,
       });
       const objectUrl = URL.createObjectURL(blob);
-      const contentType = (blob.type || attachment.content_type || '').toLowerCase();
-      const previewable = contentType === 'application/pdf'
-        || /^image\/(avif|bmp|gif|heic|jpeg|jpg|png|webp)$/.test(contentType);
-
-      if (previewable && previewWindow) {
-        previewWindow.location.replace(objectUrl);
-      } else {
-        previewWindow?.close();
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = attachment.filename || 'piece-jointe';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+      if (attachmentRequestId.current !== requestId) {
+        URL.revokeObjectURL(objectUrl);
+        return;
       }
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      attachmentUrl.current = objectUrl;
+      const contentType = (blob.type || attachment.content_type || '').toLowerCase();
+      setAttachmentViewer({ attachment, contentType, error: null, status: 'ready', url: objectUrl });
     } catch (error) {
-      previewWindow?.close();
-      toast.error((error as Error)?.message || "Impossible d'ouvrir la pièce jointe");
-    } finally {
-      setOpeningAttachmentId(null);
+      if (attachmentRequestId.current !== requestId) return;
+      const message = (error as Error)?.message || "Impossible d'ouvrir la pièce jointe";
+      setAttachmentViewer({
+        attachment,
+        contentType: attachment.content_type?.toLowerCase() || '',
+        error: message,
+        status: 'error',
+        url: null,
+      });
+      toast.error(message);
     }
   };
+
+  const downloadAttachment = () => {
+    if (!attachmentViewer?.url) return;
+    const link = document.createElement('a');
+    link.href = attachmentViewer.url;
+    link.download = attachmentViewer.attachment.filename || 'piece-jointe';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const attachmentIsPdf = attachmentViewer?.contentType === 'application/pdf';
+  const attachmentIsImage = Boolean(
+    attachmentViewer
+    && /^image\/(avif|bmp|gif|heic|jpeg|jpg|png|webp)$/.test(attachmentViewer.contentType),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -606,10 +676,10 @@ function EmailDetail({
                     type="button"
                     className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-wait disabled:opacity-70"
                     onClick={() => void openAttachment(attachment)}
-                    disabled={openingAttachmentId === attachment.id}
+                    disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground group-hover:text-primary">
-                      {openingAttachmentId === attachment.id
+                      {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
                         ? <Loader2 className="h-4 w-4 animate-spin" />
                         : <ExternalLink className="h-4 w-4" />}
                     </div>
@@ -624,7 +694,7 @@ function EmailDetail({
                 ))}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Cliquez sur un fichier pour l’ouvrir. Les formats non prévisualisables sont téléchargés automatiquement.
+                Cliquez sur un fichier pour l’ouvrir dans le CRM, puis téléchargez-le si nécessaire.
               </p>
             </div>
           )}
@@ -651,6 +721,16 @@ function EmailDetail({
                 className="mt-4 resize-y rounded-lg"
                 disabled={!recipient || replyMutation.isPending}
               />
+              {signature.trim() && (
+                <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    Signature ajoutée à l’envoi
+                  </p>
+                  <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                    {signature}
+                  </p>
+                </div>
+              )}
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   {email.email_message_id
@@ -673,6 +753,91 @@ function EmailDetail({
           )}
         </div>
       </div>
+
+      <Dialog
+        open={attachmentViewer !== null}
+        onOpenChange={(open) => {
+          if (!open) closeAttachmentViewer();
+        }}
+      >
+        <DialogContent className="h-[90dvh] max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-2xl">
+          <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
+            <DialogTitle className="truncate pr-2">
+              {attachmentViewer?.attachment.filename || 'Pièce jointe'}
+            </DialogTitle>
+            <DialogDescription>
+              Aperçu sécurisé de la pièce jointe reçue par email
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-3 sm:p-5">
+            {attachmentViewer?.status === 'loading' && (
+              <div className="flex flex-col items-center text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="mt-3 text-sm font-medium">Chargement de la pièce jointe…</p>
+              </div>
+            )}
+
+            {attachmentViewer?.status === 'error' && (
+              <div className="max-w-md rounded-xl border border-destructive/20 bg-background p-6 text-center">
+                <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
+                <p className="mt-3 font-medium">Impossible d’ouvrir ce fichier</p>
+                <p className="mt-1 text-sm text-muted-foreground">{attachmentViewer.error}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 rounded-full"
+                  onClick={() => void openAttachment(attachmentViewer.attachment)}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Réessayer
+                </Button>
+              </div>
+            )}
+
+            {attachmentViewer?.status === 'ready' && attachmentViewer.url && attachmentIsPdf && (
+              <iframe
+                src={attachmentViewer.url}
+                title={`Aperçu de ${attachmentViewer.attachment.filename}`}
+                className="h-full w-full rounded-lg border border-border bg-background"
+              />
+            )}
+
+            {attachmentViewer?.status === 'ready' && attachmentViewer.url && attachmentIsImage && (
+              <img
+                src={attachmentViewer.url}
+                alt={attachmentViewer.attachment.filename}
+                className="max-h-full max-w-full rounded-lg object-contain shadow-sm"
+              />
+            )}
+
+            {attachmentViewer?.status === 'ready' && attachmentViewer.url && !attachmentIsPdf && !attachmentIsImage && (
+              <div className="max-w-md rounded-xl border border-border bg-background p-6 text-center">
+                <FileText className="mx-auto h-10 w-10 text-muted-foreground" />
+                <p className="mt-3 font-medium">Aperçu non disponible pour ce format</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Téléchargez le fichier pour l’ouvrir avec l’application adaptée.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t border-border bg-background px-4 py-3 sm:px-6">
+            <Button type="button" variant="outline" className="rounded-full" onClick={closeAttachmentViewer}>
+              Fermer
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={attachmentViewer?.status !== 'ready' || !attachmentViewer.url}
+              onClick={downloadAttachment}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Télécharger
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

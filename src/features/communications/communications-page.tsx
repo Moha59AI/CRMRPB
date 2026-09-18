@@ -28,7 +28,8 @@ import { createCommunication, createSmsTemplate, fetchCommunications, fetchSmsTe
 import { fetchContacts } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
 import {
-  getIonosMailboxStatus, sendIonosEmail, type IonosMailboxStatus,
+  buildSignedEmailContent, getIonosConnection, getIonosMailboxStatus,
+  parseIonosSettings, sendIonosEmail, type IonosMailboxStatus,
 } from '@/features/integrations/email/email-service';
 
 // ============ LABELS ============
@@ -171,6 +172,11 @@ export function CommunicationsPage() {
     queryFn: getIonosMailboxStatus,
     retry: false,
   });
+  const { data: ionosConnection } = useQuery({
+    queryKey: ['ionos-email-connection'],
+    queryFn: getIonosConnection,
+  });
+  const emailSignature = parseIonosSettings(ionosConnection ?? null).signature;
 
   const leadMap = useMemo(() => {
     const m = new Map<string, Lead>();
@@ -390,6 +396,7 @@ export function CommunicationsPage() {
         leads={leads ?? []}
         contacts={contacts ?? []}
         mailboxStatus={mailboxStatus}
+        signature={emailSignature}
       />
       <NoteDialog
         open={noteOpen}
@@ -871,13 +878,14 @@ function SmsDialog({
 // ============ EMAIL DIALOG ============
 
 function EmailDialog({
-  open, onOpenChange, leads, contacts, mailboxStatus,
+  open, onOpenChange, leads, contacts, mailboxStatus, signature,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   leads: Lead[];
   contacts: Contact[];
   mailboxStatus?: IonosMailboxStatus;
+  signature: string;
 }) {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState('');
@@ -902,7 +910,7 @@ function EmailDialog({
         contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
         lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
         subject: subject.trim(),
-        content: content.trim(),
+        content: buildSignedEmailContent(content, signature),
       });
     },
     onSuccess: () => {
@@ -995,6 +1003,16 @@ function EmailDialog({
               rows={6}
               className="rounded-lg resize-none"
             />
+            {signature.trim() && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Signature ajoutée à l’envoi
+                </p>
+                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                  {signature}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

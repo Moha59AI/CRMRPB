@@ -13,8 +13,10 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { supabaseUrl } from '@/lib/supabase';
 import {
+  buildDefaultEmailSignature, buildSignedEmailContent,
   getIonosConnection, getIonosMailboxStatus, parseIonosSettings,
   saveIonosSettings, sendIonosEmail, type IonosEmailSettings,
 } from './email-service';
@@ -35,7 +37,10 @@ function erreurLisible(error: unknown): string {
 export function EmailSettingsPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<IonosEmailSettings>({
-    email_address: '', sender_name: 'Relais Pare-Brise', inbound_address: '',
+    email_address: '',
+    sender_name: 'Relais Pare-Brise',
+    inbound_address: '',
+    signature: buildDefaultEmailSignature('Relais Pare-Brise', ''),
   });
 
   const connectionQuery = useQuery({
@@ -70,7 +75,10 @@ export function EmailSettingsPage() {
       return sendIonosEmail({
         to: form.email_address,
         subject: 'Test de connexion du CRM Relais Pare-Brise',
-        content: 'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis la page Communications.',
+        content: buildSignedEmailContent(
+          'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis la page Communications.',
+          form.signature,
+        ),
       });
     },
     onSuccess: async () => {
@@ -175,6 +183,32 @@ export function EmailSettingsPage() {
                 value={form.sender_name}
                 onChange={(event) => setForm((value) => ({ ...value, sender_name: event.target.value }))}
               />
+            </div>
+          </div>
+
+          <Separator className="my-5" />
+
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="ionos-signature">Signature automatique</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Elle sera visible pendant la rédaction et ajoutée automatiquement à chaque email et chaque réponse.
+              </p>
+            </div>
+            <Textarea
+              id="ionos-signature"
+              value={form.signature}
+              onChange={(event) => setForm((value) => ({ ...value, signature: event.target.value }))}
+              rows={6}
+              maxLength={2_000}
+              className="resize-y rounded-lg"
+              placeholder="Cordialement,\n\nRelais Pare-Brise"
+            />
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Aperçu de la signature</p>
+              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">
+                {form.signature.trim() || 'Aucune signature ne sera ajoutée.'}
+              </p>
             </div>
           </div>
 
