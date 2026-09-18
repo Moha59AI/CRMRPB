@@ -23,6 +23,11 @@ export interface SendIonosEmailInput {
   in_reply_to?: string;
 }
 
+export interface FetchEmailAttachmentInput {
+  communicationId: string;
+  attachmentId: string;
+}
+
 const EMAIL_PAGE_SIZE = 500;
 
 type EmailFunctionResponse = {
@@ -34,11 +39,16 @@ type EmailFunctionResponse = {
   connection_status?: IntegrationConnection['status'];
 };
 
-async function appelerEmail(payload: Record<string, unknown>): Promise<EmailFunctionResponse> {
+async function jetonSession(): Promise<string> {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw new Error(sessionError.message);
   const accessToken = sessionData.session?.access_token;
   if (!accessToken) throw new Error('Session expirée, reconnectez-vous');
+  return accessToken;
+}
+
+async function appelerEmail(payload: Record<string, unknown>): Promise<EmailFunctionResponse> {
+  const accessToken = await jetonSession();
 
   const response = await fetch(`${supabaseUrl}/functions/v1/email-send`, {
     method: 'POST',
@@ -147,4 +157,26 @@ export async function sendIonosEmail(input: SendIonosEmailInput): Promise<Commun
   });
   if (!result.communication) throw new Error("L'email a été envoyé mais son historique n'a pas été retourné");
   return result.communication;
+}
+
+export async function fetchEmailAttachment(input: FetchEmailAttachmentInput): Promise<Blob> {
+  const accessToken = await jetonSession();
+  const response = await fetch(`${supabaseUrl}/functions/v1/email-attachment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      communication_id: input.communicationId,
+      attachment_id: input.attachmentId,
+    }),
+  });
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(result.error || `Pièce jointe inaccessible : HTTP ${response.status}`);
+  }
+
+  return response.blob();
 }

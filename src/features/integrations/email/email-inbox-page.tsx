@@ -1,27 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowDownLeft,
   ArrowLeft,
   ArrowUpRight,
+  ExternalLink,
   Inbox,
   Link2,
+  Loader2,
   Mail,
   Paperclip,
   PenLine,
   RefreshCw,
+  Reply,
   Search,
   Send,
   ShieldCheck,
   UserRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { fetchContacts } from '@/services/contacts-service';
 import { fetchInsurers } from '@/services/insurers-service';
 import { fetchLeads } from '@/services/leads-service';
@@ -30,7 +35,7 @@ import {
   classifyEmailParty,
   type EmailPartyClassification,
 } from './email-classification';
-import { fetchMailboxEmails } from './email-service';
+import { fetchEmailAttachment, fetchMailboxEmails, sendIonosEmail } from './email-service';
 
 type MailboxView = 'inbound' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -406,6 +411,7 @@ export function EmailInboxPage() {
         <section className={`${mobileDetailOpen ? 'flex' : 'hidden lg:flex'} min-h-0 flex-col bg-background`}>
           {selectedEmail ? (
             <EmailDetail
+              key={selectedEmail.id}
               email={selectedEmail}
               person={resolvePerson(selectedEmail, contactMap, leadMap)}
               classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
@@ -438,9 +444,76 @@ function EmailDetail({
   onBack: () => void;
 }) {
   const inbound = email.direction === 'inbound';
+  const queryClient = useQueryClient();
+  const [replyContent, setReplyContent] = useState('');
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+  const recipient = inbound ? email.sender_email?.trim() || null : null;
+  const originalSubject = email.subject?.trim() || '(Sans objet)';
+  const replySubject = /^re\s*:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
   const relatedPath = email.lead_id
     ? `/interventions/${email.lead_id}`
     : email.contact_id ? `/clients/${email.contact_id}` : null;
+
+  const replyMutation = useMutation({
+    mutationFn: async () => {
+      if (!recipient) throw new Error("L'adresse de l'expéditeur est introuvable");
+      const content = replyContent.trim();
+      if (!content) throw new Error('Écrivez votre réponse avant de l’envoyer');
+      return sendIonosEmail({
+        to: recipient,
+        contact_id: email.contact_id ?? undefined,
+        lead_id: email.lead_id ?? undefined,
+        subject: replySubject,
+        content,
+        in_reply_to: email.email_message_id ?? undefined,
+      });
+    },
+    onSuccess: () => {
+      setReplyContent('');
+      void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
+      void queryClient.invalidateQueries({ queryKey: ['communications'] });
+      toast.success('Réponse envoyée depuis votre boîte IONOS');
+    },
+    onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer la réponse"),
+  });
+
+  const openAttachment = async (attachment: Communication['email_attachments'][number]) => {
+    const previewWindow = window.open('about:blank', '_blank');
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.title = 'Ouverture de la pièce jointe…';
+    }
+
+    setOpeningAttachmentId(attachment.id);
+    try {
+      const blob = await fetchEmailAttachment({
+        communicationId: email.id,
+        attachmentId: attachment.id,
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const contentType = (blob.type || attachment.content_type || '').toLowerCase();
+      const previewable = contentType === 'application/pdf'
+        || /^image\/(avif|bmp|gif|heic|jpeg|jpg|png|webp)$/.test(contentType);
+
+      if (previewable && previewWindow) {
+        previewWindow.location.replace(objectUrl);
+      } else {
+        previewWindow?.close();
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = attachment.filename || 'piece-jointe';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      previewWindow?.close();
+      toast.error((error as Error)?.message || "Impossible d'ouvrir la pièce jointe");
+    } finally {
+      setOpeningAttachmentId(null);
+    }
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -528,18 +601,74 @@ function EmailDetail({
               </h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {email.email_attachments.map((attachment, index) => (
-                  <div key={`${attachment.id}-${index}`} className="rounded-lg border border-border bg-muted/30 p-3">
-                    <p className="truncate text-sm font-medium">{attachment.filename}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {attachment.content_type || 'Type inconnu'}
-                      {attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
-                    </p>
-                  </div>
+                  <button
+                    key={`${attachment.id}-${index}`}
+                    type="button"
+                    className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-wait disabled:opacity-70"
+                    onClick={() => void openAttachment(attachment)}
+                    disabled={openingAttachmentId === attachment.id}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground group-hover:text-primary">
+                      {openingAttachmentId === attachment.id
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <ExternalLink className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{attachment.filename}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {attachment.content_type || 'Type inconnu'}
+                        {attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
+                      </p>
+                    </div>
+                  </button>
                 ))}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Les pièces jointes sont identifiées dans le CRM. Leur téléchargement sécurisé sera ajouté dans une prochaine étape.
+                Cliquez sur un fichier pour l’ouvrir. Les formats non prévisualisables sont téléchargés automatiquement.
               </p>
+            </div>
+          )}
+
+          {inbound && (
+            <div className="mt-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Reply className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground">Répondre à ce message</h3>
+                  <p className="mt-0.5 break-all text-xs text-muted-foreground">
+                    À : {recipient ?? 'adresse expéditeur indisponible'} · Objet : {replySubject}
+                  </p>
+                </div>
+              </div>
+
+              <Textarea
+                value={replyContent}
+                onChange={(event) => setReplyContent(event.target.value)}
+                placeholder="Écrivez votre réponse…"
+                rows={6}
+                className="mt-4 resize-y rounded-lg"
+                disabled={!recipient || replyMutation.isPending}
+              />
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {email.email_message_id
+                    ? 'La réponse restera dans le même fil de discussion.'
+                    : 'Le message sera envoyé sans rattachement technique au fil d’origine.'}
+                </p>
+                <Button
+                  type="button"
+                  className="rounded-full"
+                  disabled={!recipient || !replyContent.trim() || replyMutation.isPending}
+                  onClick={() => replyMutation.mutate()}
+                >
+                  {replyMutation.isPending
+                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    : <Send className="mr-2 h-4 w-4" />}
+                  Envoyer la réponse
+                </Button>
+              </div>
             </div>
           )}
         </div>

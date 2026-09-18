@@ -93,3 +93,28 @@ test('la boite mail separe les recus des envoyes et detecte assureurs et experts
   assert.match(classification, /solutions-expertises\.com/);
   assert.match(classification, /Détection probable à vérifier|probable/);
 });
+
+test('les pieces jointes sont ouvertes via un relais authentifie et les reponses restent dans le fil', async () => {
+  const [inbox, service, attachmentEdge, config] = await Promise.all([
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/integrations/email/email-service.ts'),
+    read('supabase/functions/email-attachment/index.ts'),
+    read('supabase/config.toml'),
+  ]);
+
+  assert.match(inbox, /fetchEmailAttachment/);
+  assert.match(inbox, /sendIonosEmail/);
+  assert.match(inbox, /in_reply_to: email\.email_message_id/);
+  assert.match(inbox, /Répondre à ce message/);
+  assert.match(inbox, /window\.open\('about:blank', '_blank'\)/);
+  assert.match(service, /functions\/v1\/email-attachment/);
+  assert.match(attachmentEdge, /admin\.auth\.getUser\(token\)/);
+  assert.match(attachmentEdge, /\['admin', 'manager', 'advisor'\]/);
+  assert.match(attachmentEdge, /\.eq\('workspace_id', workspaceId\)/);
+  assert.match(attachmentEdge, /\.eq\('type', 'email_inbound'\)/);
+  assert.match(attachmentEdge, /email_attachments/);
+  assert.match(attachmentEdge, /api\.resend\.com\/emails\/receiving/);
+  assert.match(attachmentEdge, /download_url/);
+  assert.match(attachmentEdge, /Cache-Control': 'private, no-store'/);
+  assert.match(config, /\[functions\.email-attachment\][\s\S]*verify_jwt = true/);
+});

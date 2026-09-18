@@ -60,3 +60,6 @@ verify_jwt = true
 
 [functions.email-inbound-webhook]
 verify_jwt = false
+
+[functions.email-attachment]
+verify_jwt = true
