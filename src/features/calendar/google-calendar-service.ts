@@ -6,6 +6,8 @@ export interface GoogleCalendarStatus {
   authorized: boolean;
   calendarId: string;
   calendarName: string | null;
+  /** Compte Google qui a autorise le CRM. Connu apres la premiere synchronisation. */
+  accountEmail: string | null;
   lastSyncedAt: string | null;
   lastError: string | null;
 }
@@ -32,6 +34,7 @@ export async function fetchGoogleCalendarStatus(): Promise<GoogleCalendarStatus>
     authorized: Boolean(settings.calendar_authorized_at),
     calendarId: String(settings.calendar_id || 'primary'),
     calendarName: settings.calendar_name ? String(settings.calendar_name) : null,
+    accountEmail: settings.calendar_account_email ? String(settings.calendar_account_email) : null,
     lastSyncedAt: settings.calendar_last_synced_at ? String(settings.calendar_last_synced_at) : null,
     lastError: settings.calendar_last_error ? String(settings.calendar_last_error) : null,
   };

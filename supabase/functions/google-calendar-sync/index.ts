@@ -31,6 +31,19 @@ type GoogleEvent = {
   start?: { dateTime?: string; date?: string; timeZone?: string };
   end?: { dateTime?: string; date?: string; timeZone?: string };
   extendedProperties?: { private?: Record<string, string> };
+  // Pour un evenement cree par le CRM avec ce jeton, `creator.email` est le
+  // compte Google qui a autorise. C'est le seul moyen de le connaitre sans
+  // demander la portee calendar.readonly (Calendars.get) ni openid.
+  creator?: { email?: string; self?: boolean };
+  organizer?: { email?: string; self?: boolean };
+};
+
+/** Ce que l'on apprend sur l'agenda au passage, sans appel supplementaire. */
+type IdentiteAgenda = {
+  /** `summary` de la reponse events.list : pour l'agenda principal, le nom du compte. */
+  nom: string | null;
+  /** Adresse du compte Google, deduite des evenements crees par le CRM. */
+  compte: string | null;
 };
 
 type SyncResult = {
@@ -145,10 +158,23 @@ function googleIsNewer(event: GoogleEvent, knownUpdatedAt: string | null): boole
   return new Date(event.updated).getTime() > new Date(knownUpdatedAt).getTime();
 }
 
+/** Memorise le compte des qu'un evenement cree par le CRM le revele. */
+function retenirCompte(identite: IdentiteAgenda, events: GoogleEvent[]): void {
+  if (identite.compte) return;
+  for (const event of events) {
+    const email = event.creator?.email ?? event.organizer?.email;
+    if (email && email.includes('@')) {
+      identite.compte = email;
+      return;
+    }
+  }
+}
+
 async function listCrmEvents(
   token: string,
   calendarId: string,
   workspaceId: string,
+  identite: IdentiteAgenda,
 ): Promise<GoogleEvent[]> {
   const events: GoogleEvent[] = [];
   let pageToken = '';
@@ -165,13 +191,16 @@ async function listCrmEvents(
       singleEvents: 'true',
     });
     if (pageToken) params.set('pageToken', pageToken);
-    const page = await googleRequest<{ items?: GoogleEvent[]; nextPageToken?: string }>(
+    const page = await googleRequest<{ items?: GoogleEvent[]; nextPageToken?: string; summary?: string }>(
       token,
       `${calendarUrl(calendarId, '/events')}?${params}`,
     );
+    if (!identite.nom && page.summary?.trim()) identite.nom = page.summary.trim();
     events.push(...(page.items ?? []));
     pageToken = page.nextPageToken ?? '';
   } while (pageToken);
+
+  retenirCompte(identite, events);
 
   return events;
 }
@@ -200,7 +229,8 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
   console.info('[google-calendar-sync] Recuperation du jeton OAuth');
   const token = await accessToken(workspaceId, settings);
   console.info('[google-calendar-sync] Jeton OAuth obtenu');
-  const googleEvents = await listCrmEvents(token, calendarId, workspaceId);
+  const identite: IdentiteAgenda = { nom: null, compte: null };
+  const googleEvents = await listCrmEvents(token, calendarId, workspaceId, identite);
   console.info(`[google-calendar-sync] ${googleEvents.length} evenement(s) CRM trouve(s) chez Google`);
   const eventsById = new Map(
     googleEvents.filter((event) => event.id).map((event) => [event.id as string, event]),
@@ -318,6 +348,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
         `${calendarUrl(calendarId, `/events/${encodeURIComponent(event.id)}`)}?sendUpdates=none`,
         { method: 'PATCH', body: JSON.stringify(eventPayload(appointment)) },
       );
+      retenirCompte(identite, [updatedEvent]);
       const { error: updateError } = await adminClient
         .from('appointments')
         .update({
@@ -340,6 +371,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
       { method: 'POST', body: JSON.stringify(eventPayload(appointment)) },
     );
     if (!createdEvent.id) throw new Error('Google Agenda n a pas renvoye d identifiant evenement');
+    retenirCompte(identite, [createdEvent]);
     const { error: createError } = await adminClient
       .from('appointments')
       .update({
@@ -368,7 +400,11 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
         // synchronisation n'a besoin que de calendar.events. Garder ces
         // valeurs locales évite de demander un droit Google plus large.
         calendar_id: calendarId,
-        calendar_name: String(settings.calendar_name || 'Agenda principal Google'),
+        // Le nom vient de la reponse events.list quand Google le donne ; pour
+        // l'agenda principal c'est le nom du compte, ce qui leve l'ambiguite
+        // « lequel de mes comptes Google ? ».
+        calendar_name: identite.nom ?? String(settings.calendar_name || 'Agenda principal Google'),
+        calendar_account_email: identite.compte ?? (settings.calendar_account_email ?? null),
         calendar_time_zone: String(settings.calendar_time_zone || TIME_ZONE),
         calendar_last_synced_at: new Date().toISOString(),
         calendar_last_error: null,

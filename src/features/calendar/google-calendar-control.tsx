@@ -105,8 +105,20 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
             <div className="space-y-4">
               <div className="rounded-xl border border-border p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">{value?.calendarName || 'Agenda principal Google'}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{value?.calendarName || 'Agenda principal Google'}</p>
+                    {/* Le compte est l'information qui manque le plus : avec
+                        plusieurs comptes Google, on cherche ses rendez-vous
+                        dans le mauvais agenda et on croit que rien ne part. */}
+                    {value?.accountEmail ? (
+                      <p className="mt-0.5 truncate text-xs text-foreground">
+                        Compte : <span className="font-medium">{value.accountEmail}</span>
+                      </p>
+                    ) : value?.authorized ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Compte connu après la première synchronisation
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-xs text-muted-foreground">
                       {value?.lastSyncedAt
                         ? `Dernière synchronisation : ${new Date(value.lastSyncedAt).toLocaleString('fr-FR')}`
@@ -183,7 +195,13 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
                 </Button>
                 {value?.authorized && (
                   <Button asChild variant="ghost" size="icon" className="rounded-full">
-                    <a href="https://calendar.google.com/calendar/u/0/r" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir Google Agenda">
+                    {/* `authuser` ouvre l'agenda du compte autorise, pas celui
+                        du premier compte connecte dans le navigateur. */}
+                    <a
+                      href={value?.accountEmail
+                        ? `https://calendar.google.com/calendar/u/0/r?authuser=${encodeURIComponent(value.accountEmail)}`
+                        : 'https://calendar.google.com/calendar/u/0/r'}
+                      target="_blank" rel="noopener noreferrer" aria-label="Ouvrir Google Agenda">
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   </Button>
