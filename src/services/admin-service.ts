@@ -87,6 +87,12 @@ export interface ReglagesEntreprise {
     detection_doublons: boolean;
     attribution_auto: boolean;
   };
+  /**
+   * Objectif de CA net annuel affiche sur l'accueil. null = non renseigne.
+   * Optionnel : le formulaire Reglages ne le connait pas, et il n'a pas a
+   * le porter -- c'est l'accueil qui le saisit, et le service qui le preserve.
+   */
+  objectif_annuel?: number | null;
 }
 
 export const JOURS = [
@@ -111,6 +117,7 @@ export const REGLAGES_PAR_DEFAUT: ReglagesEntreprise = {
     detection_doublons: true,
     attribution_auto: false,
   },
+  objectif_annuel: null,
 };
 
 /**
@@ -130,6 +137,10 @@ function fusionner(brut: unknown, nomWorkspace: string): ReglagesEntreprise {
         ? s.horaires
         : REGLAGES_PAR_DEFAUT.horaires,
     preferences: { ...REGLAGES_PAR_DEFAUT.preferences, ...(s.preferences ?? {}) },
+    objectif_annuel:
+      typeof s.objectif_annuel === 'number' && Number.isFinite(s.objectif_annuel) && s.objectif_annuel > 0
+        ? s.objectif_annuel
+        : null,
   };
 }
 
@@ -151,11 +162,48 @@ export async function enregistrerReglagesEntreprise(
 ): Promise<void> {
   const workspaceId = await getWorkspaceId();
 
+  // On fusionne avec ce qui est deja en base : le formulaire Reglages
+  // reconstruit l'objet a partir de ses seuls champs, et une cle qu'il ne
+  // connait pas (objectif annuel, ou toute cle a venir) serait sinon effacee
+  // a chaque enregistrement.
+  const { data: actuel, error: erreurLecture } = await supabase
+    .from('workspaces')
+    .select('settings')
+    .eq('id', workspaceId)
+    .maybeSingle();
+  if (erreurLecture) throw new Error(erreurLecture.message);
+
+  const settings = { ...((actuel?.settings as Record<string, unknown> | null) ?? {}), ...reglages };
+
   // Le nom vit dans les deux : `workspaces.name` reste la source pour tout ce
   // qui affiche l'espace, `settings.nom` pour ce qui est imprime.
   const { error } = await supabase
     .from('workspaces')
-    .update({ name: reglages.nom, settings: reglages, updated_at: new Date().toISOString() })
+    .update({ name: reglages.nom, settings, updated_at: new Date().toISOString() })
+    .eq('id', workspaceId);
+
+  if (error) throw new Error(error.message);
+}
+
+/** Enregistre le seul objectif annuel, sans toucher au reste des reglages. */
+export async function enregistrerObjectifAnnuel(objectif: number | null): Promise<void> {
+  const workspaceId = await getWorkspaceId();
+
+  const { data: actuel, error: erreurLecture } = await supabase
+    .from('workspaces')
+    .select('settings')
+    .eq('id', workspaceId)
+    .maybeSingle();
+  if (erreurLecture) throw new Error(erreurLecture.message);
+
+  const settings = {
+    ...((actuel?.settings as Record<string, unknown> | null) ?? {}),
+    objectif_annuel: objectif,
+  };
+
+  const { error } = await supabase
+    .from('workspaces')
+    .update({ settings, updated_at: new Date().toISOString() })
     .eq('id', workspaceId);
 
   if (error) throw new Error(error.message);
