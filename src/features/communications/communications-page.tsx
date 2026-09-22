@@ -29,8 +29,9 @@ import { fetchContacts } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
 import {
   buildSignedEmailContent, getIonosConnection, getIonosMailboxStatus,
-  parseIonosSettings, sendIonosEmail, type IonosMailboxStatus,
+  parseIonosSettings, prepareEmailAttachments, sendIonosEmail, type IonosMailboxStatus,
 } from '@/features/integrations/email/email-service';
+import { EmailAttachmentPicker } from '@/features/integrations/email/email-attachment-picker';
 
 // ============ LABELS ============
 
@@ -224,7 +225,7 @@ export function CommunicationsPage() {
         title="Communications"
         description="SMS, appels et emails"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {mailboxStatus?.configured ? (
               <Badge variant="outline" className="rounded-full border-done/25 bg-done-soft text-done text-[10px] font-medium">
                 <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -239,7 +240,7 @@ export function CommunicationsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full"
+              className="min-w-0 flex-1 rounded-full sm:flex-none"
               onClick={() => setTemplatesOpen(true)}
             >
               <Settings className="mr-2 h-4 w-4" />
@@ -250,30 +251,30 @@ export function CommunicationsPage() {
       />
 
       {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2 gutter-x border-b border-border py-3">
-        <Button size="sm" className="rounded-full" onClick={() => setCallOpen(true)}>
+      <div className="grid grid-cols-2 gap-2 gutter-x border-b border-border py-3 sm:flex sm:flex-wrap sm:items-center">
+        <Button size="sm" className="w-full justify-center rounded-full sm:w-auto" onClick={() => setCallOpen(true)}>
           <Phone className="mr-2 h-4 w-4" />
           Appeler
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => setSmsOpen(true)}>
+        <Button size="sm" className="w-full justify-center rounded-full sm:w-auto" onClick={() => setSmsOpen(true)}>
           <MessageSquare className="mr-2 h-4 w-4" />
           Envoyer un SMS
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => setEmailOpen(true)}>
+        <Button size="sm" className="w-full justify-center rounded-full sm:w-auto" onClick={() => setEmailOpen(true)}>
           <Mail className="mr-2 h-4 w-4" />
           Envoyer un email
         </Button>
-        <Button size="sm" className="rounded-full" onClick={() => setNoteOpen(true)}>
+        <Button size="sm" className="w-full justify-center rounded-full sm:w-auto" onClick={() => setNoteOpen(true)}>
           <StickyNote className="mr-2 h-4 w-4" />
           Ajouter une note
         </Button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
         {/* Sidebar filters */}
-        <aside className="w-56 shrink-0 border-r border-border bg-card/50 overflow-y-auto scrollbar-thin">
-          <nav className="flex flex-col gap-1 p-3">
-            <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <aside className="w-full shrink-0 border-b border-border bg-card/50 sm:w-56 sm:border-b-0 sm:border-r sm:overflow-y-auto sm:scrollbar-thin">
+          <nav className="flex gap-1 overflow-x-auto p-2 scrollbar-thin sm:flex-col sm:overflow-visible sm:p-3">
+            <p className="hidden px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:block">
               Filtrer
             </p>
             {filterItems.map((item) => {
@@ -283,7 +284,7 @@ export function CommunicationsPage() {
                   key={item.key}
                   onClick={() => setFilter(item.key)}
                   className={
-                    'flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ' +
+                    'flex min-h-10 shrink-0 items-center justify-between gap-3 rounded-full px-3 py-2 text-sm font-medium transition sm:rounded-lg ' +
                     (active
                       ? 'bg-secondary text-secondary-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground')
@@ -303,7 +304,7 @@ export function CommunicationsPage() {
             })}
           </nav>
 
-          <div className="mx-3 mb-3 rounded-lg border border-due/25 bg-due-soft/60 p-3">
+          <div className="mx-3 mb-3 hidden rounded-lg border border-due/25 bg-due-soft/60 p-3 sm:block">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-due">
               <AlertCircle className="h-3.5 w-3.5" />
               SMS et appels en démonstration
@@ -318,7 +319,7 @@ export function CommunicationsPage() {
         {/* Main list */}
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {isLoading && (
-            <div className="p-6">
+            <div className="p-3 sm:p-6">
               <div className="space-y-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Skeleton key={i} className="h-20 w-full rounded-lg" />
@@ -368,7 +369,7 @@ export function CommunicationsPage() {
           )}
 
           {!isLoading && !isError && filtered.length > 0 && (
-            <div className="space-y-2 p-6">
+            <div className="space-y-2 p-3 sm:p-6">
               {filtered.map((comm) => (
                 <CommunicationRow
                   key={comm.id}
@@ -892,6 +893,7 @@ function EmailDialog({
   const [email, setEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
 
   const options = useMemo(() => buildEmailOptions(leads, contacts), [leads, contacts]);
 
@@ -900,17 +902,20 @@ function EmailDialog({
     setEmail('');
     setSubject('');
     setContent('');
+    setAttachments([]);
   };
 
   const mutation = useMutation({
     mutationFn: async () => {
       const parsed = parseOption(target);
+      const preparedAttachments = await prepareEmailAttachments(attachments);
       return sendIonosEmail({
         to: email.trim() || undefined,
         contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
         lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
         subject: subject.trim(),
         content: buildSignedEmailContent(content, signature),
+        attachments: preparedAttachments,
       });
     },
     onSuccess: () => {
@@ -941,8 +946,8 @@ function EmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
-      <DialogContent className="max-w-lg sm:rounded-xl">
-        <DialogHeader>
+      <DialogContent className="h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[85dvh] sm:max-w-lg sm:rounded-xl">
+        <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
           <DialogTitle>Envoyer un email</DialogTitle>
           <DialogDescription>
             {mailboxStatus?.configured
@@ -951,7 +956,7 @@ function EmailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 space-y-4 overflow-y-auto px-4 py-4 scrollbar-thin sm:px-6">
           <div className="space-y-1.5">
             <Label className="text-sm">Destinataire</Label>
             <Select value={target} onValueChange={setTarget}>
@@ -1001,7 +1006,7 @@ function EmailDialog({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={6}
-              className="rounded-lg resize-none"
+              className="min-h-32 resize-y rounded-lg"
             />
             {signature.trim() && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
@@ -1014,9 +1019,15 @@ function EmailDialog({
               </div>
             )}
           </div>
+
+          <EmailAttachmentPicker
+            files={attachments}
+            onChange={setAttachments}
+            disabled={mutation.isPending}
+          />
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="border-t border-border bg-background px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-3 [&>button]:w-full sm:[&>button]:w-auto">
           <Button variant="ghost" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>

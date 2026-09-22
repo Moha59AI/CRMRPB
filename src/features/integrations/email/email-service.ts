@@ -22,6 +22,14 @@ export interface SendIonosEmailInput {
   subject: string;
   content: string;
   in_reply_to?: string;
+  attachments?: EmailAttachmentInput[];
+}
+
+export interface EmailAttachmentInput {
+  filename: string;
+  content_type: string;
+  content_base64: string;
+  size: number;
 }
 
 export interface FetchEmailAttachmentInput {
@@ -30,6 +38,91 @@ export interface FetchEmailAttachmentInput {
 }
 
 const EMAIL_PAGE_SIZE = 500;
+
+export const MAX_EMAIL_ATTACHMENTS = 5;
+export const MAX_EMAIL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES = 10 * 1024 * 1024;
+export const EMAIL_ATTACHMENT_ACCEPT = [
+  '.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif',
+  '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt',
+].join(',');
+
+const EMAIL_ATTACHMENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
+  txt: 'text/plain',
+};
+
+function extensionFichier(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? '';
+}
+
+export function formatEmailAttachmentSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} Ko`;
+  return `${(bytes / (1024 * 1024)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
+}
+
+export function validateEmailAttachmentFiles(files: readonly File[]): void {
+  if (files.length > MAX_EMAIL_ATTACHMENTS) {
+    throw new Error(`${MAX_EMAIL_ATTACHMENTS} pièces jointes maximum par email`);
+  }
+
+  let total = 0;
+  for (const file of files) {
+    const contentType = EMAIL_ATTACHMENT_TYPES[extensionFichier(file.name)];
+    if (!contentType) {
+      throw new Error(`Format non autorisé : ${file.name}`);
+    }
+    if (file.size <= 0) {
+      throw new Error(`Le fichier ${file.name} est vide`);
+    }
+    if (file.size > MAX_EMAIL_ATTACHMENT_BYTES) {
+      throw new Error(`${file.name} dépasse la limite de ${formatEmailAttachmentSize(MAX_EMAIL_ATTACHMENT_BYTES)}`);
+    }
+    total += file.size;
+  }
+
+  if (total > MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES) {
+    throw new Error(`Les pièces jointes dépassent ${formatEmailAttachmentSize(MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES)} au total`);
+  }
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Impossible de lire ${file.name}`));
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const separator = result.indexOf(',');
+      if (separator < 0) {
+        reject(new Error(`Impossible de préparer ${file.name}`));
+        return;
+      }
+      resolve(result.slice(separator + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function prepareEmailAttachments(files: readonly File[]): Promise<EmailAttachmentInput[]> {
+  validateEmailAttachmentFiles(files);
+  return Promise.all(files.map(async (file) => ({
+    filename: file.name,
+    content_type: EMAIL_ATTACHMENT_TYPES[extensionFichier(file.name)],
+    content_base64: await fileToBase64(file),
+    size: file.size,
+  })));
+}
 
 export function buildDefaultEmailSignature(senderName: string, emailAddress: string): string {
   const identity = senderName.trim() || 'Relais Pare-Brise';

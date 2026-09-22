@@ -10,6 +10,32 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const MAX_EMAIL_ATTACHMENTS = 5;
+const MAX_EMAIL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES = 10 * 1024 * 1024;
+const EMAIL_ATTACHMENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
+  txt: 'text/plain',
+};
+
+type OutboundAttachment = {
+  filename: string;
+  contentType: string;
+  contentBase64: string;
+  size: number;
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -25,6 +51,62 @@ function emailValide(value: unknown): value is string {
 
 function texte(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+
+function extensionFichier(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() ?? '';
+}
+
+function tailleBase64(value: string): number {
+  if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    throw new Error('Le contenu d’une pièce jointe est invalide');
+  }
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
+function piecesJointes(value: unknown): OutboundAttachment[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error('Les pièces jointes sont invalides');
+  if (value.length > MAX_EMAIL_ATTACHMENTS) {
+    throw new Error(`${MAX_EMAIL_ATTACHMENTS} pièces jointes maximum par email`);
+  }
+
+  let total = 0;
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('Une pièce jointe est invalide');
+    const attachment = item as Record<string, unknown>;
+    const rawFilename = texte(attachment.filename, 180);
+    const filename = Array.from(rawFilename, (character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 || character === '/' || character === '\\'
+        ? '_'
+        : character;
+    }).join('');
+    const contentType = EMAIL_ATTACHMENT_TYPES[extensionFichier(filename)];
+    if (!filename || !contentType) throw new Error(`Format de pièce jointe non autorisé : ${filename || 'sans nom'}`);
+
+    const declaredType = texte(attachment.content_type, 200).toLowerCase();
+    if (declaredType && declaredType !== contentType) {
+      throw new Error(`Type de pièce jointe incohérent : ${filename}`);
+    }
+
+    const contentBase64 = typeof attachment.content_base64 === 'string'
+      ? attachment.content_base64.trim()
+      : '';
+    if (contentBase64.length > Math.ceil(MAX_EMAIL_ATTACHMENT_BYTES * 4 / 3) + 4) {
+      throw new Error(`${filename} dépasse la limite de 5 Mo`);
+    }
+    const size = tailleBase64(contentBase64);
+    if (size <= 0) throw new Error(`Le fichier ${filename} est vide`);
+    if (size > MAX_EMAIL_ATTACHMENT_BYTES) throw new Error(`${filename} dépasse la limite de 5 Mo`);
+    total += size;
+    if (total > MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES) {
+      throw new Error('Les pièces jointes dépassent 10 Mo au total');
+    }
+
+    return { filename, contentType, contentBase64, size };
+  });
 }
 
 function echapperHtml(value: string): string {
@@ -133,6 +215,7 @@ Deno.serve(async (req) => {
     const content = texte(body.content, 20_000);
     if (!subject) throw new Error('OBJET_REQUIS');
     if (!content) throw new Error('MESSAGE_REQUIS');
+    const attachments = piecesJointes(body.attachments);
 
     const recipient = await adresseDestinataire(workspaceId, body);
     const requestId = /^[0-9a-f-]{36}$/i.test(texte(body.request_id, 36))
@@ -154,6 +237,13 @@ Deno.serve(async (req) => {
         subject,
         text: content,
         html: `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`,
+        ...(attachments.length ? {
+          attachments: attachments.map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.contentBase64,
+            content_type: attachment.contentType,
+          })),
+        } : {}),
         ...(inReplyTo ? { headers: { 'In-Reply-To': inReplyTo } } : {}),
       }),
     });
@@ -179,6 +269,12 @@ Deno.serve(async (req) => {
         sender_email: senderEmail,
         recipient_email: recipient.email,
         email_in_reply_to: inReplyTo,
+        email_attachments: attachments.map((attachment, index) => ({
+          id: `outbound-${resendPayload.id}-${index + 1}`,
+          filename: attachment.filename,
+          content_type: attachment.contentType,
+          size: attachment.size,
+        })),
       }, { onConflict: 'workspace_id,provider,external_id' })
       .select('*')
       .single();

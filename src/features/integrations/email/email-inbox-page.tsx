@@ -51,8 +51,10 @@ import {
   fetchMailboxEmails,
   getIonosConnection,
   parseIonosSettings,
+  prepareEmailAttachments,
   sendIonosEmail,
 } from './email-service';
+import { EmailAttachmentPicker } from './email-attachment-picker';
 
 type MailboxView = 'inbound' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -278,34 +280,36 @@ export function EmailInboxPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <PageHeader
-        title="Boîte mail"
-        description="Tous les emails reçus et envoyés depuis le CRM"
-        action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              onClick={() => emailsQuery.refetch()}
-              disabled={emailsQuery.isFetching}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${emailsQuery.isFetching ? 'animate-spin' : ''}`} />
-              Actualiser
-            </Button>
-            <Button asChild size="sm" className="rounded-full">
-              <Link to="/communications">
-                <PenLine className="mr-2 h-4 w-4" />
-                Écrire
-              </Link>
-            </Button>
-          </div>
-        }
-      />
+      <div className={mobileDetailOpen ? 'hidden lg:block' : undefined}>
+        <PageHeader
+          title="Boîte mail"
+          description="Tous les emails reçus et envoyés depuis le CRM"
+          action={
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-center rounded-full sm:w-auto"
+                onClick={() => emailsQuery.refetch()}
+                disabled={emailsQuery.isFetching}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${emailsQuery.isFetching ? 'animate-spin' : ''}`} />
+                Actualiser
+              </Button>
+              <Button asChild size="sm" className="w-full justify-center rounded-full sm:w-auto">
+                <Link to="/communications">
+                  <PenLine className="mr-2 h-4 w-4" />
+                  Écrire
+                </Link>
+              </Button>
+            </div>
+          }
+        />
+      </div>
 
-      <div className="border-b border-border bg-background gutter-x py-3">
+      <div className={`${mobileDetailOpen ? 'hidden lg:block' : ''} border-b border-border bg-background gutter-x py-3`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-thin xl:pb-0">
+          <div className="flex snap-x gap-1 overflow-x-auto pb-1 scrollbar-thin xl:pb-0">
             {mailboxViews.map(({ key, label, Icon }) => {
               const active = view === key;
               return (
@@ -316,7 +320,7 @@ export function EmailInboxPage() {
                     setView(key);
                     setMobileDetailOpen(false);
                   }}
-                  className={`flex min-h-10 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-medium transition ${
+                  className={`flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-full px-3 text-sm font-medium transition ${
                     active
                       ? 'bg-secondary text-secondary-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -345,7 +349,7 @@ export function EmailInboxPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-        <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col border-r border-border bg-card/30`}>
+        <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 lg:border-r lg:border-border`}>
           {emailsQuery.isLoading && (
             <div className="space-y-2 p-4">
               {Array.from({ length: 7 }).map((_, index) => (
@@ -481,6 +485,7 @@ function EmailDetail({
   const inbound = email.direction === 'inbound';
   const queryClient = useQueryClient();
   const [replyContent, setReplyContent] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [attachmentViewer, setAttachmentViewer] = useState<AttachmentViewerState | null>(null);
   const attachmentRequestId = useRef(0);
   const attachmentUrl = useRef<string | null>(null);
@@ -496,6 +501,7 @@ function EmailDetail({
       if (!recipient) throw new Error("L'adresse de l'expéditeur est introuvable");
       const content = replyContent.trim();
       if (!content) throw new Error('Écrivez votre réponse avant de l’envoyer');
+      const attachments = await prepareEmailAttachments(replyAttachments);
       return sendIonosEmail({
         to: recipient,
         contact_id: email.contact_id ?? undefined,
@@ -503,10 +509,12 @@ function EmailDetail({
         subject: replySubject,
         content: buildSignedEmailContent(content, signature),
         in_reply_to: email.email_message_id ?? undefined,
+        attachments,
       });
     },
     onSuccess: () => {
       setReplyContent('');
+      setReplyAttachments([]);
       void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
       void queryClient.invalidateQueries({ queryKey: ['communications'] });
       toast.success('Réponse envoyée depuis votre boîte IONOS');
@@ -606,13 +614,13 @@ function EmailDetail({
                 <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{email.provider}</span>
               )}
             </div>
-            <h2 className="mt-3 text-xl font-semibold leading-tight text-foreground sm:text-2xl">
+            <h2 className="mt-3 break-words text-xl font-semibold leading-tight text-foreground sm:text-2xl">
               {email.subject || '(Sans objet)'}
             </h2>
           </div>
 
           {relatedPath && (
-            <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full">
+            <Button asChild variant="outline" size="sm" className="w-full shrink-0 justify-center rounded-full sm:w-auto">
               <Link to={relatedPath}>
                 <UserRound className="mr-2 h-4 w-4" />
                 Voir la fiche
@@ -625,7 +633,7 @@ function EmailDetail({
       <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-thin sm:p-6">
         <div className="mx-auto max-w-4xl">
           <div className="rounded-xl border border-border bg-card p-4">
-            <div className="grid gap-3 text-sm sm:grid-cols-[90px_minmax(0,1fr)]">
+            <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm sm:grid-cols-[90px_minmax(0,1fr)]">
               <span className="text-muted-foreground">De</span>
               <div className="min-w-0">
                 {inbound && person && <p className="font-medium text-foreground">{person}</p>}
@@ -670,19 +678,8 @@ function EmailDetail({
                 Pièces jointes ({email.email_attachments.length})
               </h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {email.email_attachments.map((attachment, index) => (
-                  <button
-                    key={`${attachment.id}-${index}`}
-                    type="button"
-                    className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-wait disabled:opacity-70"
-                    onClick={() => void openAttachment(attachment)}
-                    disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground group-hover:text-primary">
-                      {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <ExternalLink className="h-4 w-4" />}
-                    </div>
+                {email.email_attachments.map((attachment, index) => {
+                  const details = (
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{attachment.filename}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -690,11 +687,44 @@ function EmailDetail({
                         {attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
                       </p>
                     </div>
-                  </button>
-                ))}
+                  );
+
+                  if (!inbound) {
+                    return (
+                      <div
+                        key={`${attachment.id}-${index}`}
+                        className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 p-3"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-primary">
+                          <Paperclip className="h-4 w-4" />
+                        </div>
+                        {details}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={`${attachment.id}-${index}`}
+                      type="button"
+                      className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-wait disabled:opacity-70"
+                      onClick={() => void openAttachment(attachment)}
+                      disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground group-hover:text-primary">
+                        {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <ExternalLink className="h-4 w-4" />}
+                      </div>
+                      {details}
+                    </button>
+                  );
+                })}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Cliquez sur un fichier pour l’ouvrir dans le CRM, puis téléchargez-le si nécessaire.
+                {inbound
+                  ? 'Cliquez sur un fichier pour l’ouvrir dans le CRM, puis téléchargez-le si nécessaire.'
+                  : 'Ces fichiers ont bien été joints à l’envoi. Leur contenu n’est pas conservé dans le CRM.'}
               </p>
             </div>
           )}
@@ -731,6 +761,13 @@ function EmailDetail({
                   </p>
                 </div>
               )}
+              <div className="mt-3">
+                <EmailAttachmentPicker
+                  files={replyAttachments}
+                  onChange={setReplyAttachments}
+                  disabled={!recipient || replyMutation.isPending}
+                />
+              </div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   {email.email_message_id
@@ -739,7 +776,7 @@ function EmailDetail({
                 </p>
                 <Button
                   type="button"
-                  className="rounded-full"
+                  className="w-full rounded-full sm:w-auto"
                   disabled={!recipient || !replyContent.trim() || replyMutation.isPending}
                   onClick={() => replyMutation.mutate()}
                 >
@@ -760,7 +797,7 @@ function EmailDetail({
           if (!open) closeAttachmentViewer();
         }}
       >
-        <DialogContent className="h-[90dvh] max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-2xl">
+        <DialogContent className="h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:h-[90dvh] sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-2xl">
           <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
             <DialogTitle className="truncate pr-2">
               {attachmentViewer?.attachment.filename || 'Pièce jointe'}
@@ -822,7 +859,7 @@ function EmailDetail({
             )}
           </div>
 
-          <DialogFooter className="border-t border-border bg-background px-4 py-3 sm:px-6">
+          <DialogFooter className="border-t border-border bg-background px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-3 [&>button]:w-full sm:[&>button]:w-auto">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeAttachmentViewer}>
               Fermer
             </Button>

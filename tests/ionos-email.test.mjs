@@ -140,3 +140,52 @@ test('la signature est personnalisable visible pendant la redaction et jointe au
   assert.match(inbox, /Signature ajoutée à l’envoi/);
   assert.match(inbox, /buildSignedEmailContent\(content, signature\)/);
 });
+
+test('la boite mail reste exploitable sur telephone sans comprimer la lecture ni la redaction', async () => {
+  const [inbox, communications, settings] = await Promise.all([
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/communications/communications-page.tsx'),
+    read('src/features/integrations/email/email-settings-page.tsx'),
+  ]);
+
+  assert.match(inbox, /mobileDetailOpen \? 'hidden lg:block'/);
+  assert.match(inbox, /grid-cols-\[64px_minmax\(0,1fr\)\]/);
+  assert.match(inbox, /h-\[100dvh\][^\n]*grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
+  assert.match(communications, /grid grid-cols-2 gap-2 gutter-x/);
+  assert.match(communications, /flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row/);
+  assert.match(communications, /sm:w-56 sm:border-b-0 sm:border-r/);
+  assert.match(communications, /h-\[100dvh\][^\n]*grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
+  assert.match(settings, /mt-5 grid gap-2 sm:flex sm:flex-wrap/);
+});
+
+test('les nouveaux emails et les reponses acceptent des pieces jointes controlees cote client et serveur', async () => {
+  const [service, picker, communications, inbox, edge] = await Promise.all([
+    read('src/features/integrations/email/email-service.ts'),
+    read('src/features/integrations/email/email-attachment-picker.tsx'),
+    read('src/features/communications/communications-page.tsx'),
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('supabase/functions/email-send/index.ts'),
+  ]);
+
+  assert.match(service, /attachments\?: EmailAttachmentInput\[\]/);
+  assert.match(service, /MAX_EMAIL_ATTACHMENTS = 5/);
+  assert.match(service, /MAX_EMAIL_ATTACHMENT_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(service, /prepareEmailAttachments/);
+  assert.match(service, /reader\.readAsDataURL\(file\)/);
+  assert.match(picker, /type="file"/);
+  assert.match(picker, /multiple/);
+  assert.match(picker, /Retirer \$\{file\.name\}/);
+  assert.match(communications, /prepareEmailAttachments\(attachments\)/);
+  assert.match(communications, /<EmailAttachmentPicker/);
+  assert.match(inbox, /prepareEmailAttachments\(replyAttachments\)/);
+  assert.match(inbox, /files=\{replyAttachments\}/);
+
+  assert.match(edge, /function piecesJointes/);
+  assert.match(edge, /MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES/);
+  assert.match(edge, /content: attachment\.contentBase64/);
+  assert.match(edge, /content_type: attachment\.contentType/);
+  assert.match(edge, /email_attachments: attachments\.map/);
+  assert.match(edge, /filename: attachment\.filename/);
+  assert.doesNotMatch(edge, /email_attachments:[\s\S]{0,300}content_base64/);
+  assert.match(inbox, /Leur contenu n’est pas conservé dans le CRM/);
+});

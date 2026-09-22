@@ -206,7 +206,7 @@ export function EmailSettingsPage() {
             />
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Aperçu de la signature</p>
-              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">
+              <p className="mt-3 whitespace-pre-line break-words text-sm leading-relaxed text-foreground">
                 {form.signature.trim() || 'Aucune signature ne sera ajoutée.'}
               </p>
             </div>
@@ -228,18 +228,18 @@ export function EmailSettingsPage() {
             </p>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button className="rounded-full" disabled={busy || connectionQuery.isLoading} onClick={save}>
+          <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
+            <Button className="w-full rounded-full sm:w-auto" disabled={busy || connectionQuery.isLoading} onClick={save}>
               {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Server className="mr-2 h-4 w-4" />}
               Enregistrer
             </Button>
-            <Button variant="outline" className="rounded-full" disabled={busy || connectionQuery.isLoading} onClick={test}>
+            <Button variant="outline" className="w-full rounded-full sm:w-auto" disabled={busy || connectionQuery.isLoading} onClick={test}>
               {testMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Envoyer un test
             </Button>
             <Button
               variant="ghost"
-              className="rounded-full"
+              className="w-full rounded-full sm:w-auto"
               disabled={statusQuery.isFetching}
               onClick={() => statusQuery.refetch()}
             >
