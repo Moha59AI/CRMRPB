@@ -4,16 +4,18 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('la connexion IONOS ne stocke aucun mot de passe et reste isolee par workspace', async () => {
-  const migration = await read('supabase/migrations/20260916100000_ionos_email_integration.sql');
+test('la connexion IONOS conserve le mot de passe uniquement dans Vault et reste isolee par workspace', async () => {
+  const migration = await read('supabase/migrations/20260925140000_ionos_imap_smtp.sql');
   const service = await read('src/features/integrations/email/email-service.ts');
+  const secretEdge = await read('supabase/functions/ionos-email-secret/index.ts');
+  const secretHelper = await read('supabase/functions/_shared/ionos-email.ts');
 
-  assert.match(migration, /'meta', 'google', 'onify', 'ionos', 'custom'/);
-  assert.match(migration, /integration_connections_ionos_unique/);
-  assert.match(migration, /workspace_id, provider/);
-  assert.match(migration, /sender_email text/);
-  assert.match(migration, /email_attachments jsonb not null/);
-  assert.doesNotMatch(service, /password|imap_password|smtp_password/i);
+  assert.match(secretHelper, /ionos_email_password_\$\{workspaceId\}/);
+  assert.match(secretHelper, /vault_read_secret/);
+  assert.match(secretHelper, /vault_(update|create)_secret/);
+  assert.match(secretEdge, /profile\.role !== 'admin'/);
+  assert.match(secretEdge, /writeIonosPassword/);
+  assert.doesNotMatch(service, /settings:[^\n]*(password|imap_password|smtp_password)/i);
   assert.doesNotMatch(migration, /imap_password|smtp_password/i);
 });
 
@@ -23,33 +25,48 @@ test('les emails sortants passent par le serveur et sont journalises seulement a
 
   assert.match(edge, /admin\.auth\.getUser\(token\)/);
   assert.match(edge, /\['admin', 'manager', 'advisor'\]/);
-  assert.match(edge, /Deno\.env\.get\('RESEND_API_KEY'\)/);
-  assert.match(edge, /https:\/\/api\.resend\.com\/emails/);
-  assert.match(edge, /Idempotency-Key/);
-  assert.match(edge, /provider: 'resend-ionos'/);
+  assert.match(edge, /nodemailer@10\.0\.10/);
+  assert.match(edge, /IONOS_SMTP_HOST/);
+  assert.match(edge, /IONOS_SMTP_PORT/);
+  assert.match(edge, /readIonosPassword/);
+  assert.match(edge, /provider: 'ionos-smtp'/);
+  assert.doesNotMatch(edge, /api\.resend\.com/);
   assert.match(page, /sendIonosEmail/);
   assert.doesNotMatch(page, /Email envoyé \(mode démo\)/);
 });
 
-test('le webhook entrant verifie la signature et rattache le message au client', async () => {
-  const edge = await read('supabase/functions/email-inbound-webhook/index.ts');
+test('la synchronisation IMAP rattache les messages et notifie les utilisateurs', async () => {
+  const edge = await read('supabase/functions/ionos-mail-sync/index.ts');
+  const ingest = await read('supabase/functions/_shared/inbound-email.ts');
   const config = await read('supabase/config.toml');
 
-  assert.match(edge, /RESEND_WEBHOOK_SECRET/);
-  assert.match(edge, /svix-id/);
-  assert.match(edge, /crypto\.subtle\.sign/);
-  assert.match(edge, /emails\/receiving/);
-  assert.match(edge, /\.from\('contacts'\)/);
-  assert.match(edge, /\.from\('leads'\)/);
-  assert.match(edge, /\.from\('notifications'\)/);
-  assert.match(edge, /type: 'email_inbound'/);
-  assert.match(edge, /classifierCorrespondant/);
-  assert.match(edge, /extraireImmatriculations/);
-  assert.match(edge, /vehicle_registration/);
-  assert.match(edge, /Email assureur/);
-  assert.match(edge, /Email expert/);
+  assert.match(edge, /ImapFlow/);
+  assert.match(edge, /imapflow@2\.0\.6/);
+  assert.match(edge, /PostalMime/);
+  assert.match(edge, /IONOS_IMAP_HOST/);
+  assert.match(edge, /readOnly: true/);
+  assert.match(edge, /email-attachments/);
+  assert.match(edge, /imap_last_uid/);
+  assert.match(edge, /MAX_MESSAGES_PER_SYNC/);
+  assert.match(ingest, /\.from\('contacts'\)/);
+  assert.match(ingest, /\.from\('leads'\)/);
+  assert.match(ingest, /\.from\('notifications'\)/);
+  assert.match(ingest, /type: 'email_inbound'/);
+  assert.match(ingest, /classifierCorrespondant/);
+  assert.match(ingest, /extraireImmatriculations/);
+  assert.match(ingest, /vehicle_registration/);
+  assert.match(ingest, /Email assureur/);
+  assert.match(ingest, /Email expert/);
   assert.match(config, /\[functions\.email-send\][\s\S]*verify_jwt = true/);
-  assert.match(config, /\[functions\.email-inbound-webhook\][\s\S]*verify_jwt = false/);
+  assert.match(config, /\[functions\.ionos-email-secret\][\s\S]*verify_jwt = true/);
+  assert.match(config, /\[functions\.ionos-mail-sync\][\s\S]*verify_jwt = false/);
+});
+
+test('le webhook Resend est neutralise apres la premiere synchronisation IMAP reussie', async () => {
+  const webhook = await read('supabase/functions/email-inbound-webhook/index.ts');
+
+  assert.match(webhook, /settings\.transport === 'ionos-imap-smtp'/);
+  assert.match(webhook, /Email Resend ignore : la boite utilise desormais la synchronisation IMAP directe/);
 });
 
 test('les reglages IONOS sont accessibles aux administrateurs depuis les integrations', async () => {
@@ -65,8 +82,10 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.match(navigation, /path: '\/settings\/integrations\/email'/);
   assert.match(permissions, /'\/settings\/integrations\/email': \['admin'\]/);
   assert.match(list, /Boîte mail IONOS/);
-  assert.match(settings, /Votre mot de passe IONOS reste privé/);
-  assert.match(settings, /email-inbound-webhook/);
+  assert.match(settings, /Connexion directe à IONOS, sans Resend/);
+  assert.match(settings, /Synchroniser maintenant/);
+  assert.match(settings, /Enregistrer et vérifier/);
+  assert.doesNotMatch(settings, /email-inbound-webhook/);
 });
 
 test('la boite mail separe les recus des envoyes et detecte assureurs et experts', async () => {
@@ -116,8 +135,9 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
   assert.match(attachmentEdge, /\.eq\('workspace_id', workspaceId\)/);
   assert.match(attachmentEdge, /\.eq\('type', 'email_inbound'\)/);
   assert.match(attachmentEdge, /email_attachments/);
-  assert.match(attachmentEdge, /api\.resend\.com\/emails\/receiving/);
-  assert.match(attachmentEdge, /download_url/);
+  assert.match(attachmentEdge, /communication\.provider === 'ionos-imap'/);
+  assert.match(attachmentEdge, /from\('email-attachments'\)/);
+  assert.match(attachmentEdge, /storage_path/);
   assert.match(attachmentEdge, /Cache-Control': 'private, no-store'/);
   assert.match(config, /\[functions\.email-attachment\][\s\S]*verify_jwt = true/);
 });
@@ -182,8 +202,8 @@ test('les nouveaux emails et les reponses acceptent des pieces jointes controlee
 
   assert.match(edge, /function piecesJointes/);
   assert.match(edge, /MAX_EMAIL_ATTACHMENTS_TOTAL_BYTES/);
-  assert.match(edge, /content: attachment\.contentBase64/);
-  assert.match(edge, /content_type: attachment\.contentType/);
+  assert.match(edge, /Buffer\.from\(attachment\.contentBase64, 'base64'\)/);
+  assert.match(edge, /contentType: attachment\.contentType/);
   assert.match(edge, /email_attachments: attachments\.map/);
   assert.match(edge, /filename: attachment\.filename/);
   assert.doesNotMatch(edge, /email_attachments:[\s\S]{0,300}content_base64/);

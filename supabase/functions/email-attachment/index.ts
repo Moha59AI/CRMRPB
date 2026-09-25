@@ -14,6 +14,7 @@ type StoredAttachment = {
   id?: unknown;
   filename?: unknown;
   content_type?: unknown;
+  storage_path?: unknown;
 };
 
 type ResendAttachment = {
@@ -82,20 +83,51 @@ Deno.serve(async (req) => {
 
     const { data: communication, error: communicationError } = await admin
       .from('communications')
-      .select('external_id, email_attachments')
+      .select('provider, external_id, email_attachments')
       .eq('id', communicationId)
       .eq('workspace_id', workspaceId)
-      .eq('provider', 'resend-ionos')
       .eq('type', 'email_inbound')
       .maybeSingle();
     if (communicationError) throw new Error(communicationError.message);
-    if (!communication?.external_id) throw new Error('EMAIL_INTROUVABLE');
+    if (!communication) throw new Error('EMAIL_INTROUVABLE');
 
     const attachments = Array.isArray(communication.email_attachments)
       ? communication.email_attachments as StoredAttachment[]
       : [];
     const storedAttachment = attachments.find((attachment) => attachment.id === attachmentId);
     if (!storedAttachment) throw new Error('PIECE_JOINTE_INTROUVABLE');
+
+    if (communication.provider === 'ionos-imap') {
+      const storagePath = texte(storedAttachment.storage_path, 1_000);
+      if (!storagePath) throw new Error('PIECE_JOINTE_INTROUVABLE');
+      const { data: file, error: storageError } = await admin.storage
+        .from('email-attachments')
+        .download(storagePath);
+      if (storageError || !file) {
+        throw new Error(`STOCKAGE_PIECE_JOINTE: ${storageError?.message ?? 'fichier absent'}`);
+      }
+
+      const filename = nomFichier(storedAttachment.filename);
+      const asciiFilename = filename.replace(/[^a-zA-Z0-9._ -]/g, '_').replace(/"/g, '');
+      const contentType = typeContenu(storedAttachment.content_type)
+        || typeContenu(file.type)
+        || 'application/octet-stream';
+      return new Response(file.stream(), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': contentType,
+          'Content-Length': String(file.size),
+          'Content-Disposition': `inline; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
+
+    if (communication.provider !== 'resend-ionos' || !communication.external_id) {
+      throw new Error('PIECE_JOINTE_INTROUVABLE');
+    }
 
     const apiKey = Deno.env.get('RESEND_API_KEY');
     if (!apiKey) throw new Error('RESEND_API_KEY_ABSENT');
@@ -143,7 +175,7 @@ Deno.serve(async (req) => {
         ? 403
         : message.endsWith('INTROUVABLE')
           ? 404
-          : message.startsWith('RESEND_')
+          : message.startsWith('RESEND_') || message.startsWith('STOCKAGE_')
             ? 502
             : 400;
     return json({ error: message }, status);

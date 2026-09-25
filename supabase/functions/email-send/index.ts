@@ -1,4 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import nodemailer from 'npm:nodemailer@10.0.10';
+import { Buffer } from 'node:buffer';
+import {
+  IONOS_SMTP_HOST,
+  IONOS_SMTP_PORT,
+  readIonosPassword,
+} from '../_shared/ionos-email.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -197,7 +204,8 @@ Deno.serve(async (req) => {
     const settings = (connection?.settings ?? {}) as Record<string, unknown>;
     const senderEmail = texte(settings.email_address, 254).toLowerCase();
     const senderName = texte(settings.sender_name, 100).replace(/[\r\n]/g, '') || 'Relais Pare-Brise';
-    const configured = Boolean(connection && emailValide(senderEmail));
+    const password = connection ? await readIonosPassword(admin, workspaceId) : null;
+    const configured = Boolean(connection && emailValide(senderEmail) && password);
 
     if (body.action === 'status') {
       return json({
@@ -208,8 +216,7 @@ Deno.serve(async (req) => {
     }
 
     if (!connection || !emailValide(senderEmail)) throw new Error('BOITE_IONOS_NON_CONFIGUREE');
-    const apiKey = Deno.env.get('RESEND_API_KEY');
-    if (!apiKey) throw new Error('RESEND_API_KEY_ABSENT');
+    if (!password) throw new Error('MOT_DE_PASSE_IONOS_ABSENT');
 
     const subject = texte(body.subject, 200);
     const content = texte(body.content, 20_000);
@@ -222,34 +229,48 @@ Deno.serve(async (req) => {
       ? texte(body.request_id, 36)
       : crypto.randomUUID();
     const inReplyTo = texte(body.in_reply_to, 500) || null;
+    const messageId = `<crm.${workspaceId}.${requestId}@relaisparebrise.fr>`;
+    const transporter = nodemailer.createTransport({
+      host: IONOS_SMTP_HOST,
+      port: IONOS_SMTP_PORT,
+      secure: true,
+      auth: { user: senderEmail, pass: password },
+      connectionTimeout: 15_000,
+      greetingTimeout: 15_000,
+      socketTimeout: 30_000,
+      tls: { minVersion: 'TLSv1.2', servername: IONOS_SMTP_HOST },
+    });
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Idempotency-Key': `crm-${workspaceId}-${requestId}`,
-      },
-      body: JSON.stringify({
-        from: `${senderName} <${senderEmail}>`,
-        to: [recipient.email],
-        reply_to: senderEmail,
+    let smtpMessageId = messageId;
+    try {
+      const result = await transporter.sendMail({
+        from: { name: senderName, address: senderEmail },
+        to: recipient.email,
+        replyTo: senderEmail,
         subject,
         text: content,
         html: `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`,
+        messageId,
+        ...(inReplyTo ? { inReplyTo, references: [inReplyTo] } : {}),
         ...(attachments.length ? {
           attachments: attachments.map((attachment) => ({
             filename: attachment.filename,
-            content: attachment.contentBase64,
-            content_type: attachment.contentType,
+            content: Buffer.from(attachment.contentBase64, 'base64'),
+            contentType: attachment.contentType,
           })),
         } : {}),
-        ...(inReplyTo ? { headers: { 'In-Reply-To': inReplyTo } } : {}),
-      }),
-    });
-    const resendPayload = await resendResponse.json().catch(() => ({})) as { id?: string; message?: string };
-    if (!resendResponse.ok || !resendPayload.id) {
-      throw new Error(`RESEND_HTTP_${resendResponse.status}: ${resendPayload.message ?? 'envoi refuse'}`);
+      });
+      if (Array.isArray(result.rejected) && result.rejected.length > 0) {
+        throw new Error(`IONOS_SMTP_REFUSE: ${result.rejected.join(', ')}`);
+      }
+      smtpMessageId = typeof result.messageId === 'string' && result.messageId
+        ? result.messageId
+        : messageId;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`IONOS_SMTP_ERROR: ${detail}`);
+    } finally {
+      transporter.close();
     }
 
     const { data: communication, error: communicationError } = await admin
@@ -264,13 +285,13 @@ Deno.serve(async (req) => {
         status: 'sent',
         subject,
         content,
-        provider: 'resend-ionos',
-        external_id: resendPayload.id,
+        provider: 'ionos-smtp',
+        external_id: smtpMessageId,
         sender_email: senderEmail,
         recipient_email: recipient.email,
         email_in_reply_to: inReplyTo,
         email_attachments: attachments.map((attachment, index) => ({
-          id: `outbound-${resendPayload.id}-${index + 1}`,
+          id: `outbound-${requestId}-${index + 1}`,
           filename: attachment.filename,
           content_type: attachment.contentType,
           size: attachment.size,
@@ -291,8 +312,8 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (connectionId) {
-      const integrationFailure = message.startsWith('RESEND_')
-        || message === 'RESEND_API_KEY_ABSENT'
+      const integrationFailure = message.startsWith('IONOS_')
+        || message === 'MOT_DE_PASSE_IONOS_ABSENT'
         || message === 'BOITE_IONOS_NON_CONFIGUREE';
       await admin.from('integration_connections').update({
         ...(integrationFailure ? { status: 'error' } : {}),

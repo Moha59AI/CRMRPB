@@ -5,7 +5,6 @@ import type { Communication, IntegrationConnection } from '@/types';
 export interface IonosEmailSettings {
   email_address: string;
   sender_name: string;
-  inbound_address: string;
   signature: string;
 }
 
@@ -13,6 +12,18 @@ export interface IonosMailboxStatus {
   configured: boolean;
   email_address: string | null;
   connection_status: IntegrationConnection['status'];
+}
+
+export interface IonosCredentialStatus {
+  configured: boolean;
+  email_address: string | null;
+}
+
+export interface IonosSyncResult {
+  imported: number;
+  duplicates: number;
+  skipped: number;
+  remaining_history: boolean;
 }
 
 export interface SendIonosEmailInput {
@@ -188,7 +199,6 @@ export function parseIonosSettings(connection: IntegrationConnection | null): Io
   return {
     email_address: emailAddress,
     sender_name: senderName,
-    inbound_address: typeof settings.inbound_address === 'string' ? settings.inbound_address : '',
     signature: typeof settings.signature === 'string'
       ? settings.signature
       : buildDefaultEmailSignature(senderName, emailAddress),
@@ -199,22 +209,23 @@ export async function saveIonosSettings(settings: IonosEmailSettings): Promise<I
   const workspaceId = await getWorkspaceId();
   const current = await getIonosConnection();
   const previous = parseIonosSettings(current);
+  const normalizedEmail = settings.email_address.trim().toLowerCase();
+  const preservedSettings = current && previous.email_address === normalizedEmail
+    ? ((current.settings ?? {}) as Record<string, unknown>)
+    : {};
   const normalized = {
-    email_address: settings.email_address.trim().toLowerCase(),
+    ...preservedSettings,
+    email_address: normalizedEmail,
     sender_name: settings.sender_name.trim(),
-    inbound_address: settings.inbound_address.trim().toLowerCase(),
     signature: settings.signature.trim().slice(0, 2_000),
   };
-  const unchanged = current
-    && previous.email_address === normalized.email_address
-    && previous.sender_name === normalized.sender_name
-    && previous.inbound_address === normalized.inbound_address
-    && previous.signature === normalized.signature;
   const payload = {
     workspace_id: workspaceId,
     provider: 'ionos' as const,
     name: 'Boîte mail IONOS',
-    status: unchanged ? current.status : 'not_configured',
+    status: current && previous.email_address === normalizedEmail
+      ? current.status
+      : 'not_configured',
     settings: normalized,
     last_error: null,
   };
@@ -225,6 +236,44 @@ export async function saveIonosSettings(settings: IonosEmailSettings): Promise<I
   const { data, error } = await query.select('*').single();
   if (error) throw new Error(error.message);
   return data as IntegrationConnection;
+}
+
+async function appelerFonctionIonos<T>(
+  functionName: string,
+  options: { method?: 'GET' | 'POST'; body?: Record<string, unknown> } = {},
+): Promise<T> {
+  const accessToken = await jetonSession();
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: options.method ?? 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+  });
+  const result = await response.json().catch(() => ({})) as T & { success?: boolean; error?: string };
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || `Boîte IONOS : HTTP ${response.status}`);
+  }
+  return result;
+}
+
+export async function getIonosCredentialStatus(): Promise<IonosCredentialStatus> {
+  return appelerFonctionIonos<IonosCredentialStatus>('ionos-email-secret', { method: 'GET' });
+}
+
+export async function saveIonosPassword(password: string): Promise<void> {
+  await appelerFonctionIonos('ionos-email-secret', { body: { password } });
+}
+
+export async function syncIonosMailbox(): Promise<IonosSyncResult> {
+  const response = await appelerFonctionIonos<{
+    results?: Array<IonosSyncResult & { success: boolean; error?: string }>;
+  }>('ionos-mail-sync');
+  const result = response.results?.[0];
+  if (!result) throw new Error('Aucun compte IONOS à synchroniser');
+  if (!result.success) throw new Error(result.error || 'Synchronisation IONOS impossible');
+  return result;
 }
 
 export async function getIonosMailboxStatus(): Promise<IonosMailboxStatus> {

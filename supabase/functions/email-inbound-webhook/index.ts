@@ -214,6 +214,10 @@ async function traiterEmailRecu(event: Record<string, unknown>): Promise<void> {
 
   const workspaceId = connection.workspace_id as string;
   const settings = (connection.settings ?? {}) as Record<string, unknown>;
+  if (settings.transport === 'ionos-imap-smtp') {
+    console.info('Email Resend ignore : la boite utilise desormais la synchronisation IMAP directe');
+    return;
+  }
   const sender = extraireAdresse(email.from ?? data.from);
   if (!sender) {
     console.warn('Email Resend ignore : expéditeur absent', emailId);

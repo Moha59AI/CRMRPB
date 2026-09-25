@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertCircle, CheckCircle2, Copy, Loader2, Mail, RefreshCw, Send,
-  Server, ShieldCheck,
+  AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Mail, RefreshCw,
+  Send, Server, ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
@@ -14,21 +14,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { supabaseUrl } from '@/lib/supabase';
 import {
   buildDefaultEmailSignature, buildSignedEmailContent,
-  getIonosConnection, getIonosMailboxStatus, parseIonosSettings,
-  saveIonosSettings, sendIonosEmail, type IonosEmailSettings,
+  getIonosConnection, getIonosCredentialStatus, getIonosMailboxStatus,
+  parseIonosSettings, saveIonosPassword, saveIonosSettings, sendIonosEmail,
+  syncIonosMailbox, type IonosEmailSettings,
 } from './email-service';
 
-const webhookUrl = `${supabaseUrl}/functions/v1/email-inbound-webhook`;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function erreurLisible(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const known: Record<string, string> = {
     BOITE_IONOS_NON_CONFIGUREE: "Enregistrez d'abord l'adresse de votre boîte IONOS.",
-    RESEND_API_KEY_ABSENT: "La clé Resend n'est pas encore installée dans Supabase.",
+    MOT_DE_PASSE_IONOS_ABSENT: "Enregistrez le mot de passe de la boîte IONOS dans le coffre-fort.",
+    MOT_DE_PASSE_IONOS_INVALIDE: 'Le mot de passe IONOS est invalide.',
     EMAIL_DESTINATAIRE_INVALIDE: "L'adresse email de test est invalide.",
   };
   return known[message] ?? message;
@@ -36,10 +36,11 @@ function erreurLisible(error: unknown): string {
 
 export function EmailSettingsPage() {
   const queryClient = useQueryClient();
+  const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [form, setForm] = useState<IonosEmailSettings>({
     email_address: '',
     sender_name: 'Relais Pare-Brise',
-    inbound_address: '',
     signature: buildDefaultEmailSignature('Relais Pare-Brise', ''),
   });
 
@@ -50,6 +51,12 @@ export function EmailSettingsPage() {
   const statusQuery = useQuery({
     queryKey: ['ionos-email-status'],
     queryFn: getIonosMailboxStatus,
+    retry: false,
+  });
+  const credentialQuery = useQuery({
+    queryKey: ['ionos-email-credential'],
+    queryFn: getIonosCredentialStatus,
+    enabled: Boolean(connectionQuery.data),
     retry: false,
   });
 
@@ -65,6 +72,40 @@ export function EmailSettingsPage() {
         queryClient.invalidateQueries({ queryKey: ['ionos-email-status'] }),
       ]);
       toast.success('Réglages de la boîte mail enregistrés');
+    },
+    onError: (error) => toast.error(erreurLisible(error)),
+  });
+
+  const credentialMutation = useMutation({
+    mutationFn: async () => {
+      await saveIonosSettings(form);
+      await saveIonosPassword(password);
+      return syncIonosMailbox();
+    },
+    onSuccess: async (result) => {
+      setPassword('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-connection'] }),
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-credential'] }),
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] }),
+      ]);
+      toast.success(`${result.imported} nouvel email importé${result.imported > 1 ? 's' : ''}`);
+    },
+    onError: (error) => toast.error(erreurLisible(error)),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: syncIonosMailbox,
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-connection'] }),
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] }),
+      ]);
+      toast.success(result.imported > 0
+        ? `${result.imported} nouvel email importé${result.imported > 1 ? 's' : ''}`
+        : 'Boîte IONOS à jour');
     },
     onError: (error) => toast.error(erreurLisible(error)),
   });
@@ -101,18 +142,25 @@ export function EmailSettingsPage() {
       toast.error("Le nom d'expéditeur est requis");
       return false;
     }
-    if (form.inbound_address.trim() && !emailPattern.test(form.inbound_address.trim())) {
-      toast.error("L'adresse de transfert Resend est invalide");
-      return false;
-    }
     return true;
   };
 
   const save = () => validate() && saveMutation.mutate();
   const test = () => validate() && testMutation.mutate();
+  const connect = () => {
+    if (!validate()) return;
+    if (password.length < 8) {
+      toast.error('Saisissez le mot de passe de la boîte IONOS');
+      return;
+    }
+    credentialMutation.mutate();
+  };
   const connected = statusQuery.data?.configured && statusQuery.data.connection_status === 'connected';
-  const receptionReady = Boolean(form.inbound_address.trim());
-  const busy = saveMutation.isPending || testMutation.isPending;
+  const credentialConfigured = credentialQuery.data?.configured === true;
+  const busy = saveMutation.isPending
+    || testMutation.isPending
+    || credentialMutation.isPending
+    || syncMutation.isPending;
 
   return (
     <>
@@ -125,7 +173,7 @@ export function EmailSettingsPage() {
             : 'rounded-full border-due/25 bg-due-soft text-due'}
           >
             {connected ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <AlertCircle className="mr-1 h-3.5 w-3.5" />}
-            {connected ? 'Envoi connecté' : 'À configurer'}
+            {connected ? 'IMAP + SMTP connectés' : 'À configurer'}
           </Badge>
         }
       />
@@ -133,19 +181,19 @@ export function EmailSettingsPage() {
       <div className="mx-auto w-full max-w-4xl space-y-5 p-4 sm:p-6">
         <Alert>
           <ShieldCheck className="h-4 w-4" />
-          <AlertTitle>Votre mot de passe IONOS reste privé</AlertTitle>
+          <AlertTitle>Connexion directe à IONOS, sans Resend</AlertTitle>
           <AlertDescription>
-            Le CRM ne demande ni ne conserve le mot de passe de votre boîte. IONOS reste votre messagerie principale ;
-            le CRM envoie via votre domaine Resend et reçoit seulement une copie des nouveaux messages transférés.
+            Le mot de passe est chiffré dans le coffre-fort Supabase, jamais enregistré dans le navigateur ni dans les
+            réglages visibles. Les messages partent par SMTP IONOS et sont lus dans INBOX par IMAP IONOS.
           </AlertDescription>
         </Alert>
 
-        {(connectionQuery.isError || statusQuery.isError) && (
+        {(connectionQuery.isError || statusQuery.isError || credentialQuery.isError) && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Connexion indisponible</AlertTitle>
             <AlertDescription>
-              {erreurLisible(connectionQuery.error ?? statusQuery.error)}
+              {erreurLisible(connectionQuery.error ?? statusQuery.error ?? credentialQuery.error)}
             </AlertDescription>
           </Alert>
         )}
@@ -214,26 +262,17 @@ export function EmailSettingsPage() {
 
           <Separator className="my-5" />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="ionos-inbound">Adresse de transfert Resend</Label>
-            <Input
-              id="ionos-inbound"
-              type="email"
-              placeholder="crm@reception.relaisparebrise.fr"
-              value={form.inbound_address}
-              onChange={(event) => setForm((value) => ({ ...value, inbound_address: event.target.value }))}
-            />
-            <p className="text-xs text-muted-foreground">
-              IONOS doit transférer une copie des nouveaux messages vers cette adresse. Sans elle, l'envoi fonctionne mais la réception ne remonte pas dans le CRM.
-            </p>
-          </div>
-
           <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
             <Button className="w-full rounded-full sm:w-auto" disabled={busy || connectionQuery.isLoading} onClick={save}>
               {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Server className="mr-2 h-4 w-4" />}
               Enregistrer
             </Button>
-            <Button variant="outline" className="w-full rounded-full sm:w-auto" disabled={busy || connectionQuery.isLoading} onClick={test}>
+            <Button
+              variant="outline"
+              className="w-full rounded-full sm:w-auto"
+              disabled={busy || connectionQuery.isLoading || !credentialConfigured}
+              onClick={test}
+            >
               {testMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Envoyer un test
             </Button>
@@ -250,49 +289,83 @@ export function EmailSettingsPage() {
         </Card>
 
         <Card className="rounded-xl p-5">
-          <h2 className="text-sm font-semibold">Activer la réception dans le CRM</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Ces réglages conservent votre boîte IONOS actuelle et ne modifient pas les enregistrements MX de votre domaine.
-          </p>
-          <ol className="mt-4 space-y-4 text-sm">
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">1</span>
-              <span>Dans Resend, créez une adresse de réception sur un sous-domaine puis saisissez-la ci-dessus.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">2</span>
-              <span>Dans IONOS, créez une règle qui transfère une copie des messages reçus vers cette adresse.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">3</span>
-              <div className="min-w-0 flex-1">
-                <p>Dans Resend, ajoutez ce webhook pour les événements de réception et de suivi :</p>
-                <div className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-2">
-                  <code className="min-w-0 flex-1 truncate text-xs">{webhookUrl}</code>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    aria-label="Copier l'adresse du webhook"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(webhookUrl);
-                      toast.success('Adresse du webhook copiée');
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold">Accès sécurisé IONOS</h2>
+                <Badge variant="outline" className={credentialConfigured
+                  ? 'rounded-full border-done/25 bg-done-soft text-done'
+                  : 'rounded-full border-due/25 bg-due-soft text-due'}
+                >
+                  {credentialConfigured ? 'Mot de passe stocké' : 'Mot de passe requis'}
+                </Badge>
               </div>
-            </li>
-          </ol>
-          <div className={`mt-4 rounded-lg border p-3 text-xs ${receptionReady
+              <p className="mt-1 text-xs text-muted-foreground">
+                Utilisé côté serveur uniquement pour IMAP sécurisé (993) et SMTP sécurisé (465).
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-1.5">
+            <Label htmlFor="ionos-password">
+              {credentialConfigured ? 'Remplacer le mot de passe IONOS' : 'Mot de passe de la boîte IONOS'}
+            </Label>
+            <div className="relative">
+              <Input
+                id="ionos-password"
+                type={passwordVisible ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={credentialConfigured ? 'Laissez vide pour conserver le mot de passe actuel' : 'Mot de passe IONOS'}
+                className="pr-11"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                aria-label={passwordVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+              >
+                {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cette valeur est envoyée une seule fois au coffre-fort et n’est jamais relue par l’interface.
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
+            <Button className="w-full rounded-full sm:w-auto" disabled={busy || password.length < 8} onClick={connect}>
+              {credentialMutation.isPending
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <ShieldCheck className="mr-2 h-4 w-4" />}
+              Enregistrer et vérifier
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full rounded-full sm:w-auto"
+              disabled={busy || !credentialConfigured}
+              onClick={() => syncMutation.mutate()}
+            >
+              {syncMutation.isPending
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <RefreshCw className="mr-2 h-4 w-4" />}
+              Synchroniser maintenant
+            </Button>
+          </div>
+
+          <div className={`mt-4 rounded-lg border p-3 text-xs ${connected
             ? 'border-done/25 bg-done-soft text-done'
             : 'border-due/25 bg-due-soft text-due'}`}
           >
-            {receptionReady
-              ? 'Adresse de transfert renseignée. La réception sera active après la règle IONOS et le webhook Resend.'
-              : "L'adresse de transfert manque encore : les emails reçus ne peuvent pas être rattachés aux clients."}
+            {connected
+              ? 'Connexion directe opérationnelle. Les nouveaux emails seront relevés automatiquement toutes les 5 minutes.'
+              : 'Enregistrez les réglages et le mot de passe, puis lancez la vérification avant de supprimer votre ancien transfert Resend.'}
           </div>
         </Card>
       </div>
