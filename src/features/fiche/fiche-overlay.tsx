@@ -152,7 +152,12 @@ export function FicheOverlay<T extends string>({
   if (pleinePage) return surface;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center animate-fade-in">
+    <div className="fixed inset-0 z-[45] flex items-center justify-center animate-fade-in">
+      {/*
+        La fiche doit rester au-dessus du copilote (z-40), mais sous les
+        dialogues, listes et confirmations Radix (z-50). La placer a z-60
+        rendait les dialogues bien ouverts mais invisibles derriere la fiche.
+      */}
       {/* Le fond assombri ferme au clic, comme toute surface superposee. */}
       <button
         type="button" onClick={fermer} aria-label="Fermer la fiche"

@@ -24,3 +24,13 @@ test('la fiche lead attend la fermeture du dialogue avant de naviguer', async ()
   assert.match(overlay, /dialogueImbrique/);
   assert.match(overlay, /\[data-state="open"\]\[role="alertdialog"\]/);
 });
+
+test('les dialogues ouverts depuis une fiche restent au-dessus de la fiche', async () => {
+  const overlay = await read('src/features/fiche/fiche-overlay.tsx');
+  const dialogue = await read('src/components/ui/dialog.tsx');
+
+  assert.match(overlay, /fixed inset-0 z-\[45\]/);
+  assert.doesNotMatch(overlay, /fixed inset-0 z-\[60\]/);
+  assert.match(dialogue, /fixed inset-0 z-50/);
+  assert.match(dialogue, /fixed z-50 grid/);
+});
