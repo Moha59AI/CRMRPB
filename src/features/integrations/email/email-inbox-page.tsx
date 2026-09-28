@@ -5,6 +5,7 @@ import {
   ArrowDownLeft,
   ArrowLeft,
   ArrowUpRight,
+  CheckCircle2,
   Download,
   ExternalLink,
   FileText,
@@ -35,6 +36,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchContacts } from '@/services/contacts-service';
@@ -50,9 +59,12 @@ import {
   fetchEmailAttachment,
   fetchMailboxEmails,
   getIonosConnection,
+  getIonosMailboxStatus,
   parseIonosSettings,
   prepareEmailAttachments,
   sendIonosEmail,
+  syncIonosMailbox,
+  type IonosMailboxStatus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 
@@ -112,6 +124,39 @@ function formatFullDate(iso: string): string {
 
 function personName(person: Pick<Contact | Lead, 'first_name' | 'last_name' | 'email'>): string | null {
   return [person.first_name, person.last_name].filter(Boolean).join(' ') || person.email || null;
+}
+
+type EmailRecipientOption = {
+  id: string;
+  label: string;
+  email: string;
+};
+
+function buildEmailRecipientOptions(leads: Lead[], contacts: Contact[]): EmailRecipientOption[] {
+  const options: EmailRecipientOption[] = [];
+  contacts.forEach((contact) => {
+    if (!contact.email) return;
+    options.push({
+      id: `contact:${contact.id}`,
+      label: personName(contact) ?? contact.email,
+      email: contact.email,
+    });
+  });
+  leads.forEach((lead) => {
+    if (!lead.email) return;
+    options.push({
+      id: `lead:${lead.id}`,
+      label: personName(lead) ?? lead.email,
+      email: lead.email,
+    });
+  });
+  return options.sort((left, right) => left.label.localeCompare(right.label, 'fr'));
+}
+
+function parseEmailRecipient(value: string): { kind: 'contact' | 'lead'; id: string } | null {
+  const [kind, id] = value.split(':');
+  if (!id || (kind !== 'contact' && kind !== 'lead')) return null;
+  return { kind, id };
 }
 
 function resolvePerson(
@@ -182,10 +227,12 @@ function statusClass(email: Communication): string {
 }
 
 export function EmailInboxPage() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<MailboxView>('inbound');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const emailsQuery = useQuery({
     queryKey: ['mailbox-emails'],
@@ -194,6 +241,11 @@ export function EmailInboxPage() {
   const ionosConnectionQuery = useQuery({
     queryKey: ['ionos-email-connection'],
     queryFn: getIonosConnection,
+  });
+  const mailboxStatusQuery = useQuery({
+    queryKey: ['ionos-email-status'],
+    queryFn: getIonosMailboxStatus,
+    retry: false,
   });
   const contactsQuery = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const leadsQuery = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
@@ -278,33 +330,81 @@ export function EmailInboxPage() {
     setMobileDetailOpen(true);
   };
 
+  const syncMutation = useMutation({
+    mutationFn: syncIonosMailbox,
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] }),
+        queryClient.invalidateQueries({ queryKey: ['ionos-email-connection'] }),
+      ]);
+      const importedLabel = result.imported > 1 ? 'emails importés' : 'email importé';
+      const historyLabel = result.remaining_history ? ' La suite de l’historique sera récupérée à la prochaine synchronisation.' : '';
+      toast.success(`${result.imported} ${importedLabel}.${historyLabel}`);
+    },
+    onError: (error) => toast.error((error as Error)?.message || 'Synchronisation IONOS impossible'),
+  });
+
+  const mailboxStatus = mailboxStatusQuery.data;
+  const lastSyncAt = ionosConnectionQuery.data?.last_success_at ?? null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className={mobileDetailOpen ? 'hidden lg:block' : undefined}>
         <PageHeader
           title="Boîte mail"
-          description="Tous les emails reçus et envoyés depuis le CRM"
+          description="Réception, envoi, réponses et pièces jointes depuis votre boîte IONOS"
           action={
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full justify-center rounded-full sm:w-auto"
-                onClick={() => emailsQuery.refetch()}
-                disabled={emailsQuery.isFetching}
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
               >
-                <RefreshCw className={`mr-2 h-4 w-4 ${emailsQuery.isFetching ? 'animate-spin' : ''}`} />
-                Actualiser
+                <RefreshCw className={`mr-2 h-4 w-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                Synchroniser
               </Button>
-              <Button asChild size="sm" className="w-full justify-center rounded-full sm:w-auto">
-                <Link to="/communications">
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Écrire
-                </Link>
+              <Button
+                size="sm"
+                className="w-full justify-center rounded-full sm:w-auto"
+                onClick={() => setComposeOpen(true)}
+              >
+                <PenLine className="mr-2 h-4 w-4" />
+                Nouveau message
               </Button>
             </div>
           }
         />
+      </div>
+
+      <div className={`${mobileDetailOpen ? 'hidden lg:block' : ''} border-b border-border bg-muted/20 gutter-x py-2.5`}>
+        {mailboxStatusQuery.isLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Vérification de la connexion IONOS…
+          </div>
+        ) : mailboxStatusQuery.isError ? (
+          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <span className="inline-flex items-center gap-2 text-due">
+              <AlertCircle className="h-4 w-4" />
+              La connexion IONOS doit être vérifiée par un administrateur.
+            </span>
+            <Button asChild variant="outline" size="sm" className="w-full rounded-full sm:w-auto">
+              <Link to="/settings/integrations/email">Ouvrir les réglages</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+              <CheckCircle2 className={`h-4 w-4 ${mailboxStatus?.configured ? 'text-done' : 'text-due'}`} />
+              {mailboxStatus?.configured ? mailboxStatus.email_address ?? 'Boîte IONOS connectée' : 'Configuration IONOS incomplète'}
+            </span>
+            <span>
+              Dernière synchronisation : {lastSyncAt ? formatFullDate(lastSyncAt) : 'jamais'}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className={`${mobileDetailOpen ? 'hidden lg:block' : ''} border-b border-border bg-background gutter-x py-3`}>
@@ -380,6 +480,12 @@ export function EmailInboxPage() {
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
                 {search ? 'Essayez une autre recherche.' : 'Les nouveaux messages apparaîtront automatiquement ici.'}
               </p>
+              {!search && (
+                <Button size="sm" className="mt-4 rounded-full" onClick={() => setComposeOpen(true)}>
+                  <PenLine className="mr-2 h-4 w-4" />
+                  Écrire un email
+                </Button>
+              )}
             </div>
           )}
 
@@ -465,7 +571,221 @@ export function EmailInboxPage() {
           )}
         </section>
       </div>
+
+      <NewEmailDialog
+        open={composeOpen}
+        onOpenChange={setComposeOpen}
+        leads={leadsQuery.data ?? []}
+        contacts={contactsQuery.data ?? []}
+        mailboxStatus={mailboxStatus}
+        signature={emailSignature}
+        onSent={(email) => {
+          setView('outbound');
+          setSelectedId(email.id);
+          setMobileDetailOpen(true);
+        }}
+      />
     </div>
+  );
+}
+
+function NewEmailDialog({
+  open,
+  onOpenChange,
+  leads,
+  contacts,
+  mailboxStatus,
+  signature,
+  onSent,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  leads: Lead[];
+  contacts: Contact[];
+  mailboxStatus?: IonosMailboxStatus;
+  signature: string;
+  onSent: (email: Communication) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [target, setTarget] = useState('');
+  const [directEmail, setDirectEmail] = useState('');
+  const [subject, setSubject] = useState('');
+  const [content, setContent] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const options = useMemo(() => buildEmailRecipientOptions(leads, contacts), [leads, contacts]);
+
+  const reset = () => {
+    setTarget('');
+    setDirectEmail('');
+    setSubject('');
+    setContent('');
+    setAttachments([]);
+  };
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const parsed = parseEmailRecipient(target);
+      const preparedAttachments = await prepareEmailAttachments(attachments);
+      return sendIonosEmail({
+        to: directEmail.trim() || undefined,
+        contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
+        lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
+        subject: subject.trim(),
+        content: buildSignedEmailContent(content, signature),
+        attachments: preparedAttachments,
+      });
+    },
+    onSuccess: async (email) => {
+      await queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
+      toast.success('Email envoyé depuis votre boîte IONOS');
+      onSent(email);
+      reset();
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer l'email"),
+  });
+
+  const submit = () => {
+    if (!target && !directEmail.trim()) {
+      toast.error('Sélectionnez un client ou saisissez une adresse email');
+      return;
+    }
+    if (!subject.trim()) {
+      toast.error("L'objet est requis");
+      return;
+    }
+    if (!content.trim()) {
+      toast.error('Écrivez votre message avant de l’envoyer');
+      return;
+    }
+    sendMutation.mutate();
+  };
+
+  const close = () => {
+    if (sendMutation.isPending) return;
+    reset();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        onOpenChange(nextOpen);
+        if (!nextOpen && !sendMutation.isPending) reset();
+      }}
+    >
+      <DialogContent className="h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-2xl">
+        <DialogHeader className="border-b border-border px-4 py-4 sm:px-6">
+          <DialogTitle>Nouveau message</DialogTitle>
+          <DialogDescription>
+            {mailboxStatus?.configured
+              ? `Envoi réel depuis ${mailboxStatus.email_address ?? 'votre boîte IONOS'}.`
+              : 'La boîte IONOS doit être configurée par un administrateur avant le premier envoi.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 space-y-4 overflow-y-auto px-4 py-4 scrollbar-thin sm:px-6">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Client ou lead</Label>
+            <Select value={target} onValueChange={setTarget}>
+              <SelectTrigger className="rounded-lg">
+                <SelectValue placeholder="Rechercher un destinataire connu" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.length === 0 && (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Aucun contact avec une adresse email
+                  </div>
+                )}
+                {options.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label} · {option.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mail-direct-recipient" className="text-sm">
+              Adresse directe <span className="font-normal text-muted-foreground">(si le client n’est pas dans la liste)</span>
+            </Label>
+            <Input
+              id="mail-direct-recipient"
+              type="email"
+              autoComplete="email"
+              placeholder="destinataire@exemple.fr"
+              value={directEmail}
+              onChange={(event) => setDirectEmail(event.target.value)}
+              className="rounded-lg"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mail-subject" className="text-sm">Objet</Label>
+            <Input
+              id="mail-subject"
+              placeholder="Objet de l’email"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              className="rounded-lg"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mail-content" className="text-sm">Message</Label>
+            <Textarea
+              id="mail-content"
+              placeholder="Écrivez votre message…"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              rows={8}
+              className="min-h-40 resize-y rounded-lg"
+            />
+            {signature.trim() && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Signature ajoutée à l’envoi
+                </p>
+                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                  {signature}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <EmailAttachmentPicker
+            files={attachments}
+            onChange={setAttachments}
+            disabled={sendMutation.isPending}
+          />
+        </div>
+
+        <DialogFooter className="border-t border-border bg-background px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pb-3 [&>button]:w-full sm:[&>button]:w-auto">
+          <Button
+            type="button"
+            variant="ghost"
+            className="rounded-full"
+            disabled={sendMutation.isPending}
+            onClick={close}
+          >
+            Annuler
+          </Button>
+          <Button
+            type="button"
+            className="rounded-full"
+            disabled={sendMutation.isPending || !mailboxStatus?.configured}
+            onClick={submit}
+          >
+            {sendMutation.isPending
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Send className="mr-2 h-4 w-4" />}
+            Envoyer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

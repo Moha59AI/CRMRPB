@@ -117,7 +117,7 @@ export function EmailSettingsPage() {
         to: form.email_address,
         subject: 'Test de connexion du CRM Relais Pare-Brise',
         content: buildSignedEmailContent(
-          'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis la page Communications.',
+          'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis le module Boîte mail.',
           form.signature,
         ),
       });
@@ -126,7 +126,7 @@ export function EmailSettingsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['ionos-email-connection'] }),
         queryClient.invalidateQueries({ queryKey: ['ionos-email-status'] }),
-        queryClient.invalidateQueries({ queryKey: ['communications'] }),
+        queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] }),
       ]);
       toast.success('Email de test envoyé dans votre boîte IONOS');
     },
@@ -364,8 +364,8 @@ export function EmailSettingsPage() {
             : 'border-due/25 bg-due-soft text-due'}`}
           >
             {connected
-              ? 'Connexion directe opérationnelle. Les nouveaux emails seront relevés automatiquement toutes les 5 minutes.'
-              : 'Enregistrez les réglages et le mot de passe, puis lancez la vérification avant de supprimer votre ancien transfert Resend.'}
+              ? 'Connexion directe opérationnelle. Réception IMAP et envoi SMTP IONOS uniquement ; Resend est désactivé pour la boîte mail.'
+              : 'Enregistrez les réglages et le mot de passe, puis lancez la vérification. Supprimez également tout ancien transfert vers Resend dans IONOS.'}
           </div>
         </Card>
       </div>

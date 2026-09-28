@@ -21,7 +21,7 @@ test('la connexion IONOS conserve le mot de passe uniquement dans Vault et reste
 
 test('les emails sortants passent par le serveur et sont journalises seulement apres succes', async () => {
   const edge = await read('supabase/functions/email-send/index.ts');
-  const page = await read('src/features/communications/communications-page.tsx');
+  const page = await read('src/features/integrations/email/email-inbox-page.tsx');
 
   assert.match(edge, /admin\.auth\.getUser\(token\)/);
   assert.match(edge, /\['admin', 'manager', 'advisor'\]/);
@@ -62,11 +62,12 @@ test('la synchronisation IMAP rattache les messages et notifie les utilisateurs'
   assert.match(config, /\[functions\.ionos-mail-sync\][\s\S]*verify_jwt = false/);
 });
 
-test('le webhook Resend est neutralise apres la premiere synchronisation IMAP reussie', async () => {
+test('le webhook Resend est définitivement neutralise pour la boite mail', async () => {
   const webhook = await read('supabase/functions/email-inbound-webhook/index.ts');
 
-  assert.match(webhook, /settings\.transport === 'ionos-imap-smtp'/);
-  assert.match(webhook, /Email Resend ignore : la boite utilise desormais la synchronisation IMAP directe/);
+  assert.match(webhook, /RESEND_RETIRED_IONOS_IMAP_ACTIVE/);
+  assert.match(webhook, /status: 200/);
+  assert.doesNotMatch(webhook, /RESEND_WEBHOOK_SECRET|RESEND_API_KEY|api\.resend\.com/);
 });
 
 test('les reglages IONOS sont accessibles aux administrateurs depuis les integrations', async () => {
@@ -113,6 +114,25 @@ test('la boite mail separe les recus des envoyes et detecte assureurs et experts
   assert.match(classification, /Détection probable à vérifier|probable/);
 });
 
+test('la boite mail est un module autonome et les communications excluent les emails', async () => {
+  const [inbox, communications, navigation, permissions] = await Promise.all([
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/communications/communications-page.tsx'),
+    read('src/config/navigation.ts'),
+    read('src/config/permissions.ts'),
+  ]);
+
+  assert.match(inbox, /Nouveau message/);
+  assert.match(inbox, /function NewEmailDialog/);
+  assert.match(inbox, /syncIonosMailbox/);
+  assert.match(inbox, /Dernière synchronisation/);
+  assert.match(inbox, /sendIonosEmail/);
+  assert.match(communications, /return !comm\.type\.startsWith\('email'\)/);
+  assert.doesNotMatch(communications, /EmailDialog|EmailAttachmentPicker|sendIonosEmail/);
+  assert.match(navigation, /description: 'SMS, appels et notes'/);
+  assert.match(permissions, /'\/emails': \['admin', 'manager', 'advisor'\]/);
+});
+
 test('les pieces jointes sont ouvertes via un relais authentifie et les reponses restent dans le fil', async () => {
   const [inbox, service, attachmentEdge, config] = await Promise.all([
     read('src/features/integrations/email/email-inbox-page.tsx'),
@@ -143,10 +163,9 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
 });
 
 test('la signature est personnalisable visible pendant la redaction et jointe aux emails', async () => {
-  const [service, settings, communications, inbox] = await Promise.all([
+  const [service, settings, inbox] = await Promise.all([
     read('src/features/integrations/email/email-service.ts'),
     read('src/features/integrations/email/email-settings-page.tsx'),
-    read('src/features/communications/communications-page.tsx'),
     read('src/features/integrations/email/email-inbox-page.tsx'),
   ]);
 
@@ -155,34 +174,26 @@ test('la signature est personnalisable visible pendant la redaction et jointe au
   assert.match(service, /buildSignedEmailContent/);
   assert.match(settings, /Signature automatique/);
   assert.match(settings, /Aperçu de la signature/);
-  assert.match(communications, /Signature ajoutée à l’envoi/);
-  assert.match(communications, /buildSignedEmailContent\(content, signature\)/);
   assert.match(inbox, /Signature ajoutée à l’envoi/);
   assert.match(inbox, /buildSignedEmailContent\(content, signature\)/);
 });
 
 test('la boite mail reste exploitable sur telephone sans comprimer la lecture ni la redaction', async () => {
-  const [inbox, communications, settings] = await Promise.all([
+  const [inbox, settings] = await Promise.all([
     read('src/features/integrations/email/email-inbox-page.tsx'),
-    read('src/features/communications/communications-page.tsx'),
     read('src/features/integrations/email/email-settings-page.tsx'),
   ]);
 
   assert.match(inbox, /mobileDetailOpen \? 'hidden lg:block'/);
   assert.match(inbox, /grid-cols-\[64px_minmax\(0,1fr\)\]/);
   assert.match(inbox, /h-\[100dvh\][^\n]*grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
-  assert.match(communications, /grid grid-cols-2 gap-2 gutter-x/);
-  assert.match(communications, /flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row/);
-  assert.match(communications, /sm:w-56 sm:border-b-0 sm:border-r/);
-  assert.match(communications, /h-\[100dvh\][^\n]*grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
   assert.match(settings, /mt-5 grid gap-2 sm:flex sm:flex-wrap/);
 });
 
 test('les nouveaux emails et les reponses acceptent des pieces jointes controlees cote client et serveur', async () => {
-  const [service, picker, communications, inbox, edge] = await Promise.all([
+  const [service, picker, inbox, edge] = await Promise.all([
     read('src/features/integrations/email/email-service.ts'),
     read('src/features/integrations/email/email-attachment-picker.tsx'),
-    read('src/features/communications/communications-page.tsx'),
     read('src/features/integrations/email/email-inbox-page.tsx'),
     read('supabase/functions/email-send/index.ts'),
   ]);
@@ -195,8 +206,8 @@ test('les nouveaux emails et les reponses acceptent des pieces jointes controlee
   assert.match(picker, /type="file"/);
   assert.match(picker, /multiple/);
   assert.match(picker, /Retirer \$\{file\.name\}/);
-  assert.match(communications, /prepareEmailAttachments\(attachments\)/);
-  assert.match(communications, /<EmailAttachmentPicker/);
+  assert.match(inbox, /prepareEmailAttachments\(attachments\)/);
+  assert.match(inbox, /files=\{attachments\}/);
   assert.match(inbox, /prepareEmailAttachments\(replyAttachments\)/);
   assert.match(inbox, /files=\{replyAttachments\}/);
 

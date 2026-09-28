@@ -120,7 +120,7 @@ export const navSections: NavSection[] = [
         label: 'Communications',
         path: '/communications',
         icon: MessagesSquare,
-        description: 'SMS, appels et emails',
+        description: 'SMS, appels et notes',
       },
       {
         label: 'Scénarios',
