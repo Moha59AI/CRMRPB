@@ -53,7 +53,7 @@ export function AiSettingsPage() {
             <ShieldCheck className="h-4 w-4" />
             <AlertTitle>Le copilote alerte, le conseiller décide</AlertTitle>
             <AlertDescription>
-              Le radar métier surveille les échéances sans coût OpenAI. L’IA lit le détail d’une fiche uniquement lorsque vous lancez son analyse, puis propose une action sans modifier le lead.
+              Le centre d’action classe les urgences, explique pourquoi elles remontent et vous permet de les traiter ou de les reporter. L’IA lit le détail d’une fiche uniquement lorsque vous lancez son analyse, puis propose une action sans modifier le lead.
             </AlertDescription>
           </Alert>
 
@@ -61,18 +61,18 @@ export function AiSettingsPage() {
             {[
               {
                 icon: Radar,
-                title: 'Visible partout',
-                description: 'Urgences commerciales, documents, agenda et finance dans un seul radar.',
+                title: 'Priorités classées',
+                description: 'Les trois actions au plus fort risque sont isolées du reste des alertes.',
               },
               {
                 icon: ListChecks,
                 title: 'Actions concrètes',
-                description: 'Objectif, canal, date, checklist et brouillon de message quand il est utile.',
+                description: 'Ouvrir, traiter, reporter ou masquer sans modifier le dossier métier.',
               },
               {
                 icon: BellRing,
-                title: 'Alertes prioritaires',
-                description: 'Une analyse urgente rejoint la cloche et les notifications déjà activées.',
+                title: 'Moins de bruit',
+                description: 'Chaque utilisateur range ses alertes, sur ordinateur comme sur téléphone.',
               },
             ].map(({ icon: Icon, title, description }) => (
               <Card key={title} className="rounded-xl p-4">

@@ -239,6 +239,26 @@ lancée qui révèle une priorité haute ou critique crée en revanche une
 notification générique, dédupliquée pendant six heures, afin d'utiliser la
 cloche et le Web Push sans exposer de donnée client sur l'écran verrouillé.
 
+### copilot_alert_states
+
+État personnel du centre d'action du copilote. Les alertes continuent d'être
+recalculées depuis les tables métier ; cette table retient uniquement qu'un
+utilisateur a traité, reporté ou masqué une recommandation. Elle ne modifie
+jamais le lead, le dossier, le rendez-vous ou la facture concernés.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | Cloisonnement de l'espace |
+| user_id | uuid → auth.users | Préférence propre à l'utilisateur |
+| alert_key | text | Identifiant stable de la règle et de l'objet concerné |
+| status | text | done, snoozed ou dismissed |
+| hidden_until | timestamptz | Réapparition automatique si la cause existe encore |
+| created_at, updated_at | timestamptz | Traçabilité |
+
+**Unique** : (workspace_id, user_id, alert_key). RLS active, quatre politiques ;
+chaque utilisateur ne voit et ne modifie que ses propres décisions.
+
 ### google_ads_daily_metrics
 Mesures Google Ads synchronisées toutes les 15 minutes, une ligne par campagne
 et par jour. Les résultats métier ne sont pas copiés ici : la page Marketing
