@@ -60,6 +60,7 @@ Prospects reçus depuis Meta et autres sources.
 | source | text | meta, webhook, manual, import |
 | status | text | new, to_call, calling, nrp, interested, documents_requested, documents_received, appointment_scheduled, lost, converted |
 | assigned_user_id | uuid → auth.users | |
+| campaign_name | text | Nom lisible de la campagne d'acquisition quand le fournisseur le transmet |
 | meta_lead_id | text (UNIQUE) | ID Meta lead (idempotence) |
 | meta_page_id | text | |
 | meta_form_id | text | |
@@ -80,7 +81,7 @@ Prospects reçus depuis Meta et autres sources.
 | utm_campaign | text | |
 | utm_content | text | |
 | utm_term | text | |
-| raw_payload | jsonb | Payload brut reçu |
+| raw_payload | jsonb | Payload brut reçu ; pour Meta, `meta_attribution` conserve les noms et ID de la campagne, de l'ensemble de publicités, de la publicité et du formulaire |
 | raw_payload.onify_lead_id | text | Identifiant Onify des imports historiques, dédoublonné par espace |
 | source | text | Origine principale : `meta`, `google_ads`, `webhook`, `manual` ou `import` |
 | received_at | timestamptz | |

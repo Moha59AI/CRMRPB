@@ -24,11 +24,62 @@ const safeLeadPushTitles = new Set([
   'Nouveau lead CRM',
 ]);
 
+type SafePushContent = { title: string; body: string };
+
+/**
+ * Textes autorises sur un ecran verrouille.
+ *
+ * Ils expliquent la nature de l'alerte sans reprendre le titre ou le corps
+ * stockes en base, qui peuvent contenir un nom, un telephone, un montant ou
+ * un objet d'email.
+ */
+const safePushByType: Record<string, SafePushContent> = {
+  documents_received: {
+    title: 'Documents client reçus',
+    body: 'Toutes les pièces obligatoires sont disponibles dans le CRM.',
+  },
+  email_received: {
+    title: 'Nouvel email reçu',
+    body: 'Un nouveau message est disponible dans la boîte mail du CRM.',
+  },
+  ai: {
+    title: 'Copilote : action prioritaire',
+    body: 'Une action importante doit être vérifiée dans le CRM.',
+  },
+};
+
+const safeWorkflowPushByKey: Record<string, SafePushContent> = {
+  lead_first_contact: {
+    title: 'Lead à rappeler',
+    body: 'Un lead attend toujours son premier contact.',
+  },
+  task_overdue: {
+    title: 'Relance en retard',
+    body: 'Une tâche a dépassé son échéance.',
+  },
+  documents_unopened: {
+    title: 'Documents à relancer',
+    body: 'Un lien de dépôt de documents n’a pas encore été consulté.',
+  },
+  appointment_confirmation: {
+    title: 'Rendez-vous à confirmer',
+    body: 'Un rendez-vous prévu dans moins de 24 h doit être confirmé.',
+  },
+  invoice_overdue: {
+    title: 'Facture en retard',
+    body: 'Un encaissement nécessite votre attention.',
+  },
+  gift_pending: {
+    title: 'Cadeau ou virement en attente',
+    body: 'Une remise client doit être finalisée.',
+  },
+};
+
 function safeLeadPushContent(notification: {
   type?: unknown;
   push_title?: unknown;
   push_body?: unknown;
-}): { title: string; body: string } | null {
+}): SafePushContent | null {
   if (notification.type !== 'lead') return null;
 
   const title = typeof notification.push_title === 'string'
@@ -41,6 +92,32 @@ function safeLeadPushContent(notification: {
   if (!safeLeadPushTitles.has(title)) return null;
   if (!/^Code postal (?:[0-9]{5}|non renseigné)$/u.test(body)) return null;
   return { title, body };
+}
+
+async function safePushContent(notification: {
+  type?: unknown;
+  workflow_id?: unknown;
+  push_title?: unknown;
+  push_body?: unknown;
+}): Promise<SafePushContent | null> {
+  const leadContent = safeLeadPushContent(notification);
+  if (leadContent) return leadContent;
+
+  const type = typeof notification.type === 'string' ? notification.type : '';
+  if (safePushByType[type]) return safePushByType[type];
+
+  if (type !== 'workflow' || typeof notification.workflow_id !== 'string') return null;
+  const { data: workflow, error } = await admin
+    .from('workflows')
+    .select('flow_data')
+    .eq('id', notification.workflow_id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const flowData = workflow?.flow_data;
+  if (!flowData || typeof flowData !== 'object' || Array.isArray(flowData)) return null;
+  const key = (flowData as Record<string, unknown>).system_key;
+  return typeof key === 'string' ? safeWorkflowPushByKey[key] ?? null : null;
 }
 
 function json(body: unknown, status = 200) {
@@ -224,13 +301,13 @@ async function dispatch(body: Record<string, unknown>) {
 
   const { data: notification, error: notificationError } = await admin
     .from('notifications')
-    .select('id, user_id, type, link, push_title, push_body')
+    .select('id, user_id, type, link, workflow_id, push_title, push_body')
     .eq('id', notificationId)
     .maybeSingle();
   if (notificationError) throw new Error(notificationError.message);
   if (!notification?.user_id) return json({ success: true, sent: 0 });
 
-  const safePush = safeLeadPushContent(notification);
+  const safePush = await safePushContent(notification);
 
   const { data: subscriptions, error: subscriptionsError } = await admin
     .from('push_subscriptions')
@@ -241,8 +318,8 @@ async function dispatch(body: Record<string, unknown>) {
   const results = await Promise.all((subscriptions ?? []).map((subscription) =>
     sendToSubscription(subscription, {
       // Le push traverse le service Apple/Google/Mozilla et peut apparaitre
-      // sur un ecran verrouille : seuls la source du lead et un code postal
-      // strictement valide sont autorises. Tout autre contenu reste generique.
+      // sur un ecran verrouille. Il nomme donc le type d'evenement sans
+      // reprendre les donnees detaillees de la notification interne.
       title: safePush?.title ?? 'Nouvelle notification CRM',
       body: safePush?.body ?? 'Ouvrez le CRM pour consulter la nouvelle information.',
       link: notification.link || '/today',

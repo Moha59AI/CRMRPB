@@ -42,12 +42,35 @@ test('le push nouveau lead autorise seulement la source et un code postal valide
   assert.match(migration, /if new\.source = 'manual' then/);
   assert.match(migration, /'\/interventions\/' \|\| new\.id/);
 
-  assert.match(edge, /\.select\('id, user_id, type, link, push_title, push_body'\)/);
+  assert.match(edge, /\.select\('id, user_id, type, link, workflow_id, push_title, push_body'\)/);
   assert.match(edge, /notification\.type !== 'lead'/);
   assert.match(edge, /safeLeadPushTitles\.has\(title\)/);
   assert.match(edge, /\^Code postal \(\?:\[0-9\]\{5\}\|non renseigné\)\$/);
   assert.match(edge, /title: safePush\?\.title \?\? 'Nouvelle notification CRM'/);
   assert.match(edge, /body: safePush\?\.body \?\? 'Ouvrez le CRM pour consulter la nouvelle information\.'/);
+});
+
+test('les notifications mobiles annoncent clairement leur nature sans exposer le dossier', async () => {
+  const edge = await read('supabase/functions/web-push/index.ts');
+
+  for (const label of [
+    'Documents client reçus',
+    'Nouvel email reçu',
+    'Copilote : action prioritaire',
+    'Lead à rappeler',
+    'Relance en retard',
+    'Documents à relancer',
+    'Rendez-vous à confirmer',
+    'Facture en retard',
+    'Cadeau ou virement en attente',
+  ]) {
+    assert.match(edge, new RegExp(label));
+  }
+
+  assert.match(edge, /safePushByType/);
+  assert.match(edge, /safeWorkflowPushByKey/);
+  assert.match(edge, /\.select\('flow_data'\)/);
+  assert.match(edge, /safePushContent\(notification\)/);
 });
 
 test('le push externe ne lit jamais le nom, le telephone ou le contenu detaille', async () => {

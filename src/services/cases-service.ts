@@ -31,6 +31,19 @@ export async function fetchCaseById(id: string): Promise<WindscreenCase | null> 
   return data as WindscreenCase | null;
 }
 
+/** Dossier vitrage le plus recent rattache a une intervention commerciale. */
+export async function fetchCaseByLeadId(leadId: string): Promise<WindscreenCase | null> {
+  const { data, error } = await supabase
+    .from('windscreen_cases')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as WindscreenCase | null;
+}
+
 export async function createCase(c: Partial<WindscreenCase>): Promise<{ error: string | null; caseData: WindscreenCase | null }> {
   const wsId = await getWorkspaceId();
   const { data, error } = await supabase

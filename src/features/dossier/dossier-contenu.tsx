@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Briefcase, UserCog, Send, History, Copy, Award,
+  User, Briefcase, UserCog, Send, History, Copy, Award, Gift, Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
 import { DocumentsClientPanel } from './documents-client-panel';
 import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
+import { lireAttributionMeta } from '@/features/leads/meta-attribution';
+import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
 
 interface EvenementTimeline {
   cle: string;
@@ -59,6 +61,7 @@ export function DossierContenu({
 }: DossierContenuProps) {
   const queryClient = useQueryClient();
   const [nouvelleNote, setNouvelleNote] = useState('');
+  const [bonCadeauOuvert, setBonCadeauOuvert] = useState(false);
 
   const { data: communications, isLoading: chargeComms } = useQuery({
     queryKey: ['lead-communications', lead.id],
@@ -148,9 +151,28 @@ export function DossierContenu({
   }
 
   const conseiller = profiles.find((p) => p.id === lead.assigned_user_id) ?? null;
+  const attributionMeta = lead.source === 'meta' ? lireAttributionMeta(lead) : null;
+  const lignesDossier: [string, string | null][] = attributionMeta
+    ? [
+        ['Source', 'Meta Lead Ads'],
+        ['Campagne Meta', attributionMeta.campagne],
+        ['Ensemble de publicités', attributionMeta.ensemble],
+        ['Publicité', attributionMeta.publicite],
+        ['Formulaire', attributionMeta.formulaire],
+        ['Lead Meta', attributionMeta.lead],
+        ['Reçu le', formatDateTime(lead.received_at || lead.created_at)],
+        ['Score', String(lead.score)],
+      ]
+    : [
+        ['Source', sourceLabels[lead.source] ?? lead.source],
+        ['Campagne', lead.campaign_name],
+        ['Reçu le', formatDateTime(lead.received_at || lead.created_at)],
+        ['Score', String(lead.score)],
+      ];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
+    <>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
       {/* Colonne principale */}
       <div className="min-w-0 space-y-6">
         {doublon && doublon.type !== 'aucun' && <BandeauDoublon analyse={doublon} />}
@@ -230,18 +252,38 @@ export function DossierContenu({
           </section>
         )}
 
-        <FicheInfo icone={Briefcase} titre="Dossier" lignes={[
-          ['Source', sourceLabels[lead.source] ?? lead.source],
-          ['Campagne', lead.campaign_name],
-          ['Reçu le', formatDateTime(lead.received_at || lead.created_at)],
-          ['Score', String(lead.score)],
-        ]} />
+        <FicheInfo icone={Briefcase} titre="Dossier" lignes={lignesDossier} />
+
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Gift className="h-3.5 w-3.5" />
+            Bon de remise de cadeau
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Cadeau sélectionné : <span className="font-medium text-foreground">{lead.offer || 'à renseigner'}</span>. Le bon reste entièrement vérifiable avant impression.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-3 w-full rounded-full"
+            onClick={() => setBonCadeauOuvert(true)}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Préparer et imprimer
+          </Button>
+        </section>
 
         <FicheInfo icone={UserCog} titre="Conseiller" lignes={[
           ['Assigné à', conseiller ? profileName(conseiller) : null],
         ]} />
       </div>
-    </div>
+      </div>
+
+      <BonRemiseCadeauDialog
+        lead={lead}
+        open={bonCadeauOuvert}
+        onOpenChange={setBonCadeauOuvert}
+      />
+    </>
   );
 }
 
@@ -318,10 +360,13 @@ function FicheInfo({
         {lignes.map(([label, valeur]) => (
           <div key={label} className="flex items-baseline justify-between gap-3">
             <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-            <dd className={cn(
-              'min-w-0 truncate text-right text-sm',
-              valeur ? 'text-foreground' : 'text-muted-foreground/50'
-            )}>
+            <dd
+              title={valeur ?? undefined}
+              className={cn(
+                'min-w-0 break-words text-right text-sm',
+                valeur ? 'text-foreground' : 'text-muted-foreground/50'
+              )}
+            >
               {valeur ?? '—'}
             </dd>
           </div>

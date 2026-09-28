@@ -66,6 +66,36 @@ function splitFullName(value: string): [string | null, string | null] {
   return [first, last.length > 0 ? last : null];
 }
 
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Les noms d'acquisition rendent la fiche exploitable par l'equipe, mais leur
+ * absence ne doit jamais bloquer la creation du lead. Meta peut refuser la
+ * lecture d'un objet publicitaire ancien alors que le lead lui-meme reste
+ * accessible : dans ce cas l'identifiant conserve la tracabilite exacte.
+ */
+async function fetchMetaObjectName(
+  graphVersion: string,
+  objectId: unknown,
+  pageAccessToken: string,
+): Promise<string | null> {
+  const id = nonEmptyString(objectId);
+  if (!id) return null;
+
+  try {
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(id)}`
+      + `?fields=name&access_token=${encodeURIComponent(pageAccessToken)}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return nonEmptyString(data?.name);
+  } catch {
+    return null;
+  }
+}
+
 async function cityFromPostalCode(postalCode: string): Promise<{
   city: string;
   citycode: string;
@@ -188,12 +218,27 @@ Deno.serve(async (req: Request) => {
         const pageAccessToken = await getMetaSecret(job.workspace_id, 'page_access_token');
         if (!pageAccessToken) throw new Error('Aucun page_access_token configure');
 
-        const fields = 'field_data,ad_id,adset_id,campaign_id,form_id,created_time,platform';
+        const baseFields = [
+          'field_data',
+          'ad_id', 'adset_id', 'campaign_id', 'form_id',
+          'created_time', 'platform',
+        ].join(',');
+        const fields = `${baseFields},ad_name,adset_name,campaign_name,form_name`;
         const leadUrl = `https://graph.facebook.com/${graphVersion}/${job.external_event_id}`
           + `?fields=${fields}&access_token=${encodeURIComponent(pageAccessToken)}`;
 
-        const leadResp = await fetch(leadUrl);
-        const leadData = await leadResp.json();
+        let leadResp = await fetch(leadUrl);
+        let leadData = await leadResp.json();
+
+        // Une version Graph ancienne peut ne pas exposer les noms directement
+        // sur le lead. On retente alors uniquement les champs historiques ;
+        // les noms seront lus ensuite sur les objets campagne/publicite.
+        if (leadData?.error?.code === 100) {
+          const fallbackUrl = `https://graph.facebook.com/${graphVersion}/${job.external_event_id}`
+            + `?fields=${baseFields}&access_token=${encodeURIComponent(pageAccessToken)}`;
+          leadResp = await fetch(fallbackUrl);
+          leadData = await leadResp.json();
+        }
 
         // 429 (quota), code 4 (rate limit) et code 190 (token expire) sont
         // transitoires : on remet en file avec backoff plutot que d'abandonner.
@@ -215,7 +260,7 @@ Deno.serve(async (req: Request) => {
 
         const { data: metaForm } = await supabase
           .from('meta_forms')
-          .select('field_mapping')
+          .select('field_mapping, form_name')
           .eq('meta_form_id', leadData.form_id)
           .maybeSingle();
 
@@ -291,9 +336,39 @@ Deno.serve(async (req: Request) => {
           mapped.vehicle_model = pick(leadFields, ['vehicle_model', 'modele', 'modèle']);
         }
 
+        const [campaignNameFallback, adsetNameFallback, adNameFallback, formNameFallback] =
+          await Promise.all([
+            nonEmptyString(leadData.campaign_name)
+              ? Promise.resolve(null)
+              : fetchMetaObjectName(graphVersion, leadData.campaign_id, pageAccessToken),
+            nonEmptyString(leadData.adset_name)
+              ? Promise.resolve(null)
+              : fetchMetaObjectName(graphVersion, leadData.adset_id, pageAccessToken),
+            nonEmptyString(leadData.ad_name)
+              ? Promise.resolve(null)
+              : fetchMetaObjectName(graphVersion, leadData.ad_id, pageAccessToken),
+            nonEmptyString(leadData.form_name) || nonEmptyString(metaForm?.form_name)
+              ? Promise.resolve(null)
+              : fetchMetaObjectName(graphVersion, leadData.form_id, pageAccessToken),
+          ]);
+
+        const campaignName = nonEmptyString(leadData.campaign_name) ?? campaignNameFallback;
+        const adsetName = nonEmptyString(leadData.adset_name) ?? adsetNameFallback;
+        const adName = nonEmptyString(leadData.ad_name) ?? adNameFallback;
+        const formName = nonEmptyString(leadData.form_name)
+          ?? nonEmptyString(metaForm?.form_name)
+          ?? formNameFallback;
+
         const payload = (job.payload ?? {}) as Record<string, unknown>;
 
-        const { error: leadError } = await supabase.rpc('upsert_lead_from_webhook', {
+        const metaAttribution = {
+          campaign: { id: nonEmptyString(leadData.campaign_id), name: campaignName },
+          adset: { id: nonEmptyString(leadData.adset_id), name: adsetName },
+          ad: { id: nonEmptyString(leadData.ad_id), name: adName },
+          form: { id: nonEmptyString(leadData.form_id), name: formName },
+        };
+
+        const { data: leadId, error: leadError } = await supabase.rpc('upsert_lead_from_webhook', {
           p_workspace_id: job.workspace_id,
           p_first_name: mapped.first_name,
           p_last_name: mapped.last_name,
@@ -313,6 +388,11 @@ Deno.serve(async (req: Request) => {
           p_meta_campaign_id: leadData.campaign_id ?? null,
           p_raw_payload: {
             ...leadData,
+            campaign_name: campaignName,
+            adset_name: adsetName,
+            ad_name: adName,
+            form_name: formName,
+            meta_attribution: metaAttribution,
             code_postal: mapped.postal_code,
             ville: mapped.city,
           },
@@ -320,6 +400,35 @@ Deno.serve(async (req: Request) => {
         });
 
         if (leadError) throw new Error(`Creation du lead: ${leadError.message}`);
+
+        // La RPC historique sait deja stocker les identifiants a l'insertion,
+        // mais pas le nom de campagne. Cette mise a jour ciblee enrichit aussi
+        // un lead rejoue sans exiger de migration de signature SQL.
+        if (leadId) {
+          const attributionUpdates: Record<string, string> = {};
+          const metaPageId = nonEmptyString(payload.page_id);
+          const metaFormId = nonEmptyString(leadData.form_id);
+          const metaAdId = nonEmptyString(leadData.ad_id);
+          const metaAdsetId = nonEmptyString(leadData.adset_id);
+          const metaCampaignId = nonEmptyString(leadData.campaign_id);
+
+          if (metaPageId) attributionUpdates.meta_page_id = metaPageId;
+          if (metaFormId) attributionUpdates.meta_form_id = metaFormId;
+          if (metaAdId) attributionUpdates.meta_ad_id = metaAdId;
+          if (metaAdsetId) attributionUpdates.meta_adset_id = metaAdsetId;
+          if (metaCampaignId) attributionUpdates.meta_campaign_id = metaCampaignId;
+          if (campaignName) attributionUpdates.campaign_name = campaignName;
+
+          if (Object.keys(attributionUpdates).length > 0) {
+            const { error: attributionError } = await supabase
+              .from('leads')
+              .update(attributionUpdates)
+              .eq('id', leadId);
+            if (attributionError) {
+              throw new Error(`Attribution Meta du lead: ${attributionError.message}`);
+            }
+          }
+        }
 
         await supabase
           .from('webhook_events')
