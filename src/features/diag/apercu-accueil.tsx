@@ -9,6 +9,8 @@
 
 import { CarteEvolution } from '@/features/today/today-page';
 import type { MoisEvolution } from '@/features/today/indicateurs-accueil';
+import { BadgeAttente } from '@/features/leads/leads-page';
+import type { Lead, LeadStatus } from '@/types';
 
 const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
   'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -29,6 +31,28 @@ function evolutionDemo(avecPaiements: boolean): MoisEvolution[] {
     };
   });
 }
+
+
+const HEURE = 3_600_000;
+
+function leadDemo(heures: number, status: LeadStatus): Lead {
+  const arrive = new Date(Date.now() - heures * HEURE).toISOString();
+  return {
+    id: `demo-${heures}-${status}`,
+    status,
+    arrive_le: arrive,
+    received_at: arrive,
+    created_at: arrive,
+  } as Lead;
+}
+
+const CAS_ATTENTE: { titre: string; lead: Lead }[] = [
+  { titre: 'Arrivé il y a 1 h', lead: leadDemo(1, 'new') },
+  { titre: 'Arrivé il y a 9 h', lead: leadDemo(9, 'new') },
+  { titre: 'Sans réponse depuis 3 jours', lead: leadDemo(74, 'nrp') },
+  { titre: 'Sans réponse depuis 6 semaines', lead: leadDemo(1010, 'new') },
+  { titre: 'Rendez-vous pris il y a 5 jours', lead: leadDemo(120, 'appointment_scheduled') },
+];
 
 export function ApercuAccueil() {
   return (
@@ -57,6 +81,21 @@ export function ApercuAccueil() {
             En chargement
           </h2>
           <CarteEvolution evolution={[]} chargement />
+        </section>
+
+        <section>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Attente d’un lead — remplace le score
+          </h2>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+            {CAS_ATTENTE.map(({ titre, lead }) => (
+              <li key={lead.id} className="flex items-center gap-3 px-4 py-3">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">{titre}</span>
+                <BadgeAttente lead={lead} compact />
+                <BadgeAttente lead={lead} />
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
     </div>

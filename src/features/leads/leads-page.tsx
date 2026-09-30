@@ -3,7 +3,7 @@ import { fondDepuis } from '@/features/dossier/dossier-constants';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle, Star,
+  Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle,
   Archive, ArchiveRestore, Trash2, Clock3, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
@@ -41,6 +41,9 @@ import {
 import { fetchProfiles } from '@/services/profiles-service';
 import { LeadAddressFields } from './lead-address-fields';
 import { messageErreurBase } from '@/lib/erreurs';
+import {
+  attenteDuLead, COULEUR_ATTENTE, LIBELLE_NIVEAU,
+} from './anciennete';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OUTILS_DEMO_ACTIFS } from '@/config/features';
@@ -52,7 +55,7 @@ import type {
 import {
   statusLabels, statusStyles, leadJourneyStages, leadStageForKey,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
-  scoreColor, formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
+  formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
 import { SourceBadge } from './source-badge';
@@ -60,6 +63,31 @@ import { SourceBadge } from './source-badge';
 // ============ MAIN PAGE ============
 
 type ViewMode = 'table' | 'kanban' | 'compact';
+
+/**
+ * Depuis combien de temps ce lead attend.
+ *
+ * Remplace le score, qui valait 0 sur les 568 leads faute d'etre calcule
+ * nulle part. L'echelle est celle des relances : rouge au-dela de 48 h,
+ * ambre des 4 h, bleu tant que c'est frais, neutre quand c'est pris en
+ * charge.
+ */
+export function BadgeAttente({ lead, compact }: { lead: Lead; compact?: boolean }) {
+  const attente = attenteDuLead(lead);
+  return (
+    <span
+      title={LIBELLE_NIVEAU[attente.niveau]}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border px-1.5 font-semibold tabular-nums',
+        compact ? 'text-[10px] py-0' : 'text-xs py-0.5',
+        COULEUR_ATTENTE[attente.niveau],
+      )}
+    >
+      {attente.niveau === 'urgent' && <AlertTriangle className="h-3 w-3" aria-hidden />}
+      {attente.libelle}
+    </span>
+  );
+}
 
 export function LeadsPage() {
   const queryClient = useQueryClient();
@@ -767,7 +795,7 @@ function LeadsTable({
         <TableHead className="text-xs">Source</TableHead>
         <TableHead className="text-xs">Statut</TableHead>
         <TableHead className="text-xs">Conseiller</TableHead>
-        <TableHead className="text-xs text-right">Score</TableHead>
+        <TableHead className="text-xs text-right">Attente</TableHead>
         {onSupprimer && <TableHead className="w-10" />}
       </TableRow>
     </TableHeader>
@@ -836,10 +864,7 @@ function LeadsTable({
               {advisor ? profileName(advisor) : <span className="text-muted-foreground/60">Non assigné</span>}
             </TableCell>
             <TableCell className="text-right">
-              <span className={cn('inline-flex items-center gap-1 text-sm font-semibold', scoreColor(lead.score))}>
-                <Star className="h-3.5 w-3.5" />
-                {lead.score}
-              </span>
+              <BadgeAttente lead={lead} />
             </TableCell>
             {onSupprimer && (
               <TableCell className="pr-2 text-right">
@@ -981,12 +1006,7 @@ function KanbanCard({
         <p className="text-sm font-medium text-foreground leading-tight">
           {leadName(lead)}
         </p>
-        {lead.score > 0 && (
-          <span className={cn('inline-flex items-center gap-0.5 text-[10px] font-semibold shrink-0', scoreColor(lead.score))}>
-            <Star className="h-3 w-3" />
-            {lead.score}
-          </span>
-        )}
+        <BadgeAttente lead={lead} compact />
       </div>
       <SourceBadge source={lead.source} className="mt-2" />
       {lead.phone && (
@@ -1040,10 +1060,7 @@ function CompactList({
             </span>
             <SourceBadge source={lead.source} className="shrink-0" />
             <StatusBadge status={lead.status} className="shrink-0" />
-            <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold shrink-0 w-12 justify-end', scoreColor(lead.score))}>
-              {lead.score > 0 && <Star className="h-3 w-3" />}
-              {lead.score || ''}
-            </span>
+            <BadgeAttente lead={lead} compact />
           </button>
         ))}
       </div>

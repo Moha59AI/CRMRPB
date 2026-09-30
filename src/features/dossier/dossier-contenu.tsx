@@ -20,6 +20,7 @@ import type { Lead, Profile } from '@/types';
 import type { AnalyseDoublon } from '@/services/leads-service';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
+import { attenteDuLead } from '@/features/leads/anciennete';
 import { DocumentsClientPanel } from './documents-client-panel';
 import { FacturationClient } from '@/features/billing/facturation-client';
 import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
@@ -172,13 +173,13 @@ export function DossierContenu({
         ['Formulaire', attributionMeta.formulaire],
         ['Lead Meta', attributionMeta.lead],
         ['Reçu le', formatDateTime(lead.received_at || lead.created_at)],
-        ['Score', String(lead.score)],
+        ['En attente depuis', attenteDuLead(lead).libelle],
       ]
     : [
         ['Source', sourceLabels[lead.source] ?? lead.source],
         ['Campagne', lead.campaign_name],
         ['Reçu le', formatDateTime(lead.received_at || lead.created_at)],
-        ['Score', String(lead.score)],
+        ['En attente depuis', attenteDuLead(lead).libelle],
       ];
 
   return (
