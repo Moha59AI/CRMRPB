@@ -1,6 +1,4 @@
-import {
-  useState, useRef,
-} from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   useQuery, useMutation, useQueryClient,
 } from '@tanstack/react-query';
@@ -71,6 +69,30 @@ const contactSchema = z.object({
 });
 type ContactFormValues = z.infer<typeof contactSchema>;
 
+type FiltreClient = 'tous' | 'clients' | 'prospects';
+
+const FILTRES: { cle: FiltreClient; label: string }[] = [
+  { cle: 'tous', label: 'Tous' },
+  { cle: 'clients', label: 'Clients' },
+  { cle: 'prospects', label: 'Prospects' },
+];
+
+/**
+ * Client ou prospect, selon la regle du metier : on est client a partir de la
+ * premiere facture. Un devis, un rendez-vous ou dix appels ne suffisent pas.
+ */
+function BadgeClient({ estClient }: { estClient: boolean }) {
+  if (!estClient) return null;
+  return (
+    <Badge
+      variant="outline"
+      className="shrink-0 rounded-full border-success/25 bg-success-soft text-[10px] text-success"
+    >
+      Client
+    </Badge>
+  );
+}
+
 export function ContactsPage() {
   const navigate = useNavigate();
   // Le tableau a sept colonnes : sur telephone, la liste le remplace.
@@ -98,11 +120,23 @@ export function ContactsPage() {
     queryFn: fetchResumesClients,
   });
 
+  // On est client quand on a une facture. Sur 682 fiches, 136 le sont : sans
+  // ce filtre, la page annonce « Clients » et montre surtout des prospects.
+  const [filtre, setFiltre] = useState<FiltreClient>('tous');
+  const listeFiltree = useMemo(() => {
+    if (!contacts) return contacts;
+    if (filtre === 'tous') return contacts;
+    const veutClient = filtre === 'clients';
+    return contacts.filter(
+      (c) => Boolean(resumes?.get(c.id)?.estClient) === veutClient,
+    );
+  }, [contacts, resumes, filtre]);
+
   return (
     <>
       <PageHeader
         title="Clients"
-        description="Les personnes et leur historique d'interventions"
+        description="Client dès la première facture ; avant, c'est un prospect"
         action={
           <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -121,6 +155,31 @@ export function ContactsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="rounded-lg pl-9"
           />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {FILTRES.map((f) => {
+            const nombre = f.cle === 'tous'
+              ? contacts?.length
+              : contacts?.filter(
+                (c) => Boolean(resumes?.get(c.id)?.estClient) === (f.cle === 'clients'),
+              ).length;
+            return (
+              <Button
+                key={f.cle}
+                type="button"
+                size="sm"
+                variant={filtre === f.cle ? 'default' : 'outline'}
+                className="rounded-full"
+                onClick={() => setFiltre(f.cle)}
+              >
+                {f.label}
+                {nombre !== undefined && (
+                  <span className="ml-1.5 tabular-nums opacity-70">{nombre}</span>
+                )}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
@@ -162,15 +221,15 @@ export function ContactsPage() {
           </div>
         )}
 
-        {!isLoading && !isError && contacts && contacts.length > 0 && estMobile && (
+        {!isLoading && !isError && listeFiltree && listeFiltree.length > 0 && estMobile && (
           <ListeMobileContacts
-            contacts={contacts}
+            contacts={listeFiltree}
             resumes={resumes}
             onOuvrir={(contact) => ouvrirClient(contact.id)}
           />
         )}
 
-        {!isLoading && !isError && contacts && contacts.length > 0 && !estMobile && (
+        {!isLoading && !isError && listeFiltree && listeFiltree.length > 0 && !estMobile && (
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -184,7 +243,7 @@ export function ContactsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {contacts.map((contact) => (
+              {listeFiltree.map((contact) => (
                 <ContactRow
                   key={contact.id}
                   contact={contact}
@@ -238,6 +297,7 @@ function ListeMobileContacts({
                 <span className="min-w-0 truncate text-sm font-medium text-foreground">
                   {nom}
                 </span>
+                <BadgeClient estClient={Boolean(resume?.estClient)} />
                 {/* Un client qui revient est le renseignement le plus utile
                     de la ligne : il se voit sans etre cherche. */}
                 {interventions > 0 && (

@@ -56,22 +56,27 @@ export { fetchInsurers } from '@/services/insurers-service';
 export interface ResumeClientListe {
   nbInterventions: number;
   derniereIntervention: string | null;
+  estClient: boolean;
+  derniereFacture: string | null;
 }
 
 export async function fetchResumesClients(): Promise<Map<string, ResumeClientListe>> {
   const { data, error } = await supabase
     .from('v_clients')
-    .select('id, nb_interventions, derniere_intervention');
+    .select('id, nb_interventions, derniere_intervention, est_client, derniere_facture');
 
   if (error) throw new Error(error.message);
 
   const resumes = new Map<string, ResumeClientListe>();
   for (const l of (data ?? []) as {
     id: string; nb_interventions: number; derniere_intervention: string | null;
+    est_client: boolean; derniere_facture: string | null;
   }[]) {
     resumes.set(l.id, {
       nbInterventions: Number(l.nb_interventions),
       derniereIntervention: l.derniere_intervention,
+      estClient: Boolean(l.est_client),
+      derniereFacture: l.derniere_facture,
     });
   }
   return resumes;
@@ -89,12 +94,23 @@ export interface SyntheseClient {
   nb_converties: number;
   premiere_intervention: string | null;
   derniere_intervention: string | null;
+  /**
+   * Est client des la premiere facture non annulee.
+   *
+   * Le statut « converti » du lead se saisit a la main, donc il ne se
+   * saisit pas : douze leads le portent pour 136 personnes facturees. La
+   * facture arrive d'Onify toute seule, elle fait foi.
+   */
+  est_client: boolean;
+  nb_factures: number;
+  premiere_facture: string | null;
+  derniere_facture: string | null;
 }
 
 export async function fetchSyntheseClient(id: string): Promise<SyntheseClient | null> {
   const { data, error } = await supabase
     .from('v_clients')
-    .select('nb_interventions, nb_converties, premiere_intervention, derniere_intervention')
+    .select('nb_interventions, nb_converties, premiere_intervention, derniere_intervention, est_client, nb_factures, premiere_facture, derniere_facture')
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);

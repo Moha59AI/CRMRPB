@@ -39,6 +39,7 @@ import { FacturationClient } from '@/features/billing/facturation-client';
 import { useAuth } from '@/features/auth/auth-context';
 import { cheminAutorise } from '@/config/permissions';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
+import type { SyntheseClient } from '@/services/contacts-service';
 import type { Lead, Contact, Communication, Note, Task } from '@/types';
 
 type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'facturation' | 'documents' | 'vehicules';
@@ -288,7 +289,11 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     <>
       <div className="flex items-center gap-2">
         <h1 className="truncate text-xl font-semibold sm:text-2xl">{nom}</h1>
-        {synthese && synthese.nb_interventions > 1 && (
+        {/* « Client fidele » se declenchait sur deux interventions, meme sans
+            la moindre facture. On est client quand on a ete facture, et
+            fidele quand on l'a ete plusieurs fois. */}
+        {synthese && <BadgeClient estClient={synthese.est_client} />}
+        {synthese && synthese.nb_factures > 1 && (
           <Badge variant="outline" className="shrink-0 rounded-full border-done/30 bg-done-soft text-done">
             Client fidèle
           </Badge>
@@ -899,17 +904,50 @@ function LigneConsentement({
   );
 }
 
-function Synthese({ synthese }: { synthese: { nb_interventions: number; nb_converties: number } }) {
-  const taux = synthese.nb_interventions > 0
-    ? Math.round((synthese.nb_converties / synthese.nb_interventions) * 100)
-    : 0;
-
+/**
+ * Ce que cette personne represente, mesure sur des faits.
+ *
+ * Le taux de conversion affiche ici se calculait sur le statut « converti »
+ * du lead, qui se saisit a la main : douze leads le portent, pour 136
+ * personnes facturees. Il annoncait donc 0 % a presque tout le monde, y
+ * compris aux clients de longue date. La facture remplace le statut.
+ */
+function Synthese({ synthese }: { synthese: SyntheseClient }) {
   return (
     <div className="grid grid-cols-3 gap-3">
       <Chiffre valeur={synthese.nb_interventions} label="Interventions" />
-      <Chiffre valeur={synthese.nb_converties} label="Converties" accent />
-      <Chiffre valeur={`${taux} %`} label="Taux de conversion" />
+      <Chiffre
+        valeur={synthese.nb_factures}
+        label={synthese.nb_factures > 1 ? 'Factures' : 'Facture'}
+        accent={synthese.est_client}
+      />
+      <Chiffre
+        valeur={synthese.est_client ? formatDate(synthese.premiere_facture) : '—'}
+        label="Client depuis"
+      />
     </div>
+  );
+}
+
+/**
+ * Client ou prospect.
+ *
+ * La regle est celle du metier : on est client a partir de la premiere
+ * facture. Un devis, un rendez-vous ou dix appels ne suffisent pas.
+ */
+function BadgeClient({ estClient }: { estClient: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'rounded-full text-[10px]',
+        estClient
+          ? 'border-success/25 bg-success-soft text-success'
+          : 'border-border bg-muted text-muted-foreground',
+      )}
+    >
+      {estClient ? 'Client' : 'Prospect'}
+    </Badge>
   );
 }
 
