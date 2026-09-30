@@ -72,6 +72,15 @@ type ViewMode = 'table' | 'kanban' | 'compact';
  * ambre des 4 h, bleu tant que c'est frais, neutre quand c'est pris en
  * charge.
  */
+/** Deux lettres pour ancrer l'oeil : un nom se reconnait avant de se lire. */
+function initialesLead(lead: Lead): string {
+  const mots = [lead.first_name, lead.last_name]
+    .map((m) => (m ?? '').trim())
+    .filter(Boolean);
+  if (mots.length === 0) return '?';
+  return mots.slice(0, 2).map((m) => m[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
 export function BadgeAttente({ lead, compact }: { lead: Lead; compact?: boolean }) {
   const attente = attenteDuLead(lead);
   return (
@@ -978,7 +987,7 @@ function KanbanBoard({
   );
 }
 
-function KanbanCard({
+export function KanbanCard({
   lead, isDragging, onDragStart, onDragEnd, onClick,
 }: {
   lead: Lead;
@@ -987,6 +996,8 @@ function KanbanCard({
   onDragEnd: () => void;
   onClick: () => void;
 }) {
+  const vehicule = lead.vehicle_make || lead.vehicle_model ? vehicleLabel(lead) : null;
+
   return (
     <div
       draggable
@@ -998,32 +1009,59 @@ function KanbanCard({
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={cn(
-        'cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-all hover:shadow-md active:cursor-grabbing',
-        isDragging && 'opacity-40',
+        'group cursor-grab rounded-xl border border-border bg-card p-3 shadow-sm',
+        'transition-[box-shadow,transform,border-color] duration-200',
+        'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg',
+        'active:cursor-grabbing active:translate-y-0',
+        isDragging && 'rotate-1 opacity-40 shadow-none',
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-foreground leading-tight">
+      {/* Une identite, pas une liste de champs : la pastille ancre l'oeil et
+          le nom tient la premiere ligne a lui seul. */}
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-[11px] font-semibold text-muted-foreground"
+        >
+          {initialesLead(lead)}
+        </span>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-foreground">
           {leadName(lead)}
         </p>
         <BadgeAttente lead={lead} compact />
       </div>
-      <SourceBadge source={lead.source} className="mt-2" />
-      {lead.phone && (
-        <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
-          <Phone className="h-3 w-3" />
-          {lead.phone}
+
+      {/* Les coordonnees tenaient sur quatre lignes grises identiques. Une
+          seule ligne, des separateurs, et l'oeil ne relit plus la meme
+          chose quatre fois. */}
+      {(lead.phone || lead.city) && (
+        <p className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {lead.phone && (
+            <span className="flex items-center gap-1 tabular-nums">
+              <Phone className="h-3 w-3 shrink-0" aria-hidden />{lead.phone}
+            </span>
+          )}
+          {lead.phone && lead.city && <span className="text-border-strong">·</span>}
+          {lead.city && <span className="truncate">{lead.city}</span>}
         </p>
       )}
-      {lead.city && (
-        <p className="text-xs text-muted-foreground">{lead.city}</p>
-      )}
-      {(lead.vehicle_make || lead.vehicle_model) && (
-        <p className="mt-1 text-xs text-muted-foreground/70">{vehicleLabel(lead)}</p>
-      )}
-      <p className={cn('mt-1 text-xs text-muted-foreground', !lead.glass_type && 'italic text-muted-foreground/70')}>
-        Vitrage : {vitrageLabel(lead)}
-      </p>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <SourceBadge source={lead.source} />
+        <span
+          className={cn(
+            'rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-medium',
+            lead.glass_type ? 'text-muted-foreground' : 'italic text-faint',
+          )}
+        >
+          {vitrageLabel(lead)}
+        </span>
+        {vehicule && (
+          <span className="truncate rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {vehicule}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
