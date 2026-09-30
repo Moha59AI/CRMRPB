@@ -23,6 +23,7 @@ import type {
   InvoiceStatus, QuoteStatus, GiftStatus,
 } from '@/types';
 import { createInvoice, fetchGifts, fetchInvoices, fetchPayments, fetchQuotes } from '@/services/billing-service';
+import { BoutonPdfFacture } from './bouton-pdf-facture';
 import { fetchCases } from '@/services/cases-service';
 import { fetchContacts } from '@/services/contacts-service';
 
@@ -268,6 +269,7 @@ export function BillingPage() {
                         <TableHead className="text-xs text-right">Reste à recevoir</TableHead>
                         <TableHead className="text-xs">Échéance</TableHead>
                         <TableHead className="text-xs">Statut</TableHead>
+                        <TableHead className="text-xs sr-only">PDF</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -289,6 +291,9 @@ export function BillingPage() {
                             <Badge variant="outline" className={`rounded-full text-[10px] ${invoiceStatusColor(inv.status)}`}>
                               {invoiceStatusLabels[inv.status]}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <BoutonPdfFacture facture={inv} />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -473,6 +478,7 @@ export function BillingPage() {
                           <TableHead className="text-xs text-right">Reste à recevoir</TableHead>
                           <TableHead className="text-xs">Échéance</TableHead>
                           <TableHead className="text-xs">Statut</TableHead>
+                          <TableHead className="text-xs sr-only">PDF</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -488,6 +494,9 @@ export function BillingPage() {
                               <Badge variant="outline" className="rounded-full text-[10px] bg-urgent-soft text-urgent border-urgent/25">
                                 {invoiceStatusLabels[inv.status]}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <BoutonPdfFacture facture={inv} />
                             </TableCell>
                           </TableRow>
                         ))}

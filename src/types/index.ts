@@ -576,6 +576,11 @@ export interface Invoice {
   onify_invoice_id?: string | null;
   onify_payload?: Record<string, unknown> | null;
   onify_synced_at?: string | null;
+  /** Chemin du PDF d'origine dans le bucket prive `onify-invoices`. */
+  onify_pdf_path?: string | null;
+  onify_pdf_synced_at?: string | null;
+  onify_pdf_checked_at?: string | null;
+  onify_pdf_error?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,6 @@
 // Devis, factures, paiements et cadeaux
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 import type { Quote, Invoice, Payment, Gift } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
@@ -30,6 +30,42 @@ export async function fetchInvoices(params: { status?: string }): Promise<Invoic
   const { data, error } = await query.limit(200);
   if (error) throw new Error(error.message);
   return (data as Invoice[]) ?? [];
+}
+
+/**
+ * Recupere le PDF d'origine d'une facture Onify.
+ *
+ * La cle Onify reste sur le serveur : on passe par la fonction
+ * `onify-invoice-pdf`, avec le jeton de session de l'utilisateur. Elle sert le
+ * PDF mis en cache et ne retourne vers Onify que la premiere fois.
+ */
+export async function fetchFacturePdf(invoiceId: string): Promise<Blob> {
+  const { data: session, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error(sessionError.message);
+  const accessToken = session.session?.access_token;
+  if (!accessToken) throw new Error('Session expirée, reconnectez-vous');
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/onify-invoice-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ invoice_id: invoiceId, disposition: 'inline' }),
+  });
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(messageErreurPdf(result.error, response.status));
+  }
+  return response.blob();
+}
+
+function messageErreurPdf(erreur: string | undefined, statut: number): string {
+  if (!erreur) return `PDF inaccessible : HTTP ${statut}`;
+  if (erreur === 'CLE_ONIFY_MANQUANTE') {
+    return 'Connectez Onify dans Réglages › Intégrations pour accéder aux PDF.';
+  }
+  if (erreur === 'FORBIDDEN') return "Votre rôle ne permet pas d'ouvrir les factures.";
+  if (erreur === 'UNAUTHORIZED') return 'Session expirée, reconnectez-vous';
+  return erreur;
 }
 
 export async function createInvoice(inv: Partial<Invoice>): Promise<{ error: string | null; invoice: Invoice | null }> {
