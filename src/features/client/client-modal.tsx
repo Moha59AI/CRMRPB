@@ -35,10 +35,13 @@ import {
 import { createNote } from '@/services/activity-service';
 import { etatApresRetour, etatVersFiche } from '@/features/dossier/dossier-constants';
 import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
+import { FacturationClient } from './facturation-client';
+import { useAuth } from '@/features/auth/auth-context';
+import { cheminAutorise } from '@/config/permissions';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { Lead, Contact, Communication, Note, Task } from '@/types';
 
-type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'documents' | 'vehicules';
+type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'facturation' | 'documents' | 'vehicules';
 
 const LIBELLE_CHAMP_CLIENT: Partial<Record<keyof Contact, string>> = {
   first_name: 'Prénom', last_name: 'Nom', phone: 'Téléphone', email: 'Email',
@@ -51,6 +54,7 @@ const ONGLETS: readonly OngletFiche<OngletClient>[] = [
   { cle: 'apercu', label: "Vue d'ensemble" },
   { cle: 'suivi', label: 'Suivi & échanges' },
   { cle: 'interventions', label: 'Interventions' },
+  { cle: 'facturation', label: 'Facturation' },
   { cle: 'documents', label: 'Documents' },
   { cle: 'vehicules', label: 'Véhicules' },
 ];
@@ -60,6 +64,16 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [onglet, setOnglet] = useState<OngletClient>('apercu');
+  const { profile } = useAuth();
+
+  // Les factures ne sont lisibles que par ceux qui y ont droit -- la regle
+  // vit dans la base. Sans ce filtre, un conseiller verrait un onglet
+  // Facturation systematiquement vide.
+  const voitFacturation = cheminAutorise('/billing', profile?.role ?? null);
+  const onglets = useMemo(
+    () => (voitFacturation ? ONGLETS : ONGLETS.filter((o) => o.cle !== 'facturation')),
+    [voitFacturation],
+  );
 
   const { data: client, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['client', contactId],
@@ -227,7 +241,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     return (
       <FicheOverlay
         entete={<h1 className="text-xl font-semibold">Fiche client indisponible</h1>}
-        onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
+        onglets={onglets} ongletActif={onglet} onChangerOnglet={setOnglet}
         onFermer={fermer} pleinePage={pleinePage}
       >
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -250,7 +264,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     return (
       <FicheOverlay
         entete={<Skeleton className="h-8 w-64 rounded-lg" />}
-        onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
+        onglets={onglets} ongletActif={onglet} onChangerOnglet={setOnglet}
         onFermer={fermer} pleinePage={pleinePage}
       >
         <div className="space-y-4">
@@ -311,7 +325,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   return (
     <FicheOverlay
       entete={entete}
-      onglets={ONGLETS}
+      onglets={onglets}
       ongletActif={onglet}
       onChangerOnglet={setOnglet}
       onFermer={fermerAvecGarde}
@@ -335,6 +349,8 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     >
       {onglet === 'vehicules' ? (
         <ListeVehicules vehicules={vehicules ?? []} />
+      ) : onglet === 'facturation' ? (
+        <FacturationClient contactId={contactId as string} />
       ) : onglet === 'documents' ? (
         <ClientDocumentHistory interventions={interventions ?? []} />
       ) : onglet === 'interventions' ? (

@@ -1,7 +1,7 @@
 // Devis, factures, paiements et cadeaux
 
 import { supabase, supabaseUrl } from '@/lib/supabase';
-import type { Quote, Invoice, Payment, Gift } from '@/types';
+import type { Quote, Invoice, Payment, Gift, OnifyCreditNote } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 export async function fetchQuotes(): Promise<Quote[]> {
@@ -30,6 +30,49 @@ export async function fetchInvoices(params: { status?: string }): Promise<Invoic
   const { data, error } = await query.limit(200);
   if (error) throw new Error(error.message);
   return (data as Invoice[]) ?? [];
+}
+
+export interface FacturationClient {
+  factures: Invoice[];
+  avoirs: OnifyCreditNote[];
+  paiements: Payment[];
+}
+
+/**
+ * Tout ce qui a ete facture a un client.
+ *
+ * Les trois listes viennent d'Onify par la synchronisation. Les paiements
+ * servent a dire ce qui reste du : `remaining_amount` seul ne dit pas quand ni
+ * comment le client a regle.
+ */
+export async function fetchFacturationClient(contactId: string): Promise<FacturationClient> {
+  const [factures, avoirs] = await Promise.all([
+    supabase.from('invoices').select('*')
+      .eq('contact_id', contactId)
+      .order('issue_date', { ascending: false, nullsFirst: false }),
+    supabase.from('onify_credit_notes').select('*')
+      .eq('contact_id', contactId)
+      .order('issue_date', { ascending: false, nullsFirst: false }),
+  ]);
+  if (factures.error) throw new Error(factures.error.message);
+  if (avoirs.error) throw new Error(avoirs.error.message);
+
+  const listeFactures = (factures.data as Invoice[]) ?? [];
+  if (listeFactures.length === 0) {
+    return { factures: [], avoirs: (avoirs.data as OnifyCreditNote[]) ?? [], paiements: [] };
+  }
+
+  const { data: paiements, error } = await supabase
+    .from('payments').select('*')
+    .in('invoice_id', listeFactures.map((f) => f.id))
+    .order('payment_date', { ascending: false, nullsFirst: false });
+  if (error) throw new Error(error.message);
+
+  return {
+    factures: listeFactures,
+    avoirs: (avoirs.data as OnifyCreditNote[]) ?? [],
+    paiements: (paiements as Payment[]) ?? [],
+  };
 }
 
 /**
