@@ -15,7 +15,7 @@
  * reseau manque au chargement.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const COQUILLE = `coquille-${VERSION}`;
 
 /*
@@ -86,6 +86,12 @@ self.addEventListener('fetch', (e) => {
     })());
     return;
   }
+
+  // La coquille ne se lit jamais depuis le cache en dehors d'une navigation :
+  // c'est elle que l'application interroge pour savoir si une version plus
+  // recente est en ligne. Servie depuis le cache, la reponse annoncerait
+  // toujours la version deja ouverte, et la mise a jour passerait inapercue.
+  if (url.pathname === '/' || url.pathname === '/index.html') return;
 
   // Les fichiers compiles portent un empreinte dans leur nom : leur contenu
   // ne change jamais, le cache peut repondre sans demander.
