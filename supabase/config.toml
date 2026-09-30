@@ -43,6 +43,9 @@ verify_jwt = false
 [functions.onify-sync]
 verify_jwt = false
 
+[functions.onify-invoice-pdf]
+verify_jwt = true
+
 [functions.client-documents]
 verify_jwt = false
 
