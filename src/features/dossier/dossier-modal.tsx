@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { LIBELLE_CHAMP_LEAD } from '@/features/leads/lead-shared';
 import { fetchProfiles } from '@/services/profiles-service';
+import { useAuth } from '@/features/auth/auth-context';
+import { cheminAutorise } from '@/config/permissions';
 import { fetchReglagesEntreprise } from '@/services/admin-service';
 import { createCommunication } from '@/services/activity-service';
 import { enregistrerResultatAppel } from '@/services/relances-service';
@@ -52,6 +54,16 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   );
 
   const [onglet, setOnglet] = useState<OngletDossier>('apercu');
+
+  const { profile } = useAuth();
+  // RLS ne laisse lire les factures qu'a l'administration : sans ce filtre,
+  // un conseiller ouvrirait un onglet vide.
+  const onglets = useMemo(
+    () => (cheminAutorise('/billing', profile?.role ?? null)
+      ? ONGLETS
+      : ONGLETS.filter((o) => o.cle !== 'facturation')),
+    [profile?.role],
+  );
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['lead', leadId],
@@ -298,7 +310,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     return (
       <FicheOverlay
         entete={<Skeleton className="h-8 w-64 rounded-lg" />}
-        onglets={ONGLETS} ongletActif={onglet} onChangerOnglet={setOnglet}
+        onglets={onglets} ongletActif={onglet} onChangerOnglet={setOnglet}
         onFermer={fermerAvecGarde} pleinePage={pleinePage}
       >
         <div className="space-y-4">
@@ -417,7 +429,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   return (
     <FicheOverlay
       entete={entete}
-      onglets={ONGLETS}
+      onglets={onglets}
       ongletActif={onglet}
       onChangerOnglet={setOnglet}
       onFermer={fermerAvecGarde}

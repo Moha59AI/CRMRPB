@@ -35,7 +35,7 @@ import {
 import { createNote } from '@/services/activity-service';
 import { etatApresRetour, etatVersFiche } from '@/features/dossier/dossier-constants';
 import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
-import { FacturationClient } from './facturation-client';
+import { FacturationClient } from '@/features/billing/facturation-client';
 import { useAuth } from '@/features/auth/auth-context';
 import { cheminAutorise } from '@/config/permissions';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';

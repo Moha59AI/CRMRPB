@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, FileText, StickyNote, CalendarClock,
-  User, Briefcase, UserCog, Send, History, Copy, Award, Gift, Printer,
+  User, Briefcase, UserCog, Send, History, Copy, Award, Gift, Printer, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import type { AnalyseDoublon } from '@/services/leads-service';
 import { ONGLETS, type OngletDossier } from './dossier-constants';
 import { StatusBadge } from '@/features/leads/status-badge';
 import { DocumentsClientPanel } from './documents-client-panel';
+import { FacturationClient } from '@/features/billing/facturation-client';
 import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
@@ -144,6 +145,16 @@ export function DossierContenu({
 
   if (onglet === 'documents') {
     return <DocumentsClientPanel lead={lead} />;
+  }
+
+  // La facturation ne depend pas du dossier vitrage : elle vit sur le client,
+  // synchronisee depuis Onify. Attendre la conversion revenait a n'afficher
+  // jamais rien -- deux dossiers vitrage existent, pour 146 factures.
+  if (onglet === 'facturation') {
+    if (!lead.contact_id) return <SansClient />;
+    return (
+      <FacturationClient contactId={lead.contact_id} plaque={lead.vehicle_registration} />
+    );
   }
 
   if (onglet !== 'apercu') {
@@ -424,10 +435,25 @@ function Timeline({
 }
 
 /**
- * Les onglets Assurance et Facturation s'appuient sur
- * `windscreen_cases` et `invoices`, qui ne sont alimentés qu'une fois le
- * dossier cree. Ils sont annonces comme tels plutot que d'afficher un vide
- * sans explication.
+ * Un lead sans client n'a rien a facturer : la facturation se lit sur la
+ * personne, pas sur l'intervention.
+ */
+function SansClient() {
+  return (
+    <div className="rounded-xl border border-border bg-card px-4 py-10 text-center">
+      <Receipt className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">
+        Cette intervention n’est rattachée à aucun client : renseignez un
+        téléphone ou un email pour retrouver sa facturation.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * L'onglet Assurance s'appuie sur `windscreen_cases`, qui n'est alimente
+ * qu'une fois le dossier cree. Il est annonce comme tel plutot que
+ * d'afficher un vide sans explication.
  */
 function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
   const libelle = ONGLETS.find((o) => o.cle === onglet)?.label ?? onglet;

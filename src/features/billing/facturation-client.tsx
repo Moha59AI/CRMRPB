@@ -13,7 +13,7 @@ import { ChevronDown, FileText, Receipt, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { BoutonPdfFacture } from '@/features/billing/bouton-pdf-facture';
+import { BoutonPdfFacture } from './bouton-pdf-facture';
 import { fetchFacturationClient } from '@/services/billing-service';
 import type { Invoice, InvoiceStatus, OnifyCreditNote, Payment } from '@/types';
 
@@ -111,7 +111,25 @@ function objetDe(facture: Invoice): string | null {
 
 // ── Panneau ───────────────────────────────────────────────────────────────
 
-export function FacturationClient({ contactId }: { contactId: string }) {
+interface FacturationClientProps {
+  contactId: string;
+  /**
+   * Plaque de l'intervention d'ou l'on vient.
+   *
+   * Depuis une fiche lead, une seule facture interesse : celle de ce
+   * vehicule. Elle remonte en tete et s'ouvre deja.
+   */
+  plaque?: string | null;
+}
+
+function memePlaque(a: string | null | undefined, b: string | null | undefined): boolean {
+  const propre = (valeur: string | null | undefined) =>
+    (valeur ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const gauche = propre(a);
+  return gauche.length >= 5 && gauche === propre(b);
+}
+
+export function FacturationClient({ contactId, plaque }: FacturationClientProps) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['client-facturation', contactId],
     queryFn: () => fetchFacturationClient(contactId),
@@ -148,8 +166,14 @@ export function FacturationClient({ contactId }: { contactId: string }) {
     );
   }
 
-  const factures = data?.factures ?? [];
   const avoirs = data?.avoirs ?? [];
+  // La facture du vehicule dont on vient passe devant les autres : c'est
+  // celle qu'on ouvre la fiche pour lire.
+  const factures = [...(data?.factures ?? [])].sort((gauche, droite) => {
+    const aGauche = memePlaque(plaque, vehiculeDe(gauche)?.immatriculation) ? 0 : 1;
+    const aDroite = memePlaque(plaque, vehiculeDe(droite)?.immatriculation) ? 0 : 1;
+    return aGauche - aDroite;
+  });
 
   if (factures.length === 0 && avoirs.length === 0) {
     return (
@@ -185,6 +209,7 @@ export function FacturationClient({ contactId }: { contactId: string }) {
               <LigneFactureDepliable
                 key={facture.id}
                 facture={facture}
+                concernee={memePlaque(plaque, vehiculeDe(facture)?.immatriculation)}
                 paiements={(data?.paiements ?? []).filter((p) => p.invoice_id === facture.id)}
               />
             ))}
@@ -230,17 +255,18 @@ function Total({ libelle, valeur, alerte }: {
   );
 }
 
-function LigneFactureDepliable({ facture, paiements }: {
+function LigneFactureDepliable({ facture, paiements, concernee }: {
   facture: Invoice;
   paiements: Payment[];
+  concernee?: boolean;
 }) {
-  const [ouverte, setOuverte] = useState(false);
+  const [ouverte, setOuverte] = useState(Boolean(concernee));
   const lignes = ouverte ? lignesDe(facture) : [];
   const vehicule = vehiculeDe(facture);
   const objet = objetDe(facture);
 
   return (
-    <li>
+    <li className={cn(concernee && 'bg-primary/5')}>
       <div className="flex items-center gap-3 px-4 py-3">
         <button
           type="button"
