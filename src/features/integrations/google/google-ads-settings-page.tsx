@@ -173,7 +173,7 @@ export function GoogleAdsSettingsPage() {
         }
       />
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <form className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="gutter-x mx-auto max-w-3xl space-y-5 py-4 sm:py-6" onSubmit={handleSubmit(onSubmit)}>
           <Alert>
             <Shield className="h-4 w-4" />
             <AlertTitle>Connexion sécurisée</AlertTitle>

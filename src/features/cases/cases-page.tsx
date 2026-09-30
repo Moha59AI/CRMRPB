@@ -258,7 +258,7 @@ export function CasesPage() {
       {/* Table */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {isLoading && (
-          <div className="p-4 sm:p-6">
+          <div className="gutter-x py-4 sm:py-6">
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full rounded-lg" />

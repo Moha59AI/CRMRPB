@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
+import { EtatErreur } from '@/components/EtatErreur';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1803,13 +1804,13 @@ export function CalendarPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* Navigation */}
           <div className="flex w-full items-center gap-2 lg:w-auto">
-            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goPrev}>
+            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goPrev} aria-label="Période précédente">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="min-w-0 flex-1 text-center text-sm font-medium text-foreground lg:min-w-[160px] lg:flex-none">
               {periodLabel}
             </span>
-            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goNext}>
+            <Button variant="outline" size="icon" className="shrink-0 md:h-8 md:w-8" onClick={goNext} aria-label="Période suivante">
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" className="shrink-0 md:h-8" onClick={goToday}>
@@ -1907,6 +1908,16 @@ export function CalendarPage() {
             </div>
             <Skeleton className="h-[600px] w-full rounded-lg" />
           </div>
+        ) : appointmentsQuery.isError ? (
+          // Sans cette branche, une requete en echec tombait sur « Aucun
+          // rendez-vous » : une panne ressemblait a une journee vide, et un
+          // technicien pouvait rentrer chez lui en croyant n'avoir rien.
+          <EtatErreur
+            titre="Planning indisponible"
+            erreur={appointmentsQuery.error}
+            onReessayer={() => void appointmentsQuery.refetch()}
+            className="min-h-[400px] rounded-xl border border-dashed border-border"
+          />
         ) : !hasAppts ? (
           <div className="flex min-h-[400px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border">
             <CalendarIcon className="h-10 w-10 text-muted-foreground/30" />

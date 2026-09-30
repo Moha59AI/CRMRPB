@@ -159,6 +159,7 @@ export function WebhooksPage() {
                             variant="outline"
                             size="icon"
                             className="shrink-0 rounded-lg"
+                            aria-label="Copier l'adresse du webhook"
                             onClick={() => copyToClipboard(getWebhookUrl(endpoint.endpoint_key), `url-${endpoint.id}`)}
                           >
                             {copied === `url-${endpoint.id}` ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
@@ -179,6 +180,7 @@ export function WebhooksPage() {
                           variant="ghost"
                           size="icon"
                           className="rounded-lg text-destructive hover:bg-destructive/10"
+                          aria-label="Supprimer ce webhook"
                           onClick={() => setASupprimer(endpoint)}
                         >
                           <Trash2 className="h-4 w-4" />

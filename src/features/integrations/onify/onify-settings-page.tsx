@@ -82,7 +82,7 @@ export function OnifySettingsPage() {
         }
       />
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
+        <div className="gutter-x mx-auto max-w-4xl space-y-5 py-4 sm:py-6">
           <Alert>
             <ShieldCheck className="h-4 w-4" />
             <AlertTitle>Onify reste protégé</AlertTitle>

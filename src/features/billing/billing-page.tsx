@@ -209,7 +209,7 @@ export function BillingPage() {
       />
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="px-6 py-4">
+        <div className="gutter-x py-4">
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="rounded-lg">
               <TabsTrigger value="invoices" className="rounded-md">

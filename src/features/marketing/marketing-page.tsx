@@ -219,7 +219,7 @@ export function MarketingPage() {
       />
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="space-y-5 p-4 sm:p-6">
+        <div className="gutter-x space-y-5 py-4 sm:py-6">
           {query.isLoading && <LoadingDashboard />}
 
           {query.isError && (

@@ -628,7 +628,7 @@ function WorkflowRow({
       <TableCell className="pr-4">
         {canManage && !managedAlert && <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" aria-label="Actions du scénario">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -871,7 +871,7 @@ function WorkflowBuilder({
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* Top bar */}
       <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3">
-        <Button variant="ghost" size="icon" className="rounded-lg" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="rounded-lg" onClick={onClose} aria-label="Fermer le scénario">
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-1 items-center gap-3">

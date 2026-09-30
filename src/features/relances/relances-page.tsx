@@ -10,6 +10,7 @@ import { DialogueResultatAppel, type ChoixResultat } from './components/dialogue
 import { resultatParCle } from './resultat-appel';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
+import { EtatErreur } from '@/components/EtatErreur';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -95,7 +96,7 @@ export function RelancesPage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ['relances', filtresRequete],
     queryFn: () => fetchRelances(filtresRequete),
     placeholderData: keepPreviousData,
@@ -426,6 +427,15 @@ export function RelancesPage() {
               <Skeleton key={i} className="h-12 w-full rounded-lg" />
             ))}
           </div>
+        ) : isError ? (
+          // « Rien a relancer » et « la liste n'a pas charge » se
+          // ressemblaient a l'ecran pres. On ne range pas son telephone pour
+          // la meme raison.
+          <EtatErreur
+            titre="Relances indisponibles"
+            erreur={error}
+            onReessayer={() => void refetch()}
+          />
         ) : relances.length === 0 ? (
           <EtatVide filtre={filtre} recherche={rechercheDifferee} />
         ) : (
