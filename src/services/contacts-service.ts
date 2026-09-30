@@ -4,15 +4,51 @@ import { supabase } from '@/lib/supabase';
 import type { Contact, Vehicle, Lead, Communication, Note, Task } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
+/**
+ * Taille d'une page de lecture.
+ *
+ * Le plafond precedent -- 200 lignes, sans le dire -- coupait la liste au
+ * 200e contact le plus recent. Sur 683 fiches, 94 clients sur 136 etaient
+ * invisibles, et les cinq ecrans qui resolvent un nom de client le
+ * cherchaient dans un tiers du carnet.
+ */
+const TAILLE_PAGE = 1000;
+const PLAFOND_LECTURE = 20_000;
+
+/**
+ * Une recherche libre entre dans un filtre `or()` de PostgREST, dont la
+ * virgule et les parentheses sont la grammaire. Les laisser passer casse la
+ * requete au lieu de ne rien trouver.
+ */
+function rechercheSure(valeur: string): string {
+  return valeur.trim().replace(/[,()*\\]/g, ' ').trim();
+}
+
 export async function fetchContacts(params: { search?: string }): Promise<Contact[]> {
-  let query = supabase.from('contacts').select('*').order('created_at', { ascending: false });
-  if (params.search) {
-    const s = params.search.trim();
-    query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,city.ilike.%${s}%`);
+  const recherche = params.search ? rechercheSure(params.search) : '';
+  const tous: Contact[] = [];
+
+  // On avance du nombre de lignes reellement recues, pas de la taille
+  // demandee : PostgREST peut plafonner une reponse en dessous, et une page
+  // plus courte ne signifie pas qu'on est arrive au bout.
+  let debut = 0;
+  while (debut < PLAFOND_LECTURE) {
+    let query = supabase.from('contacts').select('*').order('created_at', { ascending: false });
+    if (recherche) {
+      query = query.or(
+        `first_name.ilike.%${recherche}%,last_name.ilike.%${recherche}%,`
+        + `phone.ilike.%${recherche}%,email.ilike.%${recherche}%,city.ilike.%${recherche}%`,
+      );
+    }
+    const { data, error } = await query.range(debut, debut + TAILLE_PAGE - 1);
+    if (error) throw new Error(error.message);
+
+    const page = (data as Contact[]) ?? [];
+    if (page.length === 0) break;
+    tous.push(...page);
+    debut += page.length;
   }
-  const { data, error } = await query.limit(200);
-  if (error) throw new Error(error.message);
-  return (data as Contact[]) ?? [];
+  return tous;
 }
 
 export async function createContact(contact: Partial<Contact>): Promise<Contact> {
@@ -61,23 +97,35 @@ export interface ResumeClientListe {
 }
 
 export async function fetchResumesClients(): Promise<Map<string, ResumeClientListe>> {
-  const { data, error } = await supabase
-    .from('v_clients')
-    .select('id, nb_interventions, derniere_intervention, est_client, derniere_facture');
-
-  if (error) throw new Error(error.message);
-
-  const resumes = new Map<string, ResumeClientListe>();
-  for (const l of (data ?? []) as {
+  type LigneResume = {
     id: string; nb_interventions: number; derniere_intervention: string | null;
     est_client: boolean; derniere_facture: string | null;
-  }[]) {
-    resumes.set(l.id, {
-      nbInterventions: Number(l.nb_interventions),
-      derniereIntervention: l.derniere_intervention,
-      estClient: Boolean(l.est_client),
-      derniereFacture: l.derniere_facture,
-    });
+  };
+
+  const resumes = new Map<string, ResumeClientListe>();
+
+  // Meme lecture par pages que les contacts : un resume qui manque, et la
+  // ligne affiche « prospect » pour quelqu'un qu'on facture.
+  let debut = 0;
+  while (debut < PLAFOND_LECTURE) {
+    const { data, error } = await supabase
+      .from('v_clients')
+      .select('id, nb_interventions, derniere_intervention, est_client, derniere_facture')
+      .order('id')
+      .range(debut, debut + TAILLE_PAGE - 1);
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as LigneResume[];
+    if (page.length === 0) break;
+    for (const l of page) {
+      resumes.set(l.id, {
+        nbInterventions: Number(l.nb_interventions),
+        derniereIntervention: l.derniere_intervention,
+        estClient: Boolean(l.est_client),
+        derniereFacture: l.derniere_facture,
+      });
+    }
+    debut += page.length;
   }
   return resumes;
 }
