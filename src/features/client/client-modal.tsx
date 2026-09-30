@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ import {
   fetchSuiviClient,
 } from '@/services/contacts-service';
 import { createNote } from '@/services/activity-service';
-import { fondDepuis } from '@/features/dossier/dossier-constants';
+import { etatApresRetour, etatVersFiche } from '@/features/dossier/dossier-constants';
 import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { Lead, Contact, Communication, Note, Task } from '@/types';
@@ -79,13 +79,16 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const { data: vehicules } = useQuery({
     queryKey: ['client-vehicules', contactId],
     queryFn: () => fetchVehiclesForContact(contactId as string),
-    enabled: !!contactId,
+    enabled: !!contactId && onglet === 'vehicules',
   });
-  const idsInterventions = (interventions ?? []).map((i) => i.id);
+  const idsInterventions = useMemo(
+    () => (interventions ?? []).map((i) => i.id),
+    [interventions],
+  );
   const { data: suivi, isLoading: suiviCharge } = useQuery({
     queryKey: ['client-suivi', contactId, idsInterventions],
     queryFn: () => fetchSuiviClient(contactId as string, idsInterventions),
-    enabled: !!contactId && interventions !== undefined,
+    enabled: !!contactId && interventions !== undefined && onglet === 'suivi',
   });
 
   const queryClient = useQueryClient();
@@ -119,7 +122,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['resumes-clients'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Intervention créée');
-      navigate(`/interventions/${lead.id}`, { state: { background: fondDepuis(location) } });
+      navigate(`/interventions/${lead.id}`, { state: etatVersFiche(location) });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -150,36 +153,66 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     majClient.mutate(propre, { onSuccess: () => apres?.() });
   };
 
-  const etat = (location.state ?? {}) as EtatOuvertureDossier;
+  const etat = useMemo(
+    () => (location.state ?? {}) as EtatOuvertureDossier,
+    [location.state],
+  );
 
-  const fermer = () => {
-    if (pleinePage || !etat.background) navigate('/contacts');
-    else navigate(-1);
-  };
+  // Une fermeture peut arriver par le bouton, le fond ou Echap presque au
+  // meme instant. Une seule navigation doit gagner, sinon la fiche peut etre
+  // demontee pendant qu'une couche modale rend encore les clics au document.
+  const fermetureEnCours = useRef(false);
+  const fermer = useCallback(() => {
+    if (fermetureEnCours.current) return;
+    fermetureEnCours.current = true;
 
-  /**
-   * Fermeture differee, demandee depuis le dialogue de confirmation.
-   *
-   * Naviguer directement depuis le bouton demonterait la fiche -- donc le
-   * dialogue avec elle -- pendant que Radix est en train de le fermer. Sa
-   * couche modale ne rendrait alors jamais les clics au reste de la page.
-   * On ferme d'abord, on navigue au rendu suivant.
-   */
-  const [fermerApresDialogue, setFermerApresDialogue] = useState(false);
+    if (etat.retour) {
+      const { pathname, search, hash } = etat.retour;
+      navigate(`${pathname}${search}${hash}`, {
+        replace: true,
+        state: etatApresRetour(etat),
+      });
+      return;
+    }
+
+    if (pleinePage || !etat.background) {
+      navigate('/contacts', { replace: true });
+      return;
+    }
+
+    const { pathname, search, hash } = etat.background;
+    navigate(`${pathname}${search}${hash}`, { replace: true });
+  }, [etat, navigate, pleinePage]);
+
+  /** Attend la fin de l'animation Radix avant de demonter la fiche. */
+  const minuteurFermeture = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!fermerApresDialogue || fermetureDemandee) return;
-    setFermerApresDialogue(false);
-    fermer();
-    // `fermer` est recree a chaque rendu : le declencheur est l'intention,
-    // pas l'identite de la fonction.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fermerApresDialogue, fermetureDemandee]);
+    return () => {
+      if (minuteurFermeture.current !== null) clearTimeout(minuteurFermeture.current);
+    };
+  }, []);
+
+  const fermerApresDialogue = useCallback(() => {
+    setFermetureDemandee(false);
+    if (minuteurFermeture.current !== null) return;
+
+    minuteurFermeture.current = setTimeout(() => {
+      minuteurFermeture.current = null;
+      fermer();
+    }, 250);
+  }, [fermer]);
+
+  const fermerAvecGarde = useCallback(() => {
+    if (majClient.isPending) return;
+    if (brouillon.estModifie) setFermetureDemandee(true);
+    else fermer();
+  }, [brouillon.estModifie, fermer, majClient.isPending]);
 
   // Depuis un client, on ouvre une intervention : la fiche dossier se
-  // superpose a celle-ci, et Echap ramene ici.
+  // substitue a celle-ci, et Echap ramene ici sans garder deux fiches montees.
   const ouvrirIntervention = (leadId: string) => {
-    navigate(`/interventions/${leadId}`, { state: { background: fondDepuis(location) } });
+    navigate(`/interventions/${leadId}`, { state: etatVersFiche(location) });
   };
 
   const nom = client
@@ -281,10 +314,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       onglets={ONGLETS}
       ongletActif={onglet}
       onChangerOnglet={setOnglet}
-      onFermer={() => {
-        if (brouillon.estModifie) setFermetureDemandee(true);
-        else fermer();
-      }}
+      onFermer={fermerAvecGarde}
       pleinePage={pleinePage}
       piedDePage={brouillon.estModifie ? (
         <BarreEnregistrement
@@ -416,21 +446,22 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
               className="rounded-full"
               onClick={() => {
                 brouillon.annuler();
-                setFermetureDemandee(false);
-                setFermerApresDialogue(true);
+                fermerApresDialogue();
               }}
             >
               Fermer sans enregistrer
             </Button>
-            <AlertDialogAction
+            <Button
               className="rounded-full"
+              disabled={majClient.isPending}
               onClick={() => {
-                setFermetureDemandee(false);
-                enregistrer(() => setFermerApresDialogue(true));
+                // Le dialogue reste ouvert tant que la base n'a pas confirme.
+                // En cas d'erreur, la saisie et les actions restent disponibles.
+                enregistrer(fermerApresDialogue);
               }}
             >
               Enregistrer et fermer
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

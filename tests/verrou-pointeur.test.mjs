@@ -34,3 +34,26 @@ test('les dialogues ouverts depuis une fiche restent au-dessus de la fiche', asy
   assert.match(dialogue, /fixed inset-0 z-50/);
   assert.match(dialogue, /fixed z-50 grid/);
 });
+
+test('la fiche client applique les memes garanties de fermeture', async () => {
+  const client = await read('src/features/client/client-modal.tsx');
+
+  assert.match(client, /fermetureEnCours\.current/);
+  assert.doesNotMatch(client, /navigate\(-1\)/);
+  assert.match(client, /setTimeout\(\(\) => \{/);
+  assert.match(client, /enregistrer\(fermerApresDialogue\)/);
+  assert.doesNotMatch(client, /<AlertDialogAction[\s\S]*Enregistrer et fermer/);
+});
+
+test("le passage entre fiches ne conserve pas l'ancienne fiche comme fond", async () => {
+  const constantes = await read('src/features/dossier/dossier-constants.ts');
+  const dossier = await read('src/features/dossier/dossier-modal.tsx');
+  const client = await read('src/features/client/client-modal.tsx');
+
+  assert.match(constantes, /retour: fondDepuis\(location\)/);
+  assert.match(constantes, /etatApresRetour/);
+  assert.match(dossier, /state: etatVersFiche\(location\)/);
+  assert.match(client, /state: etatVersFiche\(location\)/);
+  assert.doesNotMatch(dossier, /background: fondDepuis\(location\)/);
+  assert.doesNotMatch(client, /background: fondDepuis\(location\)/);
+});

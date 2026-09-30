@@ -50,8 +50,37 @@ export function fondDepuis(location: Location): FondOuverture {
 
 export interface EtatOuvertureDossier {
   background?: FondOuverture;
+  /** Fiche precedente, sans la conserver montee sous la fiche courante. */
+  retour?: FondOuverture;
   /** Identifiants de la liste filtree, pour enchainer les dossiers. */
   liste?: string[];
   /** Affiche les actions de traitement de relance. */
   mode?: 'relance';
+}
+
+/**
+ * Etat utilise pour passer d'une fiche a une autre.
+ *
+ * Le fond reste la liste d'origine. La fiche courante devient seulement une
+ * adresse de retour : elle est demontee pendant la navigation, ce qui evite
+ * d'empiler deux arbres lourds et leurs requetes sous le meme ecran.
+ */
+export function etatVersFiche(location: Location): EtatOuvertureDossier {
+  const courant = (location.state ?? {}) as EtatOuvertureDossier;
+
+  return {
+    ...(courant.background ? { background: courant.background } : {}),
+    ...(courant.liste ? { liste: courant.liste } : {}),
+    ...(courant.mode ? { mode: courant.mode } : {}),
+    retour: fondDepuis(location),
+  };
+}
+
+/** Etat restaure sur la fiche precedente, sans recreer une chaine de retours. */
+export function etatApresRetour(etat: EtatOuvertureDossier): EtatOuvertureDossier {
+  return {
+    ...(etat.background ? { background: etat.background } : {}),
+    ...(etat.liste ? { liste: etat.liste } : {}),
+    ...(etat.mode ? { mode: etat.mode } : {}),
+  };
 }

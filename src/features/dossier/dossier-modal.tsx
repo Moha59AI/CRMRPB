@@ -28,7 +28,10 @@ import { enregistrerResultatAppel } from '@/services/relances-service';
 import { messageNrp } from '@/features/relances/message-nrp';
 import { createClientDocumentRequest } from '@/services/client-documents-service';
 import { DossierContenu } from './dossier-contenu';
-import { ONGLETS, type OngletDossier, type EtatOuvertureDossier, fondDepuis } from './dossier-constants';
+import {
+  ONGLETS, type OngletDossier, type EtatOuvertureDossier,
+  etatApresRetour, etatVersFiche,
+} from './dossier-constants';
 import type { Lead, LeadStatus } from '@/types';
 
 interface DossierModalProps {
@@ -84,6 +87,15 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     if (fermetureEnCours.current) return;
     fermetureEnCours.current = true;
 
+    if (etat.retour) {
+      const { pathname, search, hash } = etat.retour;
+      navigate(`${pathname}${search}${hash}`, {
+        replace: true,
+        state: etatApresRetour(etat),
+      });
+      return;
+    }
+
     if (pleinePage || !etat.background) {
       navigate('/relances', { replace: true });
       return;
@@ -91,7 +103,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
 
     const { pathname, search, hash } = etat.background;
     navigate(`${pathname}${search}${hash}`, { replace: true });
-  }, [pleinePage, etat.background, navigate]);
+  }, [pleinePage, etat, navigate]);
 
   // On remplace l'entrée d'historique : enchaîner vingt dossiers ne doit pas
   // obliger à appuyer vingt fois sur Retour pour revenir à la liste.
@@ -364,7 +376,7 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
         </Button>
         {lead.contact_id && (
           <Button size="sm" variant="ghost" className="rounded-full"
-            onClick={() => navigate(`/clients/${lead.contact_id}`, { state: { background: fondDepuis(location) } })}>
+            onClick={() => navigate(`/clients/${lead.contact_id}`, { state: etatVersFiche(location) })}>
             <User className="mr-1.5 h-3.5 w-3.5" />Fiche client
           </Button>
         )}

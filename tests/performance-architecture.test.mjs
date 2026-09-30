@@ -26,6 +26,13 @@ test("l'adresse existante ne declenche aucune recherche avant une interaction", 
   assert.match(champ, /setInteractionUtilisateur\(false\)/);
 });
 
+test("les donnees secondaires d'un client attendent l'ouverture de leur onglet", async () => {
+  const client = await read('src/features/client/client-modal.tsx');
+
+  assert.match(client, /enabled: !!contactId && onglet === 'vehicules'/);
+  assert.match(client, /enabled: !!contactId && interventions !== undefined && onglet === 'suivi'/);
+});
+
 test("un ancien onglet recupere automatiquement les modules remplaces par un deploiement", async () => {
   const boundary = await read('src/components/ErrorBoundary.tsx');
 
