@@ -50,6 +50,7 @@ const ClientDocumentsPage = lazy(() => import('@/features/client-documents/clien
 const ClientDocumentSettingsPage = lazy(() => import('@/features/client-documents/client-document-settings-page').then((m) => ({ default: m.ClientDocumentSettingsPage })));
 const BancListe = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancListe })));
 const BancFiche = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancFiche })));
+const ApercuAccueil = lazy(() => import('@/features/diag/apercu-accueil').then((m) => ({ default: m.ApercuAccueil })));
 
 function ChargementPage({ superposee = false }: { superposee?: boolean }) {
   return (
@@ -98,6 +99,7 @@ export function AppRoutes() {
         {import.meta.env.DEV && (
           <>
             <Route path="/diag-fiche" element={charger(<BancListe />)} />
+            <Route path="/apercu-accueil" element={charger(<ApercuAccueil />)} />
             <Route path="/diag-fiche/:id" element={charger(<BancFiche pleinePage />)} />
           </>
         )}

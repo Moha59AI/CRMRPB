@@ -16,8 +16,12 @@ import { fetchAppointments, fetchTasks } from '@/services/planning-service';
 import { enregistrerObjectifAnnuel, fetchReglagesEntreprise } from '@/services/admin-service';
 import {
   calculerIndicateurs, fetchDonneesAccueil,
-  type LigneAssureur, type LigneMarque, type Taux,
+  type LigneAssureur, type LigneMarque, type MoisEvolution, type Taux,
 } from './indicateurs-accueil';
+import {
+  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import { useMouvementReduit, useNombreAnime } from '@/lib/animation';
 import type { Appointment, Task } from '@/types';
 
 /**
@@ -137,7 +141,10 @@ function Chip({ nom }: { nom: string }) {
 function Anneau({ part, taille = 44 }: { part: number | null; taille?: number }) {
   const rayon = (taille - 6) / 2;
   const circonference = 2 * Math.PI * rayon;
-  const fraction = part === null ? 0 : Math.max(0, Math.min(1, part));
+  const cible = part === null ? 0 : Math.max(0, Math.min(1, part));
+  // L'anneau se remplit depuis zero : on voit la proportion se construire,
+  // ce qui la rend plus lisible qu'un arc deja pose.
+  const fraction = useNombreAnime(cible, 1100);
   return (
     <svg width={taille} height={taille} viewBox={`0 0 ${taille} ${taille}`} className="shrink-0" aria-hidden>
       <circle cx={taille / 2} cy={taille / 2} r={rayon} fill="none" stroke="hsl(var(--border))" strokeWidth={5} />
@@ -146,6 +153,7 @@ function Anneau({ part, taille = 44 }: { part: number | null; taille?: number })
         stroke="hsl(var(--primary))" strokeWidth={5} strokeLinecap="round"
         strokeDasharray={circonference}
         strokeDashoffset={circonference * (1 - fraction)}
+        style={{ transition: 'stroke 200ms ease' }}
         transform={`rotate(-90 ${taille / 2} ${taille / 2})`}
       />
     </svg>
@@ -159,6 +167,21 @@ function Vide({ children }: { children: ReactNode }) {
 // ─────────────────────────────────────────────────────────────────────
 // Bandeau
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Un montant qui monte jusqu'a sa valeur.
+ *
+ * `tabular-nums` est indispensable : sans chasse fixe, la largeur du nombre
+ * change a chaque image et le montant tressaute pendant toute la montee.
+ */
+function ChiffreQuiMonte({ valeur, className }: { valeur: number; className?: string }) {
+  const affiche = useNombreAnime(valeur);
+  return (
+    <p className={className} aria-label={euros.format(valeur)}>
+      {euros.format(Math.round(affiche))}
+    </p>
+  );
+}
 
 function BandeauCa({
   chargement, caNet, avoirs, periode, benefice, encours, delai, devisAcceptes,
@@ -186,9 +209,10 @@ function BandeauCa({
             <Skeleton className="mt-2 h-12 w-56" />
           ) : (
             <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <p className="text-[40px] font-semibold leading-none tracking-tight text-foreground tabular-nums">
-                {euros.format(caNet)}
-              </p>
+              <ChiffreQuiMonte
+                valeur={caNet}
+                className="text-[40px] font-semibold leading-none tracking-tight text-foreground tabular-nums"
+              />
               <Pastille>Avoirs : {euros.format(avoirs)}</Pastille>
             </div>
           )}
@@ -230,6 +254,110 @@ function BandeauCa({
 // ─────────────────────────────────────────────────────────────────────
 // Cartes de la grille
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Douze mois de chiffre d'affaires, et ce qui est rentre.
+ *
+ * L'accueil disait combien on a facture cette annee, jamais comment cela a
+ * evolue. Un total ne montre ni la saison, ni le mois ou l'on a decroche.
+ *
+ * L'aire pleine est le facture ; la ligne est l'encaisse. L'ecart entre les
+ * deux se lit d'un coup d'oeil : c'est l'argent du travail deja fait qui
+ * n'est pas encore rentre.
+ */
+export function CarteEvolution({ evolution, chargement }: {
+  evolution: MoisEvolution[];
+  chargement: boolean;
+}) {
+  const reduit = useMouvementReduit();
+  const aDesPaiements = evolution.some((m) => m.encaisse > 0);
+
+  return (
+    <Carte className="p-4">
+      <TitreCarte icon={LineChart}>Évolution sur 12 mois</TitreCarte>
+      {chargement ? (
+        <Skeleton className="mt-4 h-[220px] w-full rounded-xl" />
+      ) : (
+        <>
+          <div className="mt-4 h-[220px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={evolution} margin={{ top: 4, right: 10, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="aireCa" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="libelle" tickLine={false} axisLine={false}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  // Sur 375 px, douze mois se chevauchent. Recharts saute les
+                  // etiquettes trop serrees et garde les deux extremites, qui
+                  // sont celles qui situent la periode.
+                  interval="preserveStartEnd"
+                  minTickGap={22}
+                />
+                <YAxis
+                  tickLine={false} axisLine={false} width={56}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)} k€` : `${v} €`)}
+                />
+                <Tooltip
+                  cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+                  contentStyle={{
+                    borderRadius: 14,
+                    border: '1px solid hsl(var(--border))',
+                    background: 'hsl(var(--card))',
+                    boxShadow: 'var(--shadow-2)',
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: 4 }}
+                  formatter={(valeur: number, nom: string) => [
+                    euros.format(valeur),
+                    nom === 'caNet' ? 'Facturé' : 'Encaissé',
+                  ]}
+                />
+                <Area
+                  dataKey="caNet" type="monotone"
+                  stroke="hsl(var(--chart-1))" strokeWidth={2.5}
+                  fill="url(#aireCa)"
+                  isAnimationActive={!reduit}
+                  animationDuration={1100}
+                  animationEasing="ease-out"
+                />
+                {aDesPaiements && (
+                  <Area
+                    dataKey="encaisse" type="monotone"
+                    stroke="hsl(var(--chart-2))" strokeWidth={2} strokeDasharray="4 3"
+                    fill="transparent"
+                    isAnimationActive={!reduit}
+                    animationDuration={1300}
+                    animationEasing="ease-out"
+                  />
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-4 rounded-full" style={{ background: 'hsl(var(--chart-1))' }} aria-hidden />Facturé
+            </span>
+            {aDesPaiements ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-0.5 w-4 rounded-full" style={{ background: 'hsl(var(--chart-2))' }} aria-hidden />Encaissé
+              </span>
+            ) : (
+              <span className="text-faint">
+                Aucune date de paiement saisie : la courbe d’encaissement reste vide.
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </Carte>
+  );
+}
 
 function CarteRetards({ retards, chargement }: { retards: ReturnType<typeof calculerIndicateurs>['retards']; chargement: boolean }) {
   const tranches = retards.tranches.filter((t) => t.factures > 0);
@@ -732,6 +860,11 @@ export function TodayPage() {
               legende="{n} sur {d} leads de l'année"
             />
           </div>
+
+          <CarteEvolution
+            evolution={indicateurs?.evolution ?? []}
+            chargement={chargement}
+          />
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.25fr_1fr]">
             <CarteRetards

@@ -48,6 +48,14 @@ export interface Taux {
   denominateur: number;
 }
 
+/** Un mois de la courbe : facture net, et ce qui est rentre. */
+export interface MoisEvolution {
+  cle: string;
+  libelle: string;
+  caNet: number;
+  encaisse: number;
+}
+
 export interface IndicateursAccueil {
   periode: { debut: string; fin: string; libelle: string };
 
@@ -76,6 +84,8 @@ export interface IndicateursAccueil {
   tauxConversionDevis: Taux;
   tauxLeadsAssures: Taux;
   formules: { label: string; part: number; nombre: number }[];
+  /** Les douze derniers mois, du plus ancien au plus recent. */
+  evolution: MoisEvolution[];
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -321,6 +331,63 @@ function repartitionFormules(factures: Invoice[]) {
  * soit l'annee : une facture de decembre impayee en janvier est toujours en
  * retard.
  */
+const MOIS_COURTS = [
+  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+];
+
+/**
+ * Les douze derniers mois, mois courant compris.
+ *
+ * Les mois sans facture valent bien zero -- ils sont passes, on sait qu'il ne
+ * s'y est rien facture. C'est different d'un indicateur incalculable : ici
+ * l'absence est un fait, pas une lacune.
+ */
+function evolutionMensuelle(
+  factures: Invoice[],
+  avoirs: OnifyCreditNote[],
+  paiements: Payment[],
+  maintenant: Date,
+): MoisEvolution[] {
+  const mois: MoisEvolution[] = [];
+  const index = new Map<string, MoisEvolution>();
+
+  for (let recul = 11; recul >= 0; recul -= 1) {
+    const date = new Date(maintenant.getFullYear(), maintenant.getMonth() - recul, 1);
+    const cle = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const ligne: MoisEvolution = {
+      cle,
+      libelle: MOIS_COURTS[date.getMonth()],
+      caNet: 0,
+      encaisse: 0,
+    };
+    mois.push(ligne);
+    index.set(cle, ligne);
+  }
+
+  const cleDe = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  for (const facture of factures) {
+    const ligne = index.get(cleDe(facture.issue_date) ?? '');
+    if (ligne) ligne.caNet += numerique(facture.amount_ttc);
+  }
+  for (const avoir of avoirs) {
+    const ligne = index.get(cleDe(avoir.issue_date) ?? '');
+    if (ligne) ligne.caNet -= numerique(avoir.amount_ttc);
+  }
+  for (const paiement of paiements) {
+    const ligne = index.get(cleDe(paiement.payment_date) ?? '');
+    if (ligne) ligne.encaisse += numerique(paiement.amount);
+  }
+
+  return mois.map((m) => ({ ...m, caNet: Math.max(0, Math.round(m.caNet)) }));
+}
+
 export function calculerIndicateurs(data: DonneesAccueil, maintenant = new Date()): IndicateursAccueil {
   const debut = new Date(maintenant.getFullYear(), 0, 1);
   const fin = new Date(maintenant.getFullYear(), 11, 31, 23, 59, 59, 999);
@@ -375,5 +442,6 @@ export function calculerIndicateurs(data: DonneesAccueil, maintenant = new Date(
     tauxConversionDevis: taux(devisAcceptes, devisPeriode.length),
     tauxLeadsAssures: taux(leadsAssures, leadsPeriode.length),
     formules: repartitionFormules(facturesPeriode),
+    evolution: evolutionMensuelle(facturesActives, data.credits, data.payments, maintenant),
   };
 }
