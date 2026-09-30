@@ -128,7 +128,40 @@ function normalizePhone(value: unknown): string {
 }
 
 function normalizeEmail(value: unknown): string {
-  return String(value ?? '').trim().toLocaleLowerCase('fr-FR');
+  // Un formulaire web laisse parfois « mailto: » devant l'adresse : sans ce
+  // nettoyage, la meme personne ne se reconnait pas elle-meme.
+  return String(value ?? '')
+    .replace(/^\s*mailto:\s*/i, '')
+    .trim()
+    .toLocaleLowerCase('fr-FR');
+}
+
+/**
+ * Index d'identite : un identifiant n'identifie que s'il designe une seule
+ * fiche.
+ *
+ * 32 numeros et 6 adresses sont portes par plusieurs contacts -- un foyer,
+ * une societe, et surtout `contact@relaisparebrise.fr`, que Onify pose sur
+ * 47 fiches quand le client n'a pas donne d'adresse. Indexer ces valeurs
+ * revenait a garder la derniere fiche rencontree et a rattacher un client
+ * Onify a un inconnu, en ecrasant son nom et son adresse.
+ */
+function indexDiscriminant<T>(
+  lignes: T[],
+  cle: (ligne: T) => string,
+): Map<string, T> {
+  const occurrences = new Map<string, number>();
+  for (const ligne of lignes) {
+    const valeur = cle(ligne);
+    if (valeur) occurrences.set(valeur, (occurrences.get(valeur) ?? 0) + 1);
+  }
+
+  const index = new Map<string, T>();
+  for (const ligne of lignes) {
+    const valeur = cle(ligne);
+    if (valeur && occurrences.get(valeur) === 1) index.set(valeur, ligne);
+  }
+  return index;
 }
 
 function onifyParams(params: Record<string, string | number | undefined>): string {
@@ -285,12 +318,8 @@ async function syncContacts(
   const byOnifyId = new Map((existing ?? [])
     .filter((row) => row.onify_customer_id)
     .map((row) => [String(row.onify_customer_id), row]));
-  const byPhone = new Map((existing ?? [])
-    .filter((row) => normalizePhone(row.phone))
-    .map((row) => [normalizePhone(row.phone), row]));
-  const byEmail = new Map((existing ?? [])
-    .filter((row) => normalizeEmail(row.email))
-    .map((row) => [normalizeEmail(row.email), row]));
+  const byPhone = indexDiscriminant(existing ?? [], (row) => normalizePhone(row.phone));
+  const byEmail = indexDiscriminant(existing ?? [], (row) => normalizeEmail(row.email));
   const updateRows: Json[] = [];
   const insertRows: Json[] = [];
   const syncedAt = new Date().toISOString();
