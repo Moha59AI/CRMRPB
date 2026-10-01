@@ -820,8 +820,16 @@ function LeadsTable({
             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
               {formatDate(lead.received_at || lead.created_at)}
             </TableCell>
-            <TableCell className="text-sm font-medium text-foreground whitespace-nowrap">
-              {leadName(lead)}
+            <TableCell className="whitespace-nowrap">
+              <span className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface text-[10px] font-semibold text-muted-foreground"
+                >
+                  {initialesLead(lead)}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{leadName(lead)}</span>
+              </span>
             </TableCell>
             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
               {lead.phone || '—'}
@@ -940,32 +948,43 @@ function KanbanBoard({
                 if (leadId) onStatusChange(leadId, stage.targetStatus);
               }}
             >
-              {/* Column header */}
+              {/* L'etape et son effectif tenaient dans une pastille grise,
+                  la description sur une ligne detachee en dessous. Les deux
+                  forment un seul bloc : on lit l'etape, puis ce qu'elle
+                  attend, sans chercher le lien. */}
               <div
                 className={cn(
-                  'mb-2 flex items-center justify-between rounded-lg px-3 py-2 transition-colors',
+                  'mb-2 rounded-xl border px-3 py-2.5 transition-colors',
                   dragOverColumn === stage.key
-                    ? 'bg-primary/10 ring-1 ring-primary/30'
-                    : 'bg-muted/50',
+                    ? 'border-primary/40 bg-primary/10'
+                    : 'border-transparent bg-surface',
                 )}
               >
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {stage.label}
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {colLeads.length}
-                </span>
+                <div className="flex items-center gap-2">
+                  <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                    {stage.label}
+                  </h3>
+                  <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                    {colLeads.length}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] leading-snug text-faint">
+                  {stage.description}
+                </p>
               </div>
 
-              <p className="mb-2 px-1 text-[11px] text-muted-foreground">
-                {stage.description}
-              </p>
-
               {/* Column body */}
-              <div className="flex-1 overflow-y-auto space-y-2 px-0.5 pb-2">
+              <div
+                className={cn(
+                  'flex-1 space-y-2 overflow-y-auto rounded-xl px-1 pb-2 pt-1 transition-colors',
+                  dragOverColumn === stage.key && 'bg-primary/[0.04]',
+                )}
+              >
                 {colLeads.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-border/60 p-4 text-center">
-                    <p className="text-xs text-muted-foreground/50">Aucun lead</p>
+                  <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
+                    <p className="text-xs text-faint">
+                      {dragOverColumn === stage.key ? 'Déposer ici' : 'Aucun lead'}
+                    </p>
                   </div>
                 )}
                 {colLeads.map((lead) => (
@@ -1068,7 +1087,7 @@ export function KanbanCard({
 
 // ============ COMPACT LIST VIEW ============
 
-function CompactList({
+export function CompactList({
   leads, onRowClick,
 }: {
   leads: Lead[];
@@ -1081,19 +1100,26 @@ function CompactList({
           <button
             key={lead.id}
             onClick={() => onRowClick(lead)}
-            className="flex w-full items-center gap-3 px-6 py-2 text-left hover:bg-muted/40 transition-colors"
+            className="group flex w-full items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-surface"
           >
-            <span className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground/30" />
-            <span className="text-sm font-medium text-foreground min-w-[140px] truncate">
+            {/* Un point gris de 8 px ne disait rien. Les initiales situent
+                la ligne avant qu'on en lise le nom. */}
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface text-[10px] font-semibold text-muted-foreground transition-colors group-hover:bg-card"
+            >
+              {initialesLead(lead)}
+            </span>
+            <span className="w-[190px] shrink-0 truncate text-sm font-semibold text-foreground">
               {leadName(lead)}
             </span>
-            <span className="text-xs text-muted-foreground min-w-[120px] truncate">
+            <span className="w-[120px] shrink-0 truncate text-xs tabular-nums text-muted-foreground">
               {lead.phone || '—'}
             </span>
-            <span className="text-xs text-muted-foreground flex-1 truncate">
+            <span className="flex-1 truncate text-xs text-muted-foreground">
               {lead.city || '—'}
             </span>
-            <span className={cn('min-w-[130px] truncate text-xs text-muted-foreground', !lead.glass_type && 'italic text-muted-foreground/70')}>
+            <span className={cn('w-[130px] shrink-0 truncate text-xs', lead.glass_type ? 'text-muted-foreground' : 'italic text-faint')}>
               {vitrageLabel(lead)}
             </span>
             <SourceBadge source={lead.source} className="shrink-0" />

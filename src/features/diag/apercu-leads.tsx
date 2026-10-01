@@ -7,7 +7,8 @@
 //
 // La route n'existe pas en production.
 
-import { KanbanCard } from '@/features/leads/leads-page';
+import { CompactList, KanbanCard } from '@/features/leads/leads-page';
+import { LeadPipeline } from '@/features/leads/lead-pipeline';
 import type { Lead, LeadSource, LeadStatus } from '@/types';
 
 const HEURE = 3_600_000;
@@ -111,6 +112,22 @@ export function ApercuLeads() {
               onClick={rien}
             />
           </div>
+        </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Fil d’étapes de la fiche
+        </h2>
+        <div className="space-y-3">
+          {(['new', 'documents_requested', 'appointment_scheduled', 'lost'] as LeadStatus[]).map((statut) => (
+            <LeadPipeline key={statut} statut={statut} onChangerStatut={rien} />
+          ))}
+        </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Liste compacte
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <CompactList leads={CAS.map((c) => c.lead)} onRowClick={rien} />
         </div>
       </div>
     </div>

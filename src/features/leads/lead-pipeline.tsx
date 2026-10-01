@@ -35,6 +35,9 @@ interface LeadPipelineProps {
 export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelineProps) {
   const [confirmation, setConfirmation] = useState<LeadJourneyStage | null>(null);
   const etapeCourante = leadStageForStatus(statut);
+  const parcours = leadJourneyStages.filter((e) => !e.terminal);
+  const sorties = leadJourneyStages.filter((e) => e.terminal);
+  const indexCourant = parcours.findIndex((e) => e.key === etapeCourante.key);
 
   const demanderChangement = (etape: LeadJourneyStage) => {
     if (etape.key === etapeCourante.key) return;
@@ -53,9 +56,60 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {leadJourneyStages.map((etape) => {
+      <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+        {/* Les sept etapes etaient sept boites en `flex-1`, etirees sur toute
+            la largeur : sur un grand ecran, 200 px de vide chacune pour un
+            libelle de huit caracteres. Elles prennent desormais la place de
+            leur texte, et le parcours se lit comme un fil. */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {parcours.map((etape, index) => {
+            const active = etape.key === etapeCourante.key;
+            const franchie = index < indexCourant;
+            return (
+              <div key={etape.key} className="flex shrink-0 items-center">
+                {index > 0 && (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'h-px w-3 shrink-0',
+                      franchie || active ? 'bg-primary/40' : 'bg-border',
+                    )}
+                  />
+                )}
+                <button
+                  type="button"
+                  disabled={desactive || active}
+                  onClick={() => demanderChangement(etape)}
+                  title={active ? `${etape.label} — étape actuelle` : `Passer à « ${etape.label} »`}
+                  aria-current={active ? 'step' : undefined}
+                  className={cn(
+                    'inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors',
+                    active
+                      ? 'border-primary/35 bg-primary/10 text-foreground'
+                      : franchie
+                        ? 'border-transparent bg-surface text-muted-foreground hover:bg-muted'
+                        : 'border-transparent text-faint hover:bg-surface hover:text-muted-foreground',
+                    'disabled:cursor-default disabled:opacity-100',
+                  )}
+                >
+                  {(active || franchie) && (
+                    <Check
+                      aria-hidden
+                      className={cn('h-3.5 w-3.5 shrink-0', active ? 'text-primary' : 'text-muted-foreground/60')}
+                    />
+                  )}
+                  {etape.label}
+                </button>
+              </div>
+            );
+          })}
+
+          {/* Perdu et Cloture sortent le lead du travail actif : ils ne font
+              pas partie du fil, ils le terminent. */}
+          {sorties.length > 0 && (
+            <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />
+          )}
+          {sorties.map((etape) => {
             const active = etape.key === etapeCourante.key;
             return (
               <button
@@ -66,19 +120,15 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
                 title={active ? `${etape.label} — étape actuelle` : `Passer à « ${etape.label} »`}
                 aria-current={active ? 'step' : undefined}
                 className={cn(
-                  'min-h-11 min-w-[112px] flex-1 rounded-lg border px-2.5 py-2 text-left transition-colors',
+                  'inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors',
                   active
-                    ? 'border-primary/35 bg-primary/10 text-foreground'
-                    : etape.terminal
-                      ? 'border-border bg-background text-muted-foreground hover:border-destructive/30 hover:bg-destructive/5'
-                      : 'border-transparent bg-background text-muted-foreground hover:border-border hover:bg-muted/50',
+                    ? 'border-urgent/30 bg-urgent-soft text-urgent'
+                    : 'border-border text-muted-foreground hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive',
                   'disabled:cursor-default disabled:opacity-100',
                 )}
               >
-                <span className="flex items-center gap-1.5 text-xs font-semibold">
-                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                  <span className="truncate">{etape.label}</span>
-                </span>
+                {active && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                {etape.label}
               </button>
             );
           })}
