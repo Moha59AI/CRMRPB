@@ -12,7 +12,7 @@ const resume = await readFile(
 );
 
 test('la fiche ouvre sur un resume operationnel avant les formulaires', () => {
-  assert.match(contenu, /<ProchaineAction lead=\{lead\} \/>[\s\S]*<LeadOverviewSummary lead=\{lead\} \/>/);
+  assert.match(contenu, /<ProchaineAction lead=\{lead\} \/>[\s\S]*<LeadOverviewSummary[\s\S]*lead=\{lead\}[\s\S]*onUpdate=\{onUpdate\}/);
   assert.match(resume, /Résumé opérationnel/);
   assert.match(resume, /Fiche complétée/);
   assert.match(resume, /role="progressbar"/);
@@ -24,6 +24,22 @@ test('les informations essentielles sont lisibles sans ouvrir le mode edition', 
   assert.match(resume, /Adresse d'intervention/);
   assert.match(resume, /titre="Assurance et offre"/);
   assert.match(resume, /Cadeau \/ offre/);
+});
+
+test('les informations essentielles sont modifiables directement dans le resume', () => {
+  assert.match(resume, /Modifier ici/);
+  assert.match(resume, /<ContactEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
+  assert.match(resume, /<VehiculeEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
+  assert.match(resume, /<AdresseEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
+  assert.match(resume, /<AssuranceEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
+  assert.match(resume, /<LeadAddressFields/);
+  assert.match(resume, /<ChampAssureur/);
+});
+
+test('les modifications du resume restent dans le brouillon explicite', () => {
+  assert.match(contenu, /onUpdate=\{onUpdate\}/);
+  assert.match(resume, /Les changements restent en brouillon/);
+  assert.doesNotMatch(resume, /updateLead|supabase/);
 });
 
 test('la fiche signale clairement les informations manquantes', () => {

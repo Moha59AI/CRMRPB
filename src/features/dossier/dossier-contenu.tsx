@@ -195,7 +195,11 @@ export function DossierContenu({
 
         <ProchaineAction lead={lead} />
 
-        <LeadOverviewSummary lead={lead} />
+        <LeadOverviewSummary
+          lead={lead}
+          onUpdate={onUpdate}
+          disabled={enregistrement}
+        />
 
         <Bloc titre="Note rapide">
           <Textarea
