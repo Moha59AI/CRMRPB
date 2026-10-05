@@ -1,8 +1,7 @@
 import {
-  AlertCircle, Camera, Car, CheckCircle2, Check, Gift, MapPin, Pencil, Phone, Shield,
+  AlertCircle, Car, CheckCircle2, MapPin, Phone, Shield,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { lienItineraire } from '@/services/adresse-service';
-import { LIBELLE_VITRAGE, vehicleLabel } from '@/features/leads/lead-shared';
+import { LIBELLE_VITRAGE } from '@/features/leads/lead-shared';
 import { LeadAddressFields, type ValeurAdresseLead } from '@/features/leads/lead-address-fields';
 import { ChampAssureur } from '@/features/leads/champ-assureur';
 import type { GlassType, Lead } from '@/types';
@@ -19,10 +18,9 @@ import type { GlassType, Lead } from '@/types';
 interface ResumeItemProps {
   icone: typeof Phone;
   titre: string;
-  valeur: ReactNode;
-  secondaire?: ReactNode;
   incomplet?: boolean;
-  edition?: ReactNode;
+  children: ReactNode;
+  action?: ReactNode;
 }
 
 interface LeadOverviewSummaryProps {
@@ -31,17 +29,7 @@ interface LeadOverviewSummaryProps {
   disabled?: boolean;
 }
 
-const formatMontant = new Intl.NumberFormat('fr-FR', {
-  style: 'currency',
-  currency: 'EUR',
-  maximumFractionDigits: 2,
-});
-
 export function LeadOverviewSummary({ lead, onUpdate, disabled }: LeadOverviewSummaryProps) {
-  const [edition, setEdition] = useState(false);
-
-  useEffect(() => setEdition(false), [lead.id]);
-
   const adresseDifferente = Boolean(
     lead.intervention_address || lead.intervention_postal_code || lead.intervention_city,
   );
@@ -58,13 +46,8 @@ export function LeadOverviewSummary({ lead, onUpdate, disabled }: LeadOverviewSu
     latitude: lead.latitude,
     longitude: lead.longitude,
   };
-  const adresseLisible = [adresse.address, adresse.postal_code, adresse.city]
-    .filter(Boolean)
-    .join(' ');
   const adresseComplete = Boolean(adresse.address && adresse.postal_code && adresse.city);
   const itineraire = lienItineraire(adresse);
-  const vehicule = vehicleLabel(lead);
-  const vehiculeLisible = vehicule === '—' ? '' : vehicule;
   const manquants = [
     !lead.phone && 'Téléphone',
     !adresseComplete && "Adresse d'intervention",
@@ -79,138 +62,78 @@ export function LeadOverviewSummary({ lead, onUpdate, disabled }: LeadOverviewSu
   return (
     <section
       aria-labelledby="resume-lead"
-      className={cn(
-        'rounded-xl border border-border bg-card',
-        edition ? 'overflow-visible' : 'overflow-hidden',
-      )}
+      className="overflow-visible rounded-xl border border-border bg-card"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-muted/25 px-4 py-3">
+      <div className="grid gap-3 border-b border-border bg-muted/25 px-3 py-3 sm:px-4 md:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)] md:items-center">
         <div>
           <h2 id="resume-lead" className="text-sm font-semibold text-foreground">Résumé opérationnel</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Les informations utiles pour traiter la demande sans parcourir toute la fiche.
+            Modifiez directement les informations utiles au traitement de la demande.
           </p>
         </div>
-        <div className="flex min-w-44 items-start gap-3">
-          <div className="min-w-36 flex-1">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="text-muted-foreground">Fiche complétée</span>
-              <span className="font-semibold tabular text-foreground">{champsComplets}/{totalChamps}</span>
-            </div>
-            <div
-              className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-label="Complétude de la fiche"
-              aria-valuemin={0}
-              aria-valuemax={totalChamps}
-              aria-valuenow={champsComplets}
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-[width]"
-                style={{ width: `${Math.round((champsComplets / totalChamps) * 100)}%` }}
-              />
-            </div>
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-muted-foreground">Fiche complétée</span>
+            <span className="font-semibold tabular text-foreground">{champsComplets}/{totalChamps}</span>
           </div>
-          <Button
-            type="button"
-            variant={edition ? 'secondary' : 'outline'}
-            size="sm"
-            className="h-8 shrink-0 rounded-full"
-            disabled={disabled}
-            onClick={() => setEdition((actif) => !actif)}
+          <div
+            className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label="Complétude de la fiche"
+            aria-valuemin={0}
+            aria-valuemax={totalChamps}
+            aria-valuenow={champsComplets}
           >
-            {edition ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Pencil className="mr-1.5 h-3.5 w-3.5" />}
-            {edition ? 'Terminer' : 'Modifier ici'}
-          </Button>
+            <div
+              className="h-full rounded-full bg-primary transition-[width]"
+              style={{ width: `${Math.round((champsComplets / totalChamps) * 100)}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      <div className={cn(
-        'grid gap-px bg-border',
-        edition ? 'lg:grid-cols-2' : 'sm:grid-cols-2',
-      )}>
+      <div className="grid gap-px bg-border xl:grid-cols-2">
         <ResumeItem
           icone={Phone}
           titre="Contact"
           incomplet={!lead.phone}
-          valeur={lead.phone ? (
-            <a href={`tel:${lead.phone}`} className="font-semibold text-primary hover:underline">
-              {lead.phone}
-            </a>
-          ) : 'Téléphone à renseigner'}
-          secondaire={lead.email ? (
-            <a href={`mailto:${lead.email}`} className="break-all hover:text-foreground hover:underline">
-              {lead.email}
-            </a>
-          ) : 'E-mail non renseigné'}
-          edition={edition ? (
-            <ContactEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
-          ) : undefined}
-        />
+        >
+          <ContactEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
+        </ResumeItem>
 
         <ResumeItem
           icone={Car}
           titre="Véhicule et vitrage"
           incomplet={!lead.vehicle_registration || !lead.glass_type}
-          valeur={lead.vehicle_registration || vehiculeLisible || 'Véhicule à renseigner'}
-          secondaire={
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {vehiculeLisible && lead.vehicle_registration ? <span>{vehiculeLisible}</span> : null}
-              {lead.glass_type ? <span>{LIBELLE_VITRAGE[lead.glass_type]}</span> : <span>Vitrage à qualifier</span>}
-              {lead.has_adas_camera && lead.glass_type === 'pare_brise' ? (
-                <span className="inline-flex items-center gap-1 font-medium text-due">
-                  <Camera className="h-3 w-3" /> Calibrage
-                </span>
-              ) : null}
-            </span>
-          }
-          edition={edition ? (
-            <VehiculeEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
-          ) : undefined}
-        />
+        >
+          <VehiculeEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
+        </ResumeItem>
 
         <ResumeItem
           icone={MapPin}
           titre={adresseDifferente ? "Adresse d'intervention" : 'Adresse principale utilisée'}
           incomplet={!adresseComplete}
-          valeur={adresseLisible || 'Adresse à renseigner'}
-          secondaire={itineraire ? (
+          action={itineraire ? (
             <a href={itineraire} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
               Ouvrir l’itinéraire
             </a>
-          ) : 'Aucun itinéraire disponible'}
-          edition={edition ? (
-            <AdresseEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
           ) : undefined}
-        />
+        >
+          <AdresseEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
+        </ResumeItem>
 
         <ResumeItem
           icone={Shield}
           titre="Assurance et offre"
           incomplet={!lead.insurance || !lead.offer}
-          valeur={lead.insurance || 'Assurance à renseigner'}
-          secondaire={
-            <span className="space-y-1">
-              <span className="flex items-start gap-1.5">
-                <Gift className="mt-0.5 h-3 w-3 shrink-0" />
-                <span>{lead.offer || 'Cadeau / offre à renseigner'}</span>
-              </span>
-              {lead.franchise_amount != null ? (
-                <span className="block">Reste à charge : {formatMontant.format(lead.franchise_amount)}</span>
-              ) : null}
-            </span>
-          }
-          edition={edition ? (
-            <AssuranceEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
-          ) : undefined}
-        />
+        >
+          <AssuranceEditor lead={lead} onUpdate={onUpdate} disabled={disabled} />
+        </ResumeItem>
       </div>
 
-      {edition ? (
-        <div className="border-t border-primary/15 bg-primary/5 px-4 py-2 text-xs text-muted-foreground">
-          Les changements restent en brouillon jusqu’à ce que vous appuyiez sur « Enregistrer ».
-        </div>
-      ) : null}
+      <div className="border-t border-primary/15 bg-primary/5 px-3 py-2 text-xs text-muted-foreground sm:px-4">
+        Les champs sont toujours modifiables. Les changements restent en brouillon jusqu’à ce que vous appuyiez sur « Enregistrer ».
+      </div>
 
       <div className={cn(
         'flex items-start gap-2.5 border-t px-4 py-3 text-xs',
@@ -236,24 +159,20 @@ export function LeadOverviewSummary({ lead, onUpdate, disabled }: LeadOverviewSu
   );
 }
 
-function ResumeItem({ icone: Icone, titre, valeur, secondaire, incomplet, edition }: ResumeItemProps) {
+function ResumeItem({ icone: Icone, titre, incomplet, children, action }: ResumeItemProps) {
   return (
-    <div className="min-w-0 bg-card p-4">
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <Icone className="h-3.5 w-3.5 shrink-0" />
-        <span>{titre}</span>
-        {incomplet ? <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-due">À compléter</span> : null}
+    <div className="min-w-0 bg-card p-3 sm:p-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <Icone className="h-3.5 w-3.5 shrink-0" />
+          <span>{titre}</span>
+        </span>
+        <span className="ml-auto flex items-center gap-3">
+          {action}
+          {incomplet ? <span className="text-[10px] font-semibold uppercase tracking-wide text-due">À compléter</span> : null}
+        </span>
       </div>
-      {edition ? (
-        <div className="mt-3">{edition}</div>
-      ) : (
-        <>
-          <div className={cn('mt-2 break-words text-sm font-medium', incomplet && 'text-muted-foreground')}>
-            {valeur}
-          </div>
-          {secondaire ? <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{secondaire}</div> : null}
-        </>
-      )}
+      <div className="mt-3 min-w-0">{children}</div>
     </div>
   );
 }

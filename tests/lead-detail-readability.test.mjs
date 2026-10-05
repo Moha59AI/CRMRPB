@@ -18,7 +18,7 @@ test('la fiche ouvre sur un resume operationnel avant les formulaires', () => {
   assert.match(resume, /role="progressbar"/);
 });
 
-test('les informations essentielles sont lisibles sans ouvrir le mode edition', () => {
+test('les informations essentielles sont organisees en quatre blocs lisibles', () => {
   assert.match(resume, /titre="Contact"/);
   assert.match(resume, /titre="Véhicule et vitrage"/);
   assert.match(resume, /Adresse d'intervention/);
@@ -27,13 +27,16 @@ test('les informations essentielles sont lisibles sans ouvrir le mode edition', 
 });
 
 test('les informations essentielles sont modifiables directement dans le resume', () => {
-  assert.match(resume, /Modifier ici/);
+  assert.doesNotMatch(resume, /Modifier ici|Terminer/);
   assert.match(resume, /<ContactEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
   assert.match(resume, /<VehiculeEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
   assert.match(resume, /<AdresseEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
   assert.match(resume, /<AssuranceEditor lead=\{lead\} onUpdate=\{onUpdate\}/);
   assert.match(resume, /<LeadAddressFields/);
   assert.match(resume, /<ChampAssureur/);
+  assert.match(resume, /Les champs sont toujours modifiables/);
+  assert.match(resume, /xl:grid-cols-2/);
+  assert.match(resume, /grid gap-3 sm:grid-cols-2/);
 });
 
 test('les modifications du resume restent dans le brouillon explicite', () => {
