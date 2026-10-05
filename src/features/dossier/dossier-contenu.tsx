@@ -8,6 +8,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { LeadIdentity, LeadQualification } from '@/features/leads/lead-qualification';
 import {
@@ -26,6 +29,7 @@ import { FacturationClient } from '@/features/billing/facturation-client';
 import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
+import { LeadOverviewSummary } from './lead-overview-summary';
 
 interface EvenementTimeline {
   cle: string;
@@ -191,19 +195,7 @@ export function DossierContenu({
 
         <ProchaineAction lead={lead} />
 
-        <LeadAiAssistant
-          lead={lead}
-          notes={notes ?? []}
-          onVoirHistorique={onVoirHistorique}
-        />
-
-        <Bloc titre="Client et coordonnées">
-          <LeadIdentity lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
-        </Bloc>
-
-        <Bloc titre="Intervention et qualification">
-          <LeadQualification lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
-        </Bloc>
+        <LeadOverviewSummary lead={lead} />
 
         <Bloc titre="Note rapide">
           <Textarea
@@ -224,19 +216,37 @@ export function DossierContenu({
           </div>
         </Bloc>
 
-        <Bloc titre="Derniers échanges">
-          <Timeline evenements={timeline.slice(0, 8)} chargement={chargeComms} />
-        </Bloc>
+        <LeadAiAssistant
+          lead={lead}
+          notes={notes ?? []}
+          onVoirHistorique={onVoirHistorique}
+        />
+
+        <EditionLead
+          lead={lead}
+          onUpdate={onUpdate}
+          enregistrement={enregistrement}
+        />
       </div>
 
-      {/* Colonne laterale : ce qu'on consulte, et qu'on ne saisit pas pendant
-          l'appel.
-
-          Les cartes « Résumé client », « Véhicule » et « Assurance » ont été
-          retirées : elles répétaient mot pour mot les champs éditables de la
-          colonne de gauche. On lisait deux fois la même chose, côte à côte, ce
-          qui allongeait la fiche sans rien apprendre. */}
+      {/* Colonne laterale : historique et metadonnees stables, consultables
+          sans interrompre la saisie de la colonne principale. */}
       <div className="space-y-4">
+        <Bloc titre="Derniers échanges">
+          <Timeline evenements={timeline.slice(0, 5)} chargement={chargeComms} />
+          {timeline.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-3 w-full rounded-full"
+              onClick={onVoirHistorique}
+            >
+              Voir tout l’historique
+            </Button>
+          )}
+        </Bloc>
+
         {autresInterventions && autresInterventions.length > 0 && (
           <section className="rounded-xl border border-border bg-card p-4">
             <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -296,6 +306,55 @@ export function DossierContenu({
         onOpenChange={setBonCadeauOuvert}
       />
     </>
+  );
+}
+
+function EditionLead({
+  lead, onUpdate, enregistrement,
+}: {
+  lead: Lead;
+  onUpdate: (updates: Partial<Lead>) => void;
+  enregistrement: boolean;
+}) {
+  return (
+    <section aria-labelledby="modifier-fiche" className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border bg-muted/25 px-4 py-3">
+        <h2 id="modifier-fiche" className="text-sm font-semibold text-foreground">Modifier la fiche</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Ouvrez uniquement la partie nécessaire. Les changements restent en brouillon jusqu’à l’enregistrement.
+        </p>
+      </div>
+
+      <Accordion type="multiple" className="px-4">
+        <AccordionItem value="client">
+          <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Client et coordonnées</span>
+              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                Identité, téléphone, e-mail et adresse principale
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-5">
+            <LeadIdentity lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="intervention" className="border-b-0">
+          <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Intervention et qualification</span>
+              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                Vitrage, véhicule, lieu, assurance et cadeau
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-5">
+            <LeadQualification lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </section>
   );
 }
 
