@@ -314,11 +314,37 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
       .in('role', ['admin', 'manager', 'advisor']);
     if (recipientsError) throw recipientsError;
 
+    // « Documents client reçus » ne disait pas de quel client : il fallait
+    // ouvrir la fiche pour le savoir, et avec plusieurs dossiers ouverts on
+    // ne savait pas lequel venait d'avancer.
+    const { data: lead } = await admin
+      .from('leads')
+      .select('first_name, last_name, vehicle_make, vehicle_model, vehicle_registration')
+      .eq('id', request.lead_id)
+      .maybeSingle();
+
+    const nomClient = [lead?.first_name, lead?.last_name]
+      .map((partie) => (typeof partie === 'string' ? partie.trim() : ''))
+      .filter(Boolean)
+      .join(' ') || 'Client sans nom';
+
+    // Le vehicule distingue deux interventions du meme client.
+    const vehicule = [lead?.vehicle_make, lead?.vehicle_model]
+      .map((partie) => (typeof partie === 'string' ? partie.trim() : ''))
+      .filter(Boolean)
+      .join(' ');
+    const plaque = typeof lead?.vehicle_registration === 'string'
+      ? lead.vehicle_registration.trim()
+      : '';
+    const precisions = [vehicule, plaque].filter(Boolean).join(' · ');
+
     const notificationRows = (recipients ?? []).map((recipient) => ({
         workspace_id: request.workspace_id,
         user_id: recipient.id,
-        title: 'Documents client reçus',
-        body: 'Toutes les pièces obligatoires ont été déposées.',
+        title: `Documents reçus — ${nomClient}`,
+        body: precisions
+          ? `Toutes les pièces obligatoires ont été déposées. ${precisions}`
+          : 'Toutes les pièces obligatoires ont été déposées.',
         type: 'documents_received',
         link: `/interventions/${request.lead_id}`,
       }));
