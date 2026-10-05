@@ -36,6 +36,7 @@ import { createNote } from '@/services/activity-service';
 import { etatApresRetour, etatVersFiche } from '@/features/dossier/dossier-constants';
 import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
 import { FacturationClient } from '@/features/billing/facturation-client';
+import { FacturesArchivees } from '@/features/billing/factures-archivees';
 import { useAuth } from '@/features/auth/auth-context';
 import { cheminAutorise } from '@/config/permissions';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
@@ -357,7 +358,12 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
       ) : onglet === 'facturation' ? (
         <FacturationClient contactId={contactId as string} />
       ) : onglet === 'documents' ? (
-        <ClientDocumentHistory interventions={interventions ?? []} />
+        <div className="space-y-6">
+          {/* Les factures sont des documents du client comme les autres, et
+              elles sont gardees chez nous : c'est ici qu'on les cherche. */}
+          {voitFacturation && <FacturesArchivees contactId={contactId as string} />}
+          <ClientDocumentHistory interventions={interventions ?? []} />
+        </div>
       ) : onglet === 'interventions' ? (
         <ListeInterventions
           interventions={interventions ?? []}
