@@ -266,14 +266,15 @@ export async function enregistrerResultatAppel(params: {
   prochaineAction: string | null;
   note?: string | null;
 }): Promise<void> {
-  const { error } = await supabase
-    .from('leads')
-    .update({
-      status: params.statut,
-      next_action_at: params.prochaineAction,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.leadId);
+  // Passe par la base plutot que par une mise a jour directe : c'est elle
+  // qui compte la tentative. Le compteur ne suivait que les lignes de
+  // communication, qu'un « sans reponse » marque depuis la fiche n'ecrit
+  // pas -- la cadence restait alors bloquee sur sa premiere marche.
+  const { error } = await supabase.rpc('enregistrer_resultat_appel', {
+    p_lead_id: params.leadId,
+    p_statut: params.statut,
+    p_prochaine_action: params.prochaineAction,
+  });
 
   if (error) throw new Error(error.message);
 
