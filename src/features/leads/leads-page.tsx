@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   checkDuplicateLead, createLead, fetchLeads, seedDemoLeads, updateLead, supprimerLead,
-  archiverLeadsSelectionnes, desarchiverLeadsSelectionnes,
+  archiverLeadsSelectionnes, changerStatutLeadsSelectionnes, desarchiverLeadsSelectionnes,
 } from '@/services/leads-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { LeadAddressFields } from './lead-address-fields';
@@ -59,6 +59,7 @@ import {
 } from './lead-shared';
 import { StatusBadge } from './status-badge';
 import { SourceBadge } from './source-badge';
+import { BulkLeadActions } from './bulk-lead-actions';
 
 // ============ MAIN PAGE ============
 
@@ -149,6 +150,8 @@ export function LeadsPage() {
   const [voirArchives, setVoirArchives] = useState(false);
   const [voirAArchiver, setVoirAArchiver] = useState(false);
   const [selectionArchives, setSelectionArchives] = useState<Set<string>>(new Set());
+  const [selectionLeads, setSelectionLeads] = useState<Set<string>>(new Set());
+  const [statutLot, setStatutLot] = useState<LeadStatus | ''>('');
   const [suppressionOuverte, setSuppressionOuverte] = useState(false);
   const [aSupprimer, setASupprimer] = useState<Lead | null>(null);
 
@@ -156,6 +159,8 @@ export function LeadsPage() {
   // lignes devenues invisibles après un changement de recherche ou de vue.
   useEffect(() => {
     setSelectionArchives(new Set());
+    setSelectionLeads(new Set());
+    setStatutLot('');
   }, [search, sourceFilter, statusFilter, advisorFilter, voirArchives, voirAArchiver]);
 
   const suppressionUnitaire = useMutation({
@@ -211,6 +216,22 @@ export function LeadsPage() {
     onError: (err: Error) => toast.error(messageErreurBase(err.message)),
   });
 
+  const updateStatusLotMutation = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: LeadStatus }) =>
+      changerStatutLeadsSelectionnes(ids, status),
+    onSuccess: (nombre, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['relances'] });
+      queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
+      setSelectionLeads(new Set());
+      setStatutLot('');
+      toast.success(
+        `${nombre} fiche${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers ${statusLabels[variables.status]}`,
+      );
+    },
+    onError: (err: Error) => toast.error(messageErreurBase(err.message)),
+  });
+
   const mutationArchives = useMutation({
     mutationFn: (ids: string[]) => voirArchives
       ? desarchiverLeadsSelectionnes(ids)
@@ -259,6 +280,25 @@ export function LeadsPage() {
     }
     updateStatusMutation.mutate({ id: leadId, status: newStatus });
   }, [leads, updateStatusMutation]);
+
+  const basculerSelectionLead = useCallback((leadId: string, actif: boolean) => {
+    setSelectionLeads((selectionActuelle) => {
+      const prochaineSelection = new Set(selectionActuelle);
+      if (actif) prochaineSelection.add(leadId);
+      else prochaineSelection.delete(leadId);
+      return prochaineSelection;
+    });
+  }, []);
+
+  const tousLesLeadsSelectionnes = !!leads?.length
+    && leads.every((lead) => selectionLeads.has(lead.id));
+
+  const basculerTousLesLeads = useCallback(() => {
+    if (!leads) return;
+    setSelectionLeads(
+      tousLesLeadsSelectionnes ? new Set() : new Set(leads.map((lead) => lead.id)),
+    );
+  }, [leads, tousLesLeadsSelectionnes]);
 
   const hasFilters = !!search || sourceFilter !== 'all' || statusFilter !== 'all' || advisorFilter !== 'all';
 
@@ -420,6 +460,26 @@ export function LeadsPage() {
         )}
       </div>
 
+      {!voirArchives && !voirAArchiver && selectionLeads.size > 0 && leads && (
+        <BulkLeadActions
+          selectionCount={selectionLeads.size}
+          totalVisible={leads.length}
+          tousSelectionnes={tousLesLeadsSelectionnes}
+          statutCible={statutLot}
+          enCours={updateStatusLotMutation.isPending}
+          onStatutCibleChange={setStatutLot}
+          onBasculerTout={basculerTousLesLeads}
+          onEffacer={() => {
+            setSelectionLeads(new Set());
+            setStatutLot('');
+          }}
+          onAppliquer={(status) => updateStatusLotMutation.mutate({
+            ids: [...selectionLeads],
+            status,
+          })}
+        />
+      )}
+
       {/* Content area */}
       <div className="flex-1 overflow-hidden">
         {isLoading && <LoadingState view={view} />}
@@ -453,6 +513,8 @@ export function LeadsPage() {
             ) : estMobile ? (
               <ListeMobile
                 leads={leads}
+                selection={selectionLeads}
+                onSelectionChange={basculerSelectionLead}
                 onOuvrir={(lead) => ouvrirIntervention(lead.id)}
                 onSupprimer={
                   peutSupprimer(profileCourant?.role ?? null) ? setASupprimer : undefined
@@ -462,6 +524,10 @@ export function LeadsPage() {
               <LeadsTable
                 leads={leads}
                 advisorMap={advisorMap}
+                selection={selectionLeads}
+                tousSelectionnes={tousLesLeadsSelectionnes}
+                onSelectionChange={basculerSelectionLead}
+                onBasculerTout={basculerTousLesLeads}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
                 onStatusChange={handleStatusChange}
                 onSupprimer={
@@ -471,12 +537,16 @@ export function LeadsPage() {
             ) : view === 'kanban' ? (
               <KanbanBoard
                 leads={leads}
+                selection={selectionLeads}
+                onSelectionChange={basculerSelectionLead}
                 onStatusChange={handleStatusChange}
                 onCardClick={(lead) => ouvrirIntervention(lead.id)}
               />
             ) : (
               <CompactList
                 leads={leads}
+                selection={selectionLeads}
+                onSelectionChange={basculerSelectionLead}
                 onRowClick={(lead) => ouvrirIntervention(lead.id)}
               />
             )}
@@ -716,9 +786,11 @@ function ViewToggleButton({
  * rester a un doigt.
  */
 function ListeMobile({
-  leads, onOuvrir, onSupprimer,
+  leads, selection, onSelectionChange, onOuvrir, onSupprimer,
 }: {
   leads: Lead[];
+  selection: Set<string>;
+  onSelectionChange: (leadId: string, actif: boolean) => void;
   onOuvrir: (lead: Lead) => void;
   onSupprimer?: (lead: Lead) => void;
 }) {
@@ -726,7 +798,17 @@ function ListeMobile({
     <div className="h-full overflow-y-auto">
       <ul className="divide-y divide-border">
         {leads.map((lead) => (
-          <li key={lead.id} className="flex items-stretch">
+          <li
+            key={lead.id}
+            className={cn('flex items-stretch', selection.has(lead.id) && 'bg-primary/[0.045]')}
+          >
+            <div className="flex w-11 shrink-0 items-center justify-center">
+              <Checkbox
+                checked={selection.has(lead.id)}
+                onCheckedChange={(valeur) => onSelectionChange(lead.id, valeur === true)}
+                aria-label={`Sélectionner ${leadName(lead)}`}
+              />
+            </div>
             <button
               type="button"
               onClick={() => onOuvrir(lead)}
@@ -780,10 +862,15 @@ function ListeMobile({
 }
 
 function LeadsTable({
-  leads, advisorMap, onRowClick, onStatusChange, onSupprimer,
+  leads, advisorMap, selection, tousSelectionnes, onSelectionChange,
+  onBasculerTout, onRowClick, onStatusChange, onSupprimer,
 }: {
   leads: Lead[];
   advisorMap: Map<string, Profile>;
+  selection: Set<string>;
+  tousSelectionnes: boolean;
+  onSelectionChange: (leadId: string, actif: boolean) => void;
+  onBasculerTout: () => void;
   onRowClick: (lead: Lead) => void;
   onStatusChange: (leadId: string, status: LeadStatus) => void;
   /** Absent quand le role ne permet pas de supprimer. */
@@ -794,6 +881,13 @@ function LeadsTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            <TableHead className="w-11 px-3">
+              <Checkbox
+                checked={tousSelectionnes ? true : selection.size > 0 ? 'indeterminate' : false}
+                onCheckedChange={onBasculerTout}
+                aria-label="Sélectionner tous les leads visibles"
+              />
+            </TableHead>
             <TableHead className="text-xs">Date</TableHead>
             <TableHead className="text-xs">Nom</TableHead>
         <TableHead className="text-xs">Téléphone</TableHead>
@@ -814,9 +908,19 @@ function LeadsTable({
         return (
           <TableRow
             key={lead.id}
-            className="cursor-pointer hover:bg-muted/40"
+            className={cn(
+              'cursor-pointer hover:bg-muted/40',
+              selection.has(lead.id) && 'bg-primary/[0.045]',
+            )}
             onClick={() => onRowClick(lead)}
           >
+            <TableCell className="w-11 px-3" onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={selection.has(lead.id)}
+                onCheckedChange={(valeur) => onSelectionChange(lead.id, valeur === true)}
+                aria-label={`Sélectionner ${leadName(lead)}`}
+              />
+            </TableCell>
             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
               {formatDate(lead.received_at || lead.created_at)}
             </TableCell>
@@ -908,9 +1012,11 @@ function LeadsTable({
 // ============ KANBAN VIEW ============
 
 function KanbanBoard({
-  leads, onStatusChange, onCardClick,
+  leads, selection, onSelectionChange, onStatusChange, onCardClick,
 }: {
   leads: Lead[];
+  selection: Set<string>;
+  onSelectionChange: (leadId: string, actif: boolean) => void;
   onStatusChange: (leadId: string, status: LeadStatus) => void;
   onCardClick: (lead: Lead) => void;
 }) {
@@ -991,7 +1097,9 @@ function KanbanBoard({
                   <KanbanCard
                     key={lead.id}
                     lead={lead}
+                    selectionne={selection.has(lead.id)}
                     isDragging={draggingId === lead.id}
+                    onSelectionChange={(actif) => onSelectionChange(lead.id, actif)}
                     onDragStart={() => setDraggingId(lead.id)}
                     onDragEnd={() => { setDraggingId(null); setDragOverColumn(null); }}
                     onClick={() => onCardClick(lead)}
@@ -1007,10 +1115,12 @@ function KanbanBoard({
 }
 
 export function KanbanCard({
-  lead, isDragging, onDragStart, onDragEnd, onClick,
+  lead, selectionne, isDragging, onSelectionChange, onDragStart, onDragEnd, onClick,
 }: {
   lead: Lead;
+  selectionne?: boolean;
   isDragging: boolean;
+  onSelectionChange?: (actif: boolean) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
@@ -1032,12 +1142,26 @@ export function KanbanCard({
         'transition-[box-shadow,transform,border-color] duration-200',
         'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg',
         'active:cursor-grabbing active:translate-y-0',
+        selectionne && 'border-primary/30 bg-primary/[0.045] ring-1 ring-primary/15',
         isDragging && 'rotate-1 opacity-40 shadow-none',
       )}
     >
       {/* Une identite, pas une liste de champs : la pastille ancre l'oeil et
           le nom tient la premiere ligne a lui seul. */}
       <div className="flex items-center gap-2.5">
+        {onSelectionChange && (
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={selectionne === true}
+              onCheckedChange={(valeur) => onSelectionChange(valeur === true)}
+              aria-label={`Sélectionner ${leadName(lead)}`}
+            />
+          </span>
+        )}
         <span
           aria-hidden
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-[11px] font-semibold text-muted-foreground"
@@ -1088,44 +1212,60 @@ export function KanbanCard({
 // ============ COMPACT LIST VIEW ============
 
 export function CompactList({
-  leads, onRowClick,
+  leads, selection, onSelectionChange, onRowClick,
 }: {
   leads: Lead[];
+  selection?: Set<string>;
+  onSelectionChange?: (leadId: string, actif: boolean) => void;
   onRowClick: (lead: Lead) => void;
 }) {
+  const selectionActive = selection ?? new Set<string>();
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="divide-y divide-border">
         {leads.map((lead) => (
-          <button
+          <div
             key={lead.id}
-            onClick={() => onRowClick(lead)}
-            className="group flex w-full items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-surface"
+            className={cn('flex items-stretch', selectionActive.has(lead.id) && 'bg-primary/[0.045]')}
           >
-            {/* Un point gris de 8 px ne disait rien. Les initiales situent
-                la ligne avant qu'on en lise le nom. */}
-            <span
-              aria-hidden
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface text-[10px] font-semibold text-muted-foreground transition-colors group-hover:bg-card"
+            {onSelectionChange && (
+              <div className="flex w-12 shrink-0 items-center justify-center">
+                <Checkbox
+                  checked={selectionActive.has(lead.id)}
+                  onCheckedChange={(valeur) => onSelectionChange(lead.id, valeur === true)}
+                  aria-label={`Sélectionner ${leadName(lead)}`}
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => onRowClick(lead)}
+              className="group flex min-w-0 flex-1 items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-surface"
             >
-              {initialesLead(lead)}
-            </span>
-            <span className="w-[190px] shrink-0 truncate text-sm font-semibold text-foreground">
-              {leadName(lead)}
-            </span>
-            <span className="w-[120px] shrink-0 truncate text-xs tabular-nums text-muted-foreground">
-              {lead.phone || '—'}
-            </span>
-            <span className="flex-1 truncate text-xs text-muted-foreground">
-              {lead.city || '—'}
-            </span>
-            <span className={cn('w-[130px] shrink-0 truncate text-xs', lead.glass_type ? 'text-muted-foreground' : 'italic text-faint')}>
-              {vitrageLabel(lead)}
-            </span>
-            <SourceBadge source={lead.source} className="shrink-0" />
-            <StatusBadge status={lead.status} className="shrink-0" />
-            <BadgeAttente lead={lead} compact />
-          </button>
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface text-[10px] font-semibold text-muted-foreground transition-colors group-hover:bg-card"
+              >
+                {initialesLead(lead)}
+              </span>
+              <span className="w-[190px] shrink-0 truncate text-sm font-semibold text-foreground">
+                {leadName(lead)}
+              </span>
+              <span className="w-[120px] shrink-0 truncate text-xs tabular-nums text-muted-foreground">
+                {lead.phone || '—'}
+              </span>
+              <span className="flex-1 truncate text-xs text-muted-foreground">
+                {lead.city || '—'}
+              </span>
+              <span className={cn('w-[130px] shrink-0 truncate text-xs', lead.glass_type ? 'text-muted-foreground' : 'italic text-faint')}>
+                {vitrageLabel(lead)}
+              </span>
+              <SourceBadge source={lead.source} className="shrink-0" />
+              <StatusBadge status={lead.status} className="shrink-0" />
+              <BadgeAttente lead={lead} compact />
+            </button>
+          </div>
         ))}
       </div>
     </div>

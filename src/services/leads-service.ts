@@ -61,6 +61,37 @@ export async function updateLeadStatus(id: string, status: string): Promise<{ er
   return { error: error?.message ?? null };
 }
 
+/**
+ * Change l'etape des fiches explicitement selectionnees.
+ *
+ * La relecture des identifiants mis a jour detecte une eventuelle ecriture
+ * partielle (RLS, fiche supprimee entre-temps) au lieu d'afficher un faux
+ * succes pour tout le lot.
+ */
+export async function changerStatutLeadsSelectionnes(
+  leadIds: string[],
+  status: LeadStatus,
+): Promise<number> {
+  if (leadIds.length === 0) return 0;
+
+  const idsUniques = [...new Set(leadIds)];
+  const { data, error } = await supabase
+    .from('leads')
+    .update({ status })
+    .in('id', idsUniques)
+    .is('archived_at', null)
+    .select('id');
+
+  if (error) throw new Error(error.message);
+  const nombre = data?.length ?? 0;
+  if (nombre !== idsUniques.length) {
+    throw new Error(
+      `${nombre} fiche(s) modifiée(s) sur ${idsUniques.length}. Actualisez la liste avant de réessayer.`,
+    );
+  }
+  return nombre;
+}
+
 export async function updateLead(id: string, updates: Partial<Lead>): Promise<{ error: string | null }> {
   const { error } = await supabase.from('leads').update(updates).eq('id', id);
   return { error: error?.message ?? null };
