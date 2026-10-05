@@ -9,6 +9,7 @@ import { ClocheNotifications } from '@/components/ClocheNotifications';
 import { CopilotRadar } from '@/features/ai/copilot-radar';
 import { BarreOnglets } from '@/components/BarreOnglets';
 import { useTitrePage } from '@/hooks/use-titre-page';
+import { useEstMobile } from '@/hooks/use-media-query';
 import { APP_NAME } from '@/config/constants';
 import { useAuth } from '@/features/auth/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -21,6 +22,7 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
+  const estMobile = useEstMobile();
   useTitrePage();
 
   // Les entrees inaccessibles disparaissent au lieu d'etre affichees puis
@@ -130,7 +132,7 @@ export function AppLayout() {
 
         <div className="border-t border-border p-2">
           <div className="mb-1">
-            <ClocheNotifications reduit={!expanded} />
+            {!estMobile && <ClocheNotifications reduit={!expanded} />}
           </div>
           <div className="mb-1">
             <SelecteurTheme reduit={!expanded} />
@@ -211,7 +213,7 @@ export function AppLayout() {
           </div>
 
           <div className="w-11 shrink-0">
-            <ClocheNotifications reduit />
+            {estMobile && <ClocheNotifications reduit mobile />}
           </div>
 
           <Avatar className="h-8 w-8 shrink-0">

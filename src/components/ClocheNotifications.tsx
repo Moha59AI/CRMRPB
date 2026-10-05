@@ -1,36 +1,116 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
-  Bell, BellRing, Check, TrendingUp, BellOff, Volume2, Loader2, Smartphone,
+  Bell,
+  BellOff,
+  BellRing,
+  Check,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
+  FileCheck2,
+  Inbox,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Smartphone,
+  Sparkles,
+  UserRoundPlus,
+  Volume2,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  Popover, PopoverContent, PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/features/auth/auth-context';
 import {
-  fetchNotifications, compterNonLues, marquerLue, marquerToutesLues,
+  compterNonLues,
   ecouterNotifications,
+  fetchNotifications,
+  marquerLue,
+  marquerToutesLues,
 } from '@/services/notifications-service';
 import type { Notification } from '@/types';
 import {
-  etatAlertes, demanderAlertes, afficherAlerte, testerAlertes, verifierAlertes,
+  afficherAlerte,
+  demanderAlertes,
+  etatAlertes,
+  testerAlertes,
+  verifierAlertes,
   type EtatAlertes,
 } from '@/lib/alertes';
 
-/**
- * Cloche des notifications.
- *
- * L'arrivée se fait en temps réel : une notification qui n'apparaîtrait qu'au
- * rechargement n'est pas une notification, c'est une liste.
- *
- * Quand le navigateur l'autorise, une alerte système double l'affichage — un
- * conseiller qui a le CRM dans un onglet en arrière-plan ne verrait jamais la
- * pastille. La permission n'est demandée qu'au premier clic sur la cloche :
- * la réclamer au chargement fait refuser par réflexe.
- */
+const CLE_NOTIFICATIONS = ['notifications'] as const;
+const CLE_COMPTEUR = ['notifications-unread-count'] as const;
+
+type FiltreNotification = 'toutes' | 'non_lues' | 'leads' | 'actions' | 'messages';
+type CategorieNotification = Exclude<FiltreNotification, 'toutes' | 'non_lues'>;
+
+interface ApparenceNotification {
+  categorie: CategorieNotification;
+  etiquette: string;
+  Icone: LucideIcon;
+  classeIcone: string;
+}
+
+const APPARENCE_PAR_TYPE: Record<string, ApparenceNotification> = {
+  lead: {
+    categorie: 'leads',
+    etiquette: 'Lead',
+    Icone: UserRoundPlus,
+    classeIcone: 'bg-primary/10 text-primary',
+  },
+  documents_received: {
+    categorie: 'messages',
+    etiquette: 'Documents',
+    Icone: FileCheck2,
+    classeIcone: 'bg-done-soft text-done',
+  },
+  email_received: {
+    categorie: 'messages',
+    etiquette: 'Email',
+    Icone: Mail,
+    classeIcone: 'bg-upcoming-soft text-upcoming',
+  },
+  ai: {
+    categorie: 'actions',
+    etiquette: 'Copilote',
+    Icone: Sparkles,
+    classeIcone: 'bg-due-soft text-due',
+  },
+  workflow: {
+    categorie: 'actions',
+    etiquette: 'À traiter',
+    Icone: Clock3,
+    classeIcone: 'bg-urgent-soft text-urgent',
+  },
+};
+
+const APPARENCE_DEFAUT: ApparenceNotification = {
+  categorie: 'actions',
+  etiquette: 'Information',
+  Icone: Bell,
+  classeIcone: 'bg-muted text-muted-foreground',
+};
+
+const FILTRES: Array<{ id: FiltreNotification; label: string }> = [
+  { id: 'toutes', label: 'Toutes' },
+  { id: 'non_lues', label: 'Non lues' },
+  { id: 'leads', label: 'Leads' },
+  { id: 'actions', label: 'À traiter' },
+  { id: 'messages', label: 'Messages' },
+];
+
+function apparenceNotification(notification: Notification): ApparenceNotification {
+  return APPARENCE_PAR_TYPE[notification.type] ?? APPARENCE_DEFAUT;
+}
 
 function ilYA(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -40,14 +120,59 @@ function ilYA(iso: string): string {
   const h = Math.floor(min / 60);
   if (h < 24) return `il y a ${h} h`;
   const j = Math.floor(h / 24);
-  return j === 1 ? 'hier' : `il y a ${j} jours`;
+  if (j === 1) return 'hier';
+  if (j < 7) return `il y a ${j} jours`;
+  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(new Date(iso));
 }
 
-export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
+function groupeDate(iso: string): string {
+  const date = new Date(iso);
+  const aujourdHui = new Date();
+  const debutAujourdhui = new Date(
+    aujourdHui.getFullYear(),
+    aujourdHui.getMonth(),
+    aujourdHui.getDate(),
+  );
+  const debutDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const jours = Math.round((debutAujourdhui.getTime() - debutDate.getTime()) / 86_400_000);
+
+  if (jours <= 0) return "Aujourd'hui";
+  if (jours === 1) return 'Hier';
+  if (jours <= 7) return '7 derniers jours';
+  return 'Plus anciennes';
+}
+
+function filtrerNotifications(
+  notifications: Notification[],
+  filtre: FiltreNotification,
+): Notification[] {
+  if (filtre === 'toutes') return notifications;
+  if (filtre === 'non_lues') return notifications.filter((notification) => !notification.read);
+  return notifications.filter(
+    (notification) => apparenceNotification(notification).categorie === filtre,
+  );
+}
+
+/**
+ * Centre de notifications commun au telephone et a l'ordinateur.
+ *
+ * AppLayout ne monte qu'une instance a la fois. C'est important : deux
+ * cloches masquees par CSS ouvriraient deux abonnements Realtime et feraient
+ * deux fois le meme travail a chaque nouvelle alerte.
+ */
+export function ClocheNotifications({
+  reduit,
+  mobile = false,
+}: {
+  reduit?: boolean;
+  mobile?: boolean;
+}) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [ouvert, setOuvert] = useState(false);
+  const [filtre, setFiltre] = useState<FiltreNotification>('toutes');
+  const [marquageGlobal, setMarquageGlobal] = useState(false);
   const [alertes, setAlertes] = useState<EtatAlertes>(() => etatAlertes());
 
   useEffect(() => {
@@ -55,67 +180,64 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
     verifierAlertes().then(setAlertes);
   }, [profile?.id]);
 
-  /*
-   * Nombre d'arrivées depuis le chargement.
-   *
-   * Ce n'est pas une donnée affichée : il sert de clé React. Une animation
-   * CSS ne rejoue pas si la classe est déjà posée — deux leads coup sur coup
-   * ne feraient sonner la cloche qu'une fois. En changeant de clé, l'élément
-   * est remonté et le mouvement repart à zéro.
-   */
   const [arrivees, setArrivees] = useState(0);
-
-  /* Ce que le panneau contenait à son ouverture : le reste vient d'arriver. */
   const idsALOuverture = useRef<Set<string>>(new Set());
 
-  const { data: notifications } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => fetchNotifications(),
+  const {
+    data: notifications = [],
+    isLoading: notificationsEnChargement,
+    isError: notificationsEnErreur,
+    refetch: rechargerNotifications,
+  } = useQuery({
+    queryKey: CLE_NOTIFICATIONS,
+    queryFn: () => fetchNotifications(50),
     enabled: !!profile?.id,
   });
 
-  const { data: nonLues } = useQuery({
-    queryKey: ['notifications-non-lues'],
+  const {
+    data: nonLues,
+    refetch: rechargerCompteur,
+  } = useQuery({
+    queryKey: CLE_COMPTEUR,
     queryFn: compterNonLues,
     enabled: !!profile?.id,
   });
 
-  /*
-   * Temps reel : le serveur pousse, on ne sonde pas.
-   *
-   * Les invalidations sont regroupees. La file Meta traite vingt-cinq leads
-   * par lot : sans ce delai, vingt-cinq notifications arrivees en quelques
-   * secondes declenchaient une centaine de rechargements simultanes, et
-   * l'interface se figeait le temps qu'ils passent.
-   */
   const minuteurRafraichissement = useRef<number | null>(null);
 
   useEffect(() => {
     if (!profile?.id) return;
 
-    const desabonner = ecouterNotifications(profile.id, (n) => {
+    const desabonner = ecouterNotifications(profile.id, (notification) => {
+      queryClient.setQueryData<Notification[]>(CLE_NOTIFICATIONS, (actuelles = []) => {
+        if (actuelles.some((actuelle) => actuelle.id === notification.id)) return actuelles;
+        return [notification, ...actuelles].slice(0, 50);
+      });
+      if (!notification.read) {
+        queryClient.setQueryData<number>(CLE_COMPTEUR, (compte = 0) => compte + 1);
+      }
+
       if (minuteurRafraichissement.current !== null) {
         window.clearTimeout(minuteurRafraichissement.current);
       }
       minuteurRafraichissement.current = window.setTimeout(() => {
         minuteurRafraichissement.current = null;
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications-non-lues'] });
-        // Un nouveau lead change aussi les listes ouvertes derriere.
+        queryClient.invalidateQueries({ queryKey: CLE_NOTIFICATIONS });
+        queryClient.invalidateQueries({ queryKey: CLE_COMPTEUR });
         queryClient.invalidateQueries({ queryKey: ['leads'] });
         queryClient.invalidateQueries({ queryKey: ['relances'] });
       }, 800);
 
-      // Le mouvement part tout de suite, sans attendre le regroupement des
-      // rechargements : sonner une seconde apres l'arrivee donnerait
-      // l'impression que le CRM traine.
-      setArrivees((v) => v + 1);
+      setArrivees((valeur) => valeur + 1);
 
-      // L'onglet est au premier plan : la pastille suffit, une alerte
-      // par-dessus serait redondante.
+      // Un appareil correctement inscrit recoit deja le push serveur. Cette
+      // alerte Realtime ne sert que de secours si l'inscription a echoue.
       if (document.visibilityState !== 'visible' && alertes !== 'autorisee') {
         afficherAlerte({
-          titre: n.title, corps: n.body, lien: n.link, etiquette: n.id,
+          titre: notification.title,
+          corps: notification.body,
+          lien: notification.link,
+          etiquette: notification.id,
         });
       }
     });
@@ -128,9 +250,6 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
     };
   }, [profile?.id, queryClient, alertes]);
 
-  // Le clic sur une alerte systeme demande au service worker de reveiller
-  // l'onglet ; c'est lui qui nous transmet la destination. Naviguer par le
-  // routeur plutot que recharger evite de perdre l'ecran en cours.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
@@ -144,33 +263,93 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
     return () => navigator.serviceWorker.removeEventListener('message', auMessage);
   }, [navigate]);
 
-  const compte = nonLues ?? 0;
+  const compte = nonLues ?? notifications.filter((notification) => !notification.read).length;
+  const notificationsVisibles = useMemo(
+    () => filtrerNotifications(notifications, filtre),
+    [notifications, filtre],
+  );
+  const groupes = useMemo(() => {
+    const resultat = new Map<string, Notification[]>();
+    for (const notification of notificationsVisibles) {
+      const groupe = groupeDate(notification.created_at);
+      resultat.set(groupe, [...(resultat.get(groupe) ?? []), notification]);
+    }
+    return [...resultat.entries()];
+  }, [notificationsVisibles]);
 
-  const ouvrir = (n: Notification) => {
-    setOuvert(false);
-    if (!n.read) {
-      marquerLue(n.id).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications-non-lues'] });
+  const mettreAJourLocalement = (id: string): (() => void) => {
+    const listeAvant = queryClient.getQueryData<Notification[]>(CLE_NOTIFICATIONS);
+    const compteurAvant = queryClient.getQueryData<number>(CLE_COMPTEUR);
+    const etaitNonLue = listeAvant?.some((notification) => notification.id === id && !notification.read);
+
+    queryClient.setQueryData<Notification[]>(CLE_NOTIFICATIONS, (actuelles = []) =>
+      actuelles.map((notification) => (
+        notification.id === id ? { ...notification, read: true } : notification
+      )),
+    );
+    if (etaitNonLue) {
+      queryClient.setQueryData<number>(CLE_COMPTEUR, (actuel = 0) => Math.max(0, actuel - 1));
+    }
+
+    return () => {
+      queryClient.setQueryData(CLE_NOTIFICATIONS, listeAvant);
+      queryClient.setQueryData(CLE_COMPTEUR, compteurAvant);
+    };
+  };
+
+  const marquerNotification = async (notification: Notification) => {
+    if (notification.read) return;
+    const annuler = mettreAJourLocalement(notification.id);
+    try {
+      await marquerLue(notification.id);
+    } catch (error) {
+      annuler();
+      toast.error('Notification non modifiée', {
+        description: error instanceof Error ? error.message : 'Veuillez réessayer.',
       });
     }
-    if (n.link) navigate(n.link);
+  };
+
+  const ouvrirNotification = (notification: Notification) => {
+    void marquerNotification(notification);
+    setOuvert(false);
+    if (notification.link) navigate(notification.link);
   };
 
   const toutMarquer = async () => {
-    await marquerToutesLues();
-    queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    queryClient.invalidateQueries({ queryKey: ['notifications-non-lues'] });
+    const listeAvant = queryClient.getQueryData<Notification[]>(CLE_NOTIFICATIONS);
+    const compteurAvant = queryClient.getQueryData<number>(CLE_COMPTEUR);
+    setMarquageGlobal(true);
+    queryClient.setQueryData<Notification[]>(CLE_NOTIFICATIONS, (actuelles = []) =>
+      actuelles.map((notification) => ({ ...notification, read: true })),
+    );
+    queryClient.setQueryData(CLE_COMPTEUR, 0);
+
+    try {
+      await marquerToutesLues();
+    } catch (error) {
+      queryClient.setQueryData(CLE_NOTIFICATIONS, listeAvant);
+      queryClient.setQueryData(CLE_COMPTEUR, compteurAvant);
+      toast.error('Les notifications n’ont pas été modifiées', {
+        description: error instanceof Error ? error.message : 'Veuillez réessayer.',
+      });
+    } finally {
+      setMarquageGlobal(false);
+    }
+  };
+
+  const recharger = () => {
+    void Promise.all([rechargerNotifications(), rechargerCompteur()]);
   };
 
   return (
     <Popover
       open={ouvert}
-      onOpenChange={(o) => {
-        // Fige avant le rendu du panneau : ce qui est deja la ne doit pas
-        // s'animer comme si ca venait d'arriver.
-        if (o) idsALOuverture.current = new Set((notifications ?? []).map((x) => x.id));
-        setOuvert(o);
+      onOpenChange={(prochainEtat) => {
+        if (prochainEtat) {
+          idsALOuverture.current = new Set(notifications.map((notification) => notification.id));
+        }
+        setOuvert(prochainEtat);
       }}
     >
       <PopoverTrigger asChild>
@@ -182,8 +361,6 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
           )}
           aria-label={compte > 0 ? `${compte} notification(s) non lue(s)` : 'Notifications'}
         >
-          {/* La cle remonte l'element a chaque arrivee, ce qui rejoue la
-              sonnerie. Au premier rendu il n'y a rien a annoncer. */}
           <span
             key={arrivees}
             className={cn('inline-flex shrink-0', arrivees > 0 && 'animate-sonnerie')}
@@ -191,10 +368,10 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
             {compte > 0 ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
           </span>
           {!reduit && <span className="text-sm">Notifications</span>}
+          <span className="sr-only" aria-live="polite">
+            {compte > 0 ? `${compte} notification(s) à consulter` : 'Aucune notification non lue'}
+          </span>
 
-          {/* L'onde ne depend pas du compteur : celui-ci n'arrive qu'apres le
-              regroupement des rechargements, soit presque une seconde plus
-              tard, et l'onde serait partie sans avoir rien accompagne. */}
           {arrivees > 0 && (
             <span
               key={`onde-${arrivees}`}
@@ -215,65 +392,133 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
                 reduit ? 'right-1 top-1' : 'right-2 top-1.5',
               )}
             >
-              {compte > 9 ? '9+' : compte}
+              {compte > 99 ? '99+' : compte}
             </span>
           )}
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="start" side="right" className="w-80 p-0">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <p className="text-sm font-semibold text-foreground">Notifications</p>
+      <PopoverContent
+        align={mobile ? 'end' : 'start'}
+        side={mobile ? 'bottom' : 'right'}
+        sideOffset={mobile ? 8 : 6}
+        className="w-[calc(100vw-1rem)] max-w-[26rem] overflow-hidden rounded-xl p-0 shadow-lg sm:w-[26rem]"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Centre de notifications</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {compte > 0 ? `${compte} à consulter` : 'Vous êtes à jour'}
+            </p>
+          </div>
           {compte > 0 && (
-            <button
+            <Button
               type="button"
-              onClick={toutMarquer}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              size="sm"
+              variant="ghost"
+              disabled={marquageGlobal}
+              onClick={() => void toutMarquer()}
+              className="h-8 shrink-0 rounded-full px-2.5 text-xs"
             >
-              <Check className="h-3 w-3" />
-              Tout marquer comme lu
-            </button>
+              {marquageGlobal
+                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                : <Check className="mr-1.5 h-3.5 w-3.5" />}
+              Tout lire
+            </Button>
           )}
         </div>
 
         <BandeauAlertes etat={alertes} onChange={setAlertes} />
 
-        <div className="max-h-96 overflow-y-auto">
-          {(!notifications || notifications.length === 0) && (
-            <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-              Aucune notification.
-            </p>
+        <div className="border-b border-border px-3 py-2">
+          <div className="scrollbar-thin flex gap-1 overflow-x-auto pb-0.5" aria-label="Filtrer les notifications">
+            {FILTRES.map((option) => {
+              const active = filtre === option.id;
+              const nombre = option.id === 'non_lues' ? compte : null;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFiltre(option.id)}
+                  className={cn(
+                    'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  {option.label}
+                  {nombre !== null && nombre > 0 && (
+                    <span className={cn(
+                      'min-w-4 rounded-full px-1 text-[10px] tabular-nums',
+                      active ? 'bg-background/80 text-foreground' : 'bg-primary/10 text-primary',
+                    )}>
+                      {nombre}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="max-h-[min(31rem,calc(100dvh-13rem))] overflow-y-auto overscroll-contain">
+          {notificationsEnChargement && <ChargementNotifications />}
+
+          {notificationsEnErreur && !notificationsEnChargement && (
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <CircleAlert className="mb-2 h-6 w-6 text-destructive" />
+              <p className="text-sm font-medium text-foreground">Chargement impossible</p>
+              <p className="mt-1 text-xs text-muted-foreground">Vos alertes restent conservées.</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-4 rounded-full"
+                onClick={recharger}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Réessayer
+              </Button>
+            </div>
           )}
 
-          {notifications?.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              onClick={() => ouvrir(n)}
-              className={cn(
-                'flex w-full items-start gap-2.5 border-b border-border px-3 py-2.5 text-left last:border-b-0',
-                'hover:bg-muted/50',
-                !n.read && 'bg-primary/5',
-                // Arrivee sous les yeux, panneau deja ouvert.
-                !idsALOuverture.current.has(n.id) && 'animate-entree-notification',
-              )}
-            >
-              <span className={cn('mt-0.5 shrink-0', n.read ? 'text-muted-foreground' : 'text-primary')}>
-                <TrendingUp className="h-3.5 w-3.5" />
+          {!notificationsEnChargement && !notificationsEnErreur && groupes.length === 0 && (
+            <div className="flex flex-col items-center px-6 py-12 text-center">
+              <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                <Inbox className="h-5 w-5 text-muted-foreground" />
               </span>
-              <span className="min-w-0 flex-1">
-                <span className={cn('block truncate text-sm', n.read ? 'text-muted-foreground' : 'font-medium text-foreground')}>
-                  {n.title}
-                </span>
-                {n.body && (
-                  <span className="block truncate text-xs text-muted-foreground">{n.body}</span>
-                )}
-                <span className="mt-0.5 block text-[11px] text-muted-foreground/70">
-                  {ilYA(n.created_at)}
-                </span>
-              </span>
-              {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
-            </button>
+              <p className="text-sm font-medium text-foreground">
+                {filtre === 'non_lues' ? 'Tout est traité' : 'Aucune notification'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {filtre === 'non_lues'
+                  ? 'Les prochaines alertes apparaîtront ici.'
+                  : 'Aucun élément ne correspond à ce filtre.'}
+              </p>
+            </div>
+          )}
+
+          {!notificationsEnChargement && !notificationsEnErreur && groupes.map(([groupe, elements]) => (
+            <section key={groupe} aria-labelledby={`groupe-${groupe.replace(/\s+/g, '-').toLowerCase()}`}>
+              <div className="sticky top-0 z-10 border-b border-border/70 bg-popover/95 px-4 py-1.5 backdrop-blur">
+                <p
+                  id={`groupe-${groupe.replace(/\s+/g, '-').toLowerCase()}`}
+                  className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                >
+                  {groupe}
+                </p>
+              </div>
+              {elements.map((notification) => (
+                <NotificationLigne
+                  key={notification.id}
+                  notification={notification}
+                  nouvelle={!idsALOuverture.current.has(notification.id)}
+                  onOuvrir={ouvrirNotification}
+                />
+              ))}
+            </section>
           ))}
         </div>
       </PopoverContent>
@@ -281,21 +526,97 @@ export function ClocheNotifications({ reduit }: { reduit?: boolean }) {
   );
 }
 
-/**
- * Etat des alertes systeme, et moyen de l'changer.
- *
- * Sans ce bandeau, une permission refusee est invisible : l'utilisateur voit
- * la pastille, n'a aucune alerte, et n'a aucun moyen de comprendre pourquoi.
- */
+function NotificationLigne({
+  notification,
+  nouvelle,
+  onOuvrir,
+}: {
+  notification: Notification;
+  nouvelle: boolean;
+  onOuvrir: (notification: Notification) => void;
+}) {
+  const apparence = apparenceNotification(notification);
+  const Icone = apparence.Icone;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOuvrir(notification)}
+      className={cn(
+        'group flex w-full items-start gap-3 border-b border-border/70 px-4 py-3 text-left transition-colors last:border-b-0',
+        'hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        !notification.read && 'bg-primary/[0.045]',
+        nouvelle && 'animate-entree-notification',
+      )}
+    >
+      <span className={cn(
+        'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+        apparence.classeIcone,
+      )}>
+        <Icone className="h-4 w-4" />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className={cn(
+            'min-w-0 flex-1 text-sm leading-5',
+            notification.read ? 'text-muted-foreground' : 'font-semibold text-foreground',
+          )}>
+            {notification.title}
+          </span>
+          {!notification.read && (
+            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Non lue" />
+          )}
+        </span>
+        {notification.body && (
+          <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
+            {notification.body}
+          </span>
+        )}
+        <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+          <span>{apparence.etiquette}</span>
+          <span aria-hidden="true">•</span>
+          <time dateTime={notification.created_at}>{ilYA(notification.created_at)}</time>
+        </span>
+      </span>
+
+      {notification.link && (
+        <ChevronRight className="mt-3 h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+      )}
+    </button>
+  );
+}
+
+function ChargementNotifications() {
+  return (
+    <div className="space-y-1 p-3" aria-label="Chargement des notifications">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="flex items-start gap-3 rounded-lg p-2">
+          <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1 space-y-2 py-0.5">
+            <Skeleton className="h-3.5 w-2/3" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-2.5 w-20" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BandeauAlertes({
-  etat, onChange,
-}: { etat: EtatAlertes; onChange: (e: EtatAlertes) => void }) {
+  etat,
+  onChange,
+}: {
+  etat: EtatAlertes;
+  onChange: (etat: EtatAlertes) => void;
+}) {
   if (etat === 'indisponible') return null;
 
   if (etat === 'installation_requise') {
     return (
-      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-3 py-2">
-        <Smartphone className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-4 py-2.5">
+        <Smartphone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <p className="text-xs leading-snug text-muted-foreground">
           Sur iPhone, ajoutez d’abord le CRM à l’écran d’accueil, ouvrez-le
           depuis son icône puis activez les notifications ici.
@@ -306,8 +627,8 @@ function BandeauAlertes({
 
   if (etat === 'activation') {
     return (
-      <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-        <Loader2 className="h-3 w-3 animate-spin" />
+      <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Vérification de cet appareil…
       </div>
     );
@@ -315,14 +636,14 @@ function BandeauAlertes({
 
   if (etat === 'autorisee') {
     return (
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-done-soft/40 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-done-soft/40 px-4 py-2.5">
         <span className="flex items-center gap-1.5 text-xs text-done">
-          <Volume2 className="h-3 w-3" />
-          Push actif sur cet appareil
+          <Volume2 className="h-3.5 w-3.5" />
+          Alertes actives sur cet appareil
         </span>
         <button
           type="button"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
           onClick={async () => {
             if (!(await testerAlertes())) onChange('erreur');
           }}
@@ -335,12 +656,11 @@ function BandeauAlertes({
 
   if (etat === 'refusee') {
     return (
-      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-3 py-2">
-        <BellOff className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+      <div className="flex items-start gap-2 border-b border-border bg-muted/50 px-4 py-2.5">
+        <BellOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <p className="text-xs leading-snug text-muted-foreground">
-          Alertes refusées pour ce site. Le navigateur ne redemandera pas :
-          il faut les réactiver dans ses réglages, à l’icône à gauche de
-          l’adresse.
+          Alertes bloquées par le navigateur. Réactivez-les depuis l’icône à
+          gauche de l’adresse du site.
         </p>
       </div>
     );
@@ -348,12 +668,12 @@ function BandeauAlertes({
 
   if (etat === 'erreur') {
     return (
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-destructive/5 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-destructive/5 px-4 py-2.5">
         <span className="text-xs text-destructive">Activation incomplète sur cet appareil</span>
         <Button
           size="sm"
           variant="outline"
-          className="h-6 rounded-full text-xs"
+          className="h-7 rounded-full text-xs"
           onClick={async () => {
             onChange('activation');
             onChange(await demanderAlertes());
@@ -366,13 +686,13 @@ function BandeauAlertes({
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-3 py-2">
+    <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2.5">
       <span className="text-xs text-muted-foreground">
-        Recevoir les alertes même CRM fermé
+        Être alerté même quand le CRM est fermé
       </span>
       <Button
         size="sm"
-        className="h-6 rounded-full text-xs"
+        className="h-7 rounded-full text-xs"
         onClick={async () => {
           onChange('activation');
           onChange(await demanderAlertes());
