@@ -75,6 +75,59 @@ export async function fetchFacturationClient(contactId: string): Promise<Factura
   };
 }
 
+const BUCKET_FACTURES = 'onify-invoices';
+
+/**
+ * Joint a la main le PDF d'une facture.
+ *
+ * Onify a ferme l'acces qui permettait de recuperer les documents, et sa
+ * politique CORS interdit au CRM de les lire depuis le navigateur. Rester
+ * dependant d'eux reviendrait a n'avoir plus aucune facture archivee. On
+ * telecharge donc depuis Onify, ou l'on est connecte, et on depose ici.
+ *
+ * Le fichier rejoint les 145 autres : meme bucket, meme chemin, meme
+ * visionneuse. Rien ne distingue ensuite une facture deposee d'une facture
+ * archivee automatiquement.
+ */
+export async function televerserPdfFacture(
+  facture: Pick<Invoice, 'id' | 'invoice_number'>,
+  fichier: File,
+): Promise<void> {
+  // Un PDF commence par %PDF. Le type annonce par le systeme ne suffit pas :
+  // un fichier renomme passerait, et la visionneuse afficherait du vide.
+  const entete = new Uint8Array(await fichier.slice(0, 5).arrayBuffer());
+  const estPdf = entete[0] === 0x25 && entete[1] === 0x50
+    && entete[2] === 0x44 && entete[3] === 0x46;
+  if (!estPdf) throw new Error("Ce fichier n'est pas un PDF.");
+
+  const workspaceId = await getWorkspaceId();
+  const nom = facture.invoice_number.normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120) || 'facture';
+  const chemin = `${workspaceId}/${facture.id}/${nom}.pdf`;
+
+  const { error: erreurDepot } = await supabase.storage
+    .from(BUCKET_FACTURES)
+    .upload(chemin, fichier, { contentType: 'application/pdf', upsert: true });
+  if (erreurDepot) throw new Error(erreurDepot.message);
+
+  const maintenant = new Date().toISOString();
+  const { error } = await supabase.from('invoices').update({
+    onify_pdf_path: chemin,
+    onify_pdf_synced_at: maintenant,
+    onify_pdf_checked_at: maintenant,
+    onify_pdf_error: null,
+  }).eq('id', facture.id);
+  if (error) throw new Error(error.message);
+}
+
+/** Le document chez Onify, ou la session du navigateur fait foi. */
+export function lienFactureOnify(onifyInvoiceId: string): string {
+  return `https://app.onify.fr/invoices/pdf/${encodeURIComponent(onifyInvoiceId)}`;
+}
+
 /**
  * Recupere le PDF d'origine d'une facture Onify.
  *

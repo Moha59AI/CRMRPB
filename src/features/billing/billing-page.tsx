@@ -133,29 +133,18 @@ function formatDate(date: string | null | undefined): string {
  * ne produisait rien.
  */
 function LigneFacture({ inv, children }: { inv: Invoice; children: ReactNode }) {
-  const { ouvrir, enCours, visionneuse, disponible } = usePdfFacture(inv);
+  const { ouvrir, visionneuse } = usePdfFacture(inv);
+  const conserve = Boolean(inv.onify_pdf_path);
 
   return (
     <>
       <TableRow
-        className={cn(disponible && 'cursor-pointer hover:bg-surface')}
-        onClick={disponible ? () => void ouvrir() : undefined}
+        className={cn(conserve && 'cursor-pointer hover:bg-surface')}
+        onClick={conserve ? () => void ouvrir() : undefined}
       >
         {children}
         <TableCell className="text-right">
-          {disponible && (
-            <Button
-              size="sm" variant="outline" className="rounded-full"
-              disabled={enCours}
-              onClick={(e) => { e.stopPropagation(); void ouvrir(); }}
-              title={`Ouvrir le PDF de la facture ${inv.invoice_number}`}
-            >
-              {enCours
-                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                : <FileText className="mr-1.5 h-3.5 w-3.5" />}
-              PDF
-            </Button>
-          )}
+          <BoutonPdfFacture facture={inv} />
         </TableCell>
       </TableRow>
       {visionneuse}
