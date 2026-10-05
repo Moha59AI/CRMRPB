@@ -1,6 +1,9 @@
 import {
   adminClient, automationAuthorized, corsHeaders, jsonResponse, requireAdmin, sha256,
 } from '../_shared/google-ads.ts';
+import {
+  fetchOnifyInvoicePdf, onifyInvoiceStoragePath, storeOnifyInvoicePdf,
+} from '../_shared/onify-invoices.ts';
 
 const ONIFY_API = 'https://app.onify.fr/api';
 const PAGE_SIZE = 100;
@@ -109,6 +112,8 @@ type SyncCounts = {
   quotes: number;
   credits: number;
   notesRemaining: boolean;
+  /** PDF de factures archives pendant ce tour. */
+  pdfs: number;
 };
 
 function cleanText(value: unknown): string | null {
@@ -608,6 +613,62 @@ async function syncNotesPage(
   return { count: rows.length, nextPage: remaining ? pageNumber + 1 : 1, remaining };
 }
 
+/**
+ * Archive le PDF des factures qui n'en ont pas encore.
+ *
+ * Le document etait recupere au premier clic : la premiere ouverture d'une
+ * facture attendait Onify, et une facture jamais ouverte n'etait jamais
+ * conservee. Une fois dans le CRM, elle y reste -- meme si Onify la modifie,
+ * la deplace ou devient indisponible.
+ *
+ * Le travail est borne : une synchronisation ne doit pas depasser son temps
+ * imparti a cause de l'arriere. Le reste passe au tour suivant, dix minutes
+ * plus tard.
+ */
+async function archiverPdfFactures(workspaceId: string, token: string): Promise<number> {
+  const PAR_TOUR = 15;
+  const DELAI_AVANT_NOUVEL_ESSAI = 24 * 3600 * 1000;
+  const limite = new Date(Date.now() - DELAI_AVANT_NOUVEL_ESSAI).toISOString();
+
+  // Une facture dont la recuperation a echoue il y a dix minutes echouera
+  // encore : on ne la reessaie qu'une fois par jour.
+  const { data, error } = await adminClient
+    .from('invoices')
+    .select('id, invoice_number, onify_invoice_id')
+    .eq('workspace_id', workspaceId)
+    .is('onify_pdf_path', null)
+    .not('onify_invoice_id', 'is', null)
+    .or(`onify_pdf_checked_at.is.null,onify_pdf_checked_at.lt.${limite}`)
+    .order('issue_date', { ascending: false })
+    .limit(PAR_TOUR);
+  if (error) throw new Error(error.message);
+
+  let archivees = 0;
+  for (const facture of data ?? []) {
+    const maintenant = new Date().toISOString();
+    try {
+      const octets = await fetchOnifyInvoicePdf(token, String(facture.onify_invoice_id));
+      const chemin = onifyInvoiceStoragePath(workspaceId, facture.id, facture.invoice_number);
+      await storeOnifyInvoicePdf(adminClient, chemin, octets);
+      await adminClient.from('invoices').update({
+        onify_pdf_path: chemin,
+        onify_pdf_synced_at: maintenant,
+        onify_pdf_checked_at: maintenant,
+        onify_pdf_error: null,
+      }).eq('id', facture.id);
+      archivees += 1;
+    } catch (erreur) {
+      // Un echec n'arrete pas la synchronisation : il se note et attend.
+      const message = erreur instanceof Error ? erreur.message : String(erreur);
+      await adminClient.from('invoices').update({
+        onify_pdf_checked_at: maintenant,
+        onify_pdf_error: message.slice(0, 500),
+      }).eq('id', facture.id);
+    }
+  }
+  return archivees;
+}
+
 async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   const connection = await ensureConnection(workspaceId);
   const settings = (connection.settings ?? {}) as Json;
@@ -655,8 +716,11 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     contactIds,
   );
 
+  const pdfs = await archiverPdfFactures(workspaceId, token);
+
   const counts: SyncCounts = {
     contacts: customers.length,
+    pdfs,
     leadAddresses: Number(leadAddresses ?? 0),
     notes: notes.count,
     calls: calls.length,
