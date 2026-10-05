@@ -65,7 +65,18 @@ function visibleDocumentTypes(value: unknown): Set<string> {
   return new Set(types.length > 0 ? types : defaultDocumentRules.map((rule) => rule.document_type));
 }
 
-async function notifyDocumentDeposit(itemId: string, workspaceId: string): Promise<void> {
+/** Echappe ce qui vient du client : un nom peut contenir &, < ou >. */
+function texteHtml(valeur: unknown): string {
+  return String(valeur ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function notifyDocumentDeposit(
+  itemId: string,
+  workspaceId: string,
+  leadId: string | null,
+): Promise<void> {
   const apiKey = Deno.env.get('RESEND_API_KEY');
   const forcedRecipient = Deno.env.get('DOCUMENT_NOTIFICATION_EMAIL')?.trim();
   const from = Deno.env.get('DOCUMENT_NOTIFICATION_FROM')?.trim()
@@ -87,6 +98,38 @@ async function notifyDocumentDeposit(itemId: string, workspaceId: string): Promi
     return;
   }
 
+  // Le mail disait « une nouvelle pièce vient d'être déposée » sans dire par
+  // qui ni laquelle, et renvoyait vers l'accueil : il fallait chercher le
+  // dossier a la main. Il porte desormais ce qu'il faut pour agir sans
+  // ouvrir le CRM pour rien.
+  const { data: piece } = await admin
+    .from('client_document_items')
+    .select('label, document_type, original_name')
+    .eq('id', itemId)
+    .maybeSingle();
+
+  const { data: lead } = leadId
+    ? await admin
+      .from('leads')
+      .select('first_name, last_name, vehicle_make, vehicle_model, vehicle_registration')
+      .eq('id', leadId)
+      .maybeSingle()
+    : { data: null };
+
+  const partie = (valeur: unknown): string =>
+    (typeof valeur === 'string' ? valeur.trim() : '');
+
+  const nomClient = [partie(lead?.first_name), partie(lead?.last_name)]
+    .filter(Boolean).join(' ') || 'Client sans nom';
+  const vehicule = [
+    [partie(lead?.vehicle_make), partie(lead?.vehicle_model)].filter(Boolean).join(' '),
+    partie(lead?.vehicle_registration),
+  ].filter(Boolean).join(' · ');
+  const nomPiece = partie(piece?.label) || partie(piece?.document_type) || 'Document';
+  const lienDossier = leadId
+    ? `https://crm.relaisparebrise.fr/interventions/${leadId}`
+    : 'https://crm.relaisparebrise.fr/today';
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -96,11 +139,12 @@ async function notifyDocumentDeposit(itemId: string, workspaceId: string): Promi
     body: JSON.stringify({
       from,
       to: [recipient],
-      subject: 'Nouveau document client reçu',
+      subject: `Document reçu — ${nomClient}`,
       html: `<div style="font-family:Arial,sans-serif;color:#101318;line-height:1.5">
-        <h2 style="margin:0 0 16px">Une nouvelle pièce vient d’être déposée</h2>
-        <p>Ouvrez le CRM pour consulter le document et retrouver le dossier concerné.</p>
-        <p style="margin-top:20px"><a href="https://crm.relaisparebrise.fr/today" style="color:#16a34a;font-weight:600">Ouvrir le CRM</a></p>
+        <h2 style="margin:0 0 4px">${texteHtml(nomClient)}</h2>
+        <p style="margin:0 0 16px;color:#646464">a déposé : <strong>${texteHtml(nomPiece)}</strong></p>
+        ${vehicule ? `<p style="margin:0 0 16px;color:#646464">${texteHtml(vehicule)}</p>` : ''}
+        <p style="margin-top:20px"><a href="${lienDossier}" style="color:#16a34a;font-weight:600">Ouvrir le dossier</a></p>
       </div>`,
     }),
   });
@@ -286,7 +330,7 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
     await admin.storage.from(bucket).remove([item.storage_path]);
   }
 
-  await notifyDocumentDeposit(item.id, request.workspace_id);
+  await notifyDocumentDeposit(item.id, request.workspace_id, request.lead_id);
 
   const { data: remaining, error: remainingError } = await admin
     .from('client_document_items')
