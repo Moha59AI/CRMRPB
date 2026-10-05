@@ -7,9 +7,13 @@
 //
 // La route n'existe pas en production.
 
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { CompactList, KanbanCard } from '@/features/leads/leads-page';
 import { LeadPipeline } from '@/features/leads/lead-pipeline';
 import type { Lead, LeadSource, LeadStatus } from '@/types';
+import { VisionneusePdf } from '@/features/billing/bouton-pdf-facture';
+import { pdfExemple } from './pdf-exemple';
 
 const HEURE = 3_600_000;
 
@@ -74,6 +78,7 @@ const CAS: { titre: string; lead: Lead }[] = [
 
 export function ApercuLeads() {
   const rien = () => {};
+  const [pdfOuvert, setPdfOuvert] = useState<string | null>(null);
 
   return (
     <div className="min-h-full bg-background">
@@ -113,6 +118,24 @@ export function ApercuLeads() {
             />
           </div>
         </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Visionneuse de facture
+        </h2>
+        <Button
+          variant="outline"
+          className="rounded-full"
+          onClick={() => setPdfOuvert(URL.createObjectURL(pdfExemple()))}
+        >
+          Ouvrir un PDF d’exemple
+        </Button>
+        {pdfOuvert && (
+          <VisionneusePdf
+            facture={{ id: 'demo', invoice_number: 'F-DEMO-001', onify_invoice_id: '1' }}
+            url={pdfOuvert}
+            onFermer={() => setPdfOuvert(null)}
+          />
+        )}
 
         <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Fil d’étapes de la fiche

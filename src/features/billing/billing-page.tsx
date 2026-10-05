@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import {
   CheckCircle2, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ import type {
   InvoiceStatus, QuoteStatus, GiftStatus,
 } from '@/types';
 import { createInvoice, fetchGifts, fetchInvoices, fetchPayments, fetchQuotes } from '@/services/billing-service';
-import { BoutonPdfFacture } from './bouton-pdf-facture';
+import { BoutonPdfFacture, usePdfFacture } from './bouton-pdf-facture';
 import { fetchCases } from '@/services/cases-service';
 import { fetchContacts } from '@/services/contacts-service';
 
@@ -123,6 +124,44 @@ function formatDate(date: string | null | undefined): string {
 }
 
 // ============ MAIN PAGE ============
+
+/**
+ * Une ligne de facture s'ouvre en cliquant dessus.
+ *
+ * Le PDF n'etait accessible que par une petite icone en bout de ligne, dans
+ * un tableau de douze colonnes. Cliquer la ligne -- le geste qu'on fait --
+ * ne produisait rien.
+ */
+function LigneFacture({ inv, children }: { inv: Invoice; children: ReactNode }) {
+  const { ouvrir, enCours, visionneuse, disponible } = usePdfFacture(inv);
+
+  return (
+    <>
+      <TableRow
+        className={cn(disponible && 'cursor-pointer hover:bg-surface')}
+        onClick={disponible ? () => void ouvrir() : undefined}
+      >
+        {children}
+        <TableCell className="text-right">
+          {disponible && (
+            <Button
+              size="sm" variant="outline" className="rounded-full"
+              disabled={enCours}
+              onClick={(e) => { e.stopPropagation(); void ouvrir(); }}
+              title={`Ouvrir le PDF de la facture ${inv.invoice_number}`}
+            >
+              {enCours
+                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                : <FileText className="mr-1.5 h-3.5 w-3.5" />}
+              PDF
+            </Button>
+          )}
+        </TableCell>
+      </TableRow>
+      {visionneuse}
+    </>
+  );
+}
 
 export function BillingPage() {
   const [tab, setTab] = useState('invoices');
@@ -274,7 +313,7 @@ export function BillingPage() {
                     </TableHeader>
                     <TableBody>
                       {invoices.map((inv) => (
-                        <TableRow key={inv.id}>
+                        <LigneFacture key={inv.id} inv={inv}>
                           <TableCell className="font-medium text-foreground text-sm">{inv.invoice_number}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{caseNumberFor(inv.case_id)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{contactNameFor(inv.contact_id)}</TableCell>
@@ -292,10 +331,7 @@ export function BillingPage() {
                               {invoiceStatusLabels[inv.status]}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <BoutonPdfFacture facture={inv} />
-                          </TableCell>
-                        </TableRow>
+                        </LigneFacture>
                       ))}
                     </TableBody>
                   </Table>
