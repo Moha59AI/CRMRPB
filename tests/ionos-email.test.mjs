@@ -57,6 +57,7 @@ test('la synchronisation IMAP rattache les messages et notifie les utilisateurs'
   assert.match(ingest, /vehicle_registration/);
   assert.match(ingest, /Email assureur/);
   assert.match(ingest, /Email expert/);
+  assert.match(ingest, /Email fournisseur/);
   assert.match(config, /\[functions\.email-send\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-email-secret\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-mail-sync\][\s\S]*verify_jwt = false/);
@@ -89,7 +90,7 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.doesNotMatch(settings, /email-inbound-webhook/);
 });
 
-test('la boite mail separe les recus des envoyes et detecte assureurs et experts', async () => {
+test('la boite mail separe les recus des envoyes et detecte assureurs experts et fournisseurs', async () => {
   const [routes, navigation, inbox, service, classification] = await Promise.all([
     read('src/app/app-routes.tsx'),
     read('src/config/navigation.ts'),
@@ -101,6 +102,7 @@ test('la boite mail separe les recus des envoyes et detecte assureurs et experts
   assert.match(routes, /path="\/emails"/);
   assert.match(navigation, /label: 'Boîte mail'/);
   assert.match(inbox, /key: 'inbound', label: 'Reçus'/);
+  assert.match(inbox, /key: 'suppliers', label: 'Fournisseurs'/);
   assert.match(inbox, /key: 'insurers', label: 'Assureurs'/);
   assert.match(inbox, /key: 'experts', label: 'Experts'/);
   assert.match(inbox, /key: 'outbound', label: 'Envoyés'/);
@@ -111,7 +113,29 @@ test('la boite mail separe les recus des envoyes et detecte assureurs et experts
   assert.match(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
   assert.match(classification, /insurer\.claims_email/);
   assert.match(classification, /solutions-expertises\.com/);
+  assert.match(classification, /vsf41\.com/);
+  assert.match(classification, /nsg\.com/);
+  assert.match(classification, /category: 'supplier'/);
   assert.match(classification, /Détection probable à vérifier|probable/);
+});
+
+test('les PDF de VSF et Pilkington sont sortis dans les documents fournisseur', async () => {
+  const [inbox, ingest, sync] = await Promise.all([
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('supabase/functions/_shared/inbound-email.ts'),
+    read('supabase/functions/ionos-mail-sync/index.ts'),
+  ]);
+
+  assert.match(ingest, /domainesFournisseurs/);
+  assert.match(ingest, /vsf41\.com/);
+  assert.match(ingest, /nsg\.com/);
+  assert.match(sync, /stockerPiecesJointes/);
+  assert.match(sync, /storage_path: storagePath/);
+  assert.match(inbox, /function isPdfAttachment/);
+  assert.match(inbox, /Documents fournisseur/);
+  assert.match(inbox, /détecté et sorti/);
+  assert.match(inbox, /supplierPdfs\.map/);
+  assert.match(inbox, /openAttachment\(attachment\)/);
 });
 
 test('la boite mail est un module autonome et les communications excluent les emails', async () => {

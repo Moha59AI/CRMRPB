@@ -8,11 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
-import { LeadIdentity, LeadQualification } from '@/features/leads/lead-qualification';
 import {
   formatDateTime, profileName, LIBELLE_VITRAGE, sourceLabels,
 } from '@/features/leads/lead-shared';
@@ -225,12 +221,6 @@ export function DossierContenu({
           notes={notes ?? []}
           onVoirHistorique={onVoirHistorique}
         />
-
-        <EditionLead
-          lead={lead}
-          onUpdate={onUpdate}
-          enregistrement={enregistrement}
-        />
       </div>
 
       {/* Colonne laterale : historique et metadonnees stables, consultables
@@ -310,55 +300,6 @@ export function DossierContenu({
         onOpenChange={setBonCadeauOuvert}
       />
     </>
-  );
-}
-
-function EditionLead({
-  lead, onUpdate, enregistrement,
-}: {
-  lead: Lead;
-  onUpdate: (updates: Partial<Lead>) => void;
-  enregistrement: boolean;
-}) {
-  return (
-    <section aria-labelledby="modifier-fiche" className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="border-b border-border bg-muted/25 px-4 py-3">
-        <h2 id="modifier-fiche" className="text-sm font-semibold text-foreground">Modifier la fiche</h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Ouvrez uniquement la partie nécessaire. Les changements restent en brouillon jusqu’à l’enregistrement.
-        </p>
-      </div>
-
-      <Accordion type="multiple" className="px-4">
-        <AccordionItem value="client">
-          <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Client et coordonnées</span>
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                Identité, téléphone, e-mail et adresse principale
-              </span>
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="pb-5">
-            <LeadIdentity lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="intervention" className="border-b-0">
-          <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Intervention et qualification</span>
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                Vitrage, véhicule, lieu, assurance et cadeau
-              </span>
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="pb-5">
-            <LeadQualification lead={lead} onUpdate={onUpdate} desactive={enregistrement} />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    </section>
   );
 }
 

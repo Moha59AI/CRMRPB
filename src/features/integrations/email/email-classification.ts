@@ -1,6 +1,6 @@
 import type { Communication, Insurer } from '@/types';
 
-export type EmailPartyCategory = 'insurer' | 'expert' | 'other';
+export type EmailPartyCategory = 'insurer' | 'expert' | 'supplier' | 'other';
 
 export interface EmailPartyClassification {
   category: EmailPartyCategory;
@@ -36,6 +36,13 @@ const EXPERT_DOMAINS: Array<{ domain: string; name: string }> = [
   { domain: 'cabinet-roux.com', name: 'Cabinet Roux' },
 ];
 
+const SUPPLIER_DOMAINS: Array<{ domain: string; name: string }> = [
+  { domain: 'vsf41.com', name: 'VSF' },
+  { domain: 'parebrisevsf.com', name: 'VSF' },
+  { domain: 'nsg.com', name: 'Pilkington' },
+  { domain: 'pilkington.com', name: 'Pilkington' },
+];
+
 const EXPERT_WORDS = [
   'ordre de mission',
   'mission d’expertise',
@@ -69,6 +76,11 @@ export function classifyEmailParty(
 ): EmailPartyClassification {
   const address = interlocutorAddress(email);
   const domain = domainOf(address);
+
+  const knownSupplier = SUPPLIER_DOMAINS.find((candidate) => matchesDomain(domain, candidate.domain));
+  if (knownSupplier) {
+    return { category: 'supplier', organization: knownSupplier.name, confidence: 'confirmed' };
+  }
 
   for (const insurer of insurers) {
     const knownAddresses = [

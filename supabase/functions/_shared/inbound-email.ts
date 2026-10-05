@@ -25,7 +25,7 @@ export type InboundEmail = {
 };
 
 type CorrespondantEmail = {
-  type: 'assureur' | 'expert' | 'autre';
+  type: 'assureur' | 'expert' | 'fournisseur' | 'autre';
   nom: string | null;
 };
 
@@ -44,6 +44,13 @@ const domainesExperts: Array<{ domaine: string; nom: string }> = [
   { domaine: 'texa.fr', nom: 'Groupe Texa' },
   { domaine: 'adenes.eu', nom: 'Adenes' },
   { domaine: 'cabinet-roux.com', nom: 'Cabinet Roux' },
+];
+
+const domainesFournisseurs: Array<{ domaine: string; nom: string }> = [
+  { domaine: 'vsf41.com', nom: 'VSF' },
+  { domaine: 'parebrisevsf.com', nom: 'VSF' },
+  { domaine: 'nsg.com', nom: 'Pilkington' },
+  { domaine: 'pilkington.com', nom: 'Pilkington' },
 ];
 
 function extraireAdresses(value: unknown): string[] {
@@ -66,6 +73,11 @@ function classifierCorrespondant(
   assureurs: Array<{ name: string; email: string | null; claims_email: string | null }>,
 ): CorrespondantEmail {
   const domaine = domaineDe(sender);
+  const fournisseurConnu = domainesFournisseurs.find((fournisseur) => (
+    correspondAuDomaine(domaine, fournisseur.domaine)
+  ));
+  if (fournisseurConnu) return { type: 'fournisseur', nom: fournisseurConnu.nom };
+
   for (const assureur of assureurs) {
     const adresses = [
       ...extraireAdresses(assureur.email),
@@ -227,7 +239,9 @@ export async function storeInboundEmail(
     ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
     : correspondant.type === 'expert'
       ? `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-      : 'Nouvel email reçu';
+      : correspondant.type === 'fournisseur'
+        ? `Email fournisseur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
+        : 'Nouvel email reçu';
   if (email.notify && (recipients ?? []).length > 0) {
     const { error: notificationError } = await admin.from('notifications').insert(
       (recipients ?? []).map((profile) => ({

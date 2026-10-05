@@ -13,6 +13,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  Package,
   Paperclip,
   PenLine,
   RefreshCw,
@@ -68,7 +69,7 @@ import {
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 
-type MailboxView = 'inbound' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
+type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
 const mailboxViews: Array<{
   key: MailboxView;
@@ -76,6 +77,7 @@ const mailboxViews: Array<{
   Icon: typeof Mail;
 }> = [
   { key: 'inbound', label: 'Reçus', Icon: Inbox },
+  { key: 'suppliers', label: 'Fournisseurs', Icon: Package },
   { key: 'insurers', label: 'Assureurs', Icon: ShieldCheck },
   { key: 'experts', label: 'Experts', Icon: Search },
   { key: 'outbound', label: 'Envoyés', Icon: Send },
@@ -98,6 +100,18 @@ type AttachmentViewerState = {
   status: 'loading' | 'ready' | 'error';
   url: string | null;
 };
+
+function isPdfAttachment(attachment: EmailAttachment): boolean {
+  const contentType = attachment.content_type?.split(';', 1)[0].trim().toLowerCase();
+  return contentType === 'application/pdf' || attachment.filename.toLowerCase().endsWith('.pdf');
+}
+
+function partyLabel(classification: EmailPartyClassification): string {
+  if (classification.category === 'insurer') return 'Assureur';
+  if (classification.category === 'expert') return 'Cabinet d’expertise';
+  if (classification.category === 'supplier') return 'Fournisseur';
+  return 'Autre correspondant';
+}
 
 function formatMailboxDate(iso: string): string {
   const date = new Date(iso);
@@ -181,6 +195,7 @@ function matchesMailboxView(
   classification: EmailPartyClassification,
 ): boolean {
   if (view === 'inbound') return email.direction === 'inbound';
+  if (view === 'suppliers') return email.direction === 'inbound' && classification.category === 'supplier';
   if (view === 'insurers') return email.direction === 'inbound' && classification.category === 'insurer';
   if (view === 'experts') return email.direction === 'inbound' && classification.category === 'expert';
   if (view === 'outbound') return email.direction === 'outbound';
@@ -191,7 +206,8 @@ function matchesMailboxView(
 function EmailPartyBadge({ classification }: { classification: EmailPartyClassification }) {
   if (classification.category === 'other') return null;
   const insurer = classification.category === 'insurer';
-  const label = insurer ? 'Assureur' : 'Expert';
+  const supplier = classification.category === 'supplier';
+  const label = supplier ? 'Fournisseur' : insurer ? 'Assureur' : 'Expert';
   const title = classification.organization ? `${label} · ${classification.organization}` : `${label} probable`;
 
   return (
@@ -199,12 +215,18 @@ function EmailPartyBadge({ classification }: { classification: EmailPartyClassif
       variant="outline"
       title={classification.confidence === 'confirmed' ? 'Correspondant reconnu' : 'Détection probable à vérifier'}
       className={`max-w-full gap-1 rounded-full text-[10px] ${
-        insurer
+        supplier
+          ? 'border-due/25 bg-due-soft text-due'
+          : insurer
           ? 'border-primary/25 bg-primary/5 text-primary'
           : 'border-upcoming/25 bg-upcoming-soft text-upcoming'
       }`}
     >
-      {insurer ? <ShieldCheck className="h-3 w-3 shrink-0" /> : <Search className="h-3 w-3 shrink-0" />}
+      {supplier
+        ? <Package className="h-3 w-3 shrink-0" />
+        : insurer
+          ? <ShieldCheck className="h-3 w-3 shrink-0" />
+          : <Search className="h-3 w-3 shrink-0" />}
       <span className="truncate">{title}</span>
     </Badge>
   );
@@ -279,6 +301,9 @@ export function EmailInboxPage() {
     const emails = emailsQuery.data ?? [];
     return {
       inbound: emails.filter((email) => email.direction === 'inbound').length,
+      suppliers: emails.filter((email) => (
+        email.direction === 'inbound' && classificationMap.get(email.id)?.category === 'supplier'
+      )).length,
       insurers: emails.filter((email) => (
         email.direction === 'inbound' && classificationMap.get(email.id)?.category === 'insurer'
       )).length,
@@ -306,6 +331,7 @@ export function EmailInboxPage() {
         person,
         classification.category === 'insurer' ? 'assureur assurance' : null,
         classification.category === 'expert' ? 'expert expertise' : null,
+        classification.category === 'supplier' ? 'fournisseur vsf pilkington pdf' : null,
         classification.organization,
       ].some((value) => value?.toLocaleLowerCase('fr-FR').includes(needle));
     });
@@ -497,6 +523,9 @@ export function EmailInboxPage() {
                 const person = resolvePerson(email, contactMap, leadMap);
                 const address = inbound ? email.sender_email : email.recipient_email;
                 const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
+                const supplierPdfCount = classification.category === 'supplier'
+                  ? email.email_attachments.filter(isPdfAttachment).length
+                  : 0;
                 return (
                   <button
                     key={email.id}
@@ -532,6 +561,12 @@ export function EmailInboxPage() {
                           {!email.contact_id && !email.lead_id && (
                             <span className="rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due">
                               À rattacher
+                            </span>
+                          )}
+                          {supplierPdfCount > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due">
+                              <FileText className="h-3 w-3" />
+                              {supplierPdfCount} PDF
                             </span>
                           )}
                           {email.email_attachments.length > 0 && (
@@ -815,6 +850,12 @@ function EmailDetail({
   const relatedPath = email.lead_id
     ? `/interventions/${email.lead_id}`
     : email.contact_id ? `/clients/${email.contact_id}` : null;
+  const supplierPdfs = classification.category === 'supplier'
+    ? email.email_attachments.filter(isPdfAttachment)
+    : [];
+  const otherAttachments = supplierPdfs.length > 0
+    ? email.email_attachments.filter((attachment) => !isPdfAttachment(attachment))
+    : email.email_attachments;
 
   const replyMutation = useMutation({
     mutationFn: async () => {
@@ -970,7 +1011,7 @@ function EmailDetail({
                 <>
                   <span className="text-muted-foreground">Correspondant</span>
                   <p className="font-medium text-foreground">
-                    {classification.category === 'insurer' ? 'Assureur' : 'Cabinet d’expertise'}
+                    {partyLabel(classification)}
                     {classification.organization ? ` · ${classification.organization}` : ' · à confirmer'}
                   </p>
                 </>
@@ -985,20 +1026,60 @@ function EmailDetail({
             </div>
           </div>
 
+          {supplierPdfs.length > 0 && (
+            <div className="mt-4 rounded-xl border border-due/25 bg-due-soft p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background text-due shadow-sm">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground">Documents fournisseur</h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {supplierPdfs.length} PDF {supplierPdfs.length > 1 ? 'détectés et sortis' : 'détecté et sorti'} automatiquement de cet email.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {supplierPdfs.map((attachment, index) => (
+                  <button
+                    key={`${attachment.id}-supplier-${index}`}
+                    type="button"
+                    className="group flex min-w-0 items-center gap-3 rounded-lg border border-due/20 bg-background p-3 text-left transition hover:border-due/40 hover:shadow-sm disabled:cursor-wait disabled:opacity-70"
+                    onClick={() => void openAttachment(attachment)}
+                    disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-due-soft text-due">
+                      {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <FileText className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{attachment.filename}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        PDF fournisseur{attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
+                      </p>
+                    </div>
+                    <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-due" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 min-h-48 rounded-xl border border-border bg-card p-5 sm:p-6">
             <div className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
               {email.content || 'Aucun contenu texte n’a été fourni avec cet email.'}
             </div>
           </div>
 
-          {email.email_attachments.length > 0 && (
+          {otherAttachments.length > 0 && (
             <div className="mt-4 rounded-xl border border-border bg-card p-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <Paperclip className="h-4 w-4" />
-                Pièces jointes ({email.email_attachments.length})
+                Pièces jointes ({otherAttachments.length})
               </h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {email.email_attachments.map((attachment, index) => {
+                {otherAttachments.map((attachment, index) => {
                   const details = (
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{attachment.filename}</p>

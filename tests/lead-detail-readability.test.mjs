@@ -54,11 +54,10 @@ test('la fiche signale clairement les informations manquantes', () => {
   assert.match(resume, /information\$\{manquants\.length > 1 \? 's' : ''\} à compléter/);
 });
 
-test('les formulaires restent disponibles dans deux sections explicites', () => {
-  assert.match(contenu, /<Accordion type="multiple"/);
-  assert.match(contenu, /value="client"[\s\S]*<LeadIdentity/);
-  assert.match(contenu, /value="intervention"[\s\S]*<LeadQualification/);
-  assert.match(contenu, /Les changements restent en brouillon jusqu’à l’enregistrement/);
+test('le formulaire inferieur en doublon est retire', () => {
+  assert.doesNotMatch(contenu, /Modifier la fiche|EditionLead/);
+  assert.doesNotMatch(contenu, /<LeadIdentity|<LeadQualification/);
+  assert.doesNotMatch(contenu, /<Accordion/);
 });
 
 test('la note rapide et les derniers echanges restent directement accessibles', () => {

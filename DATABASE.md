@@ -199,10 +199,13 @@ SIV dans l'objet ou le corps afin de rattacher les retours d'assureurs et
 d'experts au bon lead. La boîte mail classe visuellement ces correspondants à
 partir du référentiel `insurers` et d'une liste prudente de cabinets d'expertise ;
 les correspondances seulement textuelles restent signalées comme probables.
-Les pièces jointes entrantes ne conservent que leurs métadonnées. Leur contenu
-est récupéré à la demande par la fonction authentifiée `email-attachment`, qui
-vérifie le workspace et le rôle avant d'utiliser l'URL Resend temporaire sans
-exposer la clé API au navigateur. Une réponse envoyée depuis la boîte mail du
+Les domaines officiels de VSF et Pilkington sont classés comme fournisseurs.
+Leurs pièces PDF, déjà conservées dans le bucket privé `email-attachments`, sont
+sorties dans une section « Documents fournisseur » sans dupliquer le fichier.
+La communication ne conserve que les métadonnées des pièces jointes ; leur
+contenu reste dans le bucket privé. La fonction authentifiée `email-attachment`
+vérifie le workspace et le rôle avant de servir le fichier au navigateur. Une
+réponse envoyée depuis la boîte mail du
 CRM reprend `email_message_id` dans l'en-tête `In-Reply-To` afin de rester dans
 le fil de discussion du client.
 
