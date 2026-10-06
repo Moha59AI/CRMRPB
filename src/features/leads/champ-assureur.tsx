@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Check, AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LogoAssureur } from '@/features/insurers/insurer-logo';
 import { cn } from '@/lib/utils';
 import { fetchInsurers } from '@/services/insurers-service';
 import type { Insurer } from '@/types';
@@ -158,7 +159,7 @@ export function ChampAssureur({ valeur, onChange, desactive, id }: ChampAssureur
                     i === surligne ? 'bg-muted' : 'bg-transparent',
                   )}
                 >
-                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <LogoAssureur nom={a.name} taille="sm" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-foreground">{a.name}</span>
                     {a.franchise_texte && (

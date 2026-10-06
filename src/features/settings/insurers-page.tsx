@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { ChampAdresse } from '@/components/ChampAdresse';
 import { useAuth } from '@/features/auth/auth-context';
+import { LogoAssureur } from '@/features/insurers/insurer-logo';
 import { messageErreurBase } from '@/lib/erreurs';
 import {
   fetchInsurers, creerAssureur, modifierAssureur, supprimerAssureur,
@@ -192,20 +193,25 @@ export function InsurersPage() {
                   {assureurs.map((a) => (
                     <TableRow key={a.id} className={a.actif ? 'hover:bg-muted/40' : 'opacity-55'}>
                       <TableCell className="px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">{a.name}</span>
-                          {!a.actif && (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full text-[10px] font-normal text-muted-foreground"
-                            >
-                              Inactif
-                            </Badge>
-                          )}
+                        <div className="flex items-center gap-3">
+                          <LogoAssureur nom={a.name} />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-foreground">{a.name}</span>
+                              {!a.actif && (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full text-[10px] font-normal text-muted-foreground"
+                                >
+                                  Inactif
+                                </Badge>
+                              )}
+                            </div>
+                            {a.phone && (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground tabular">{a.phone}</p>
+                            )}
+                          </div>
                         </div>
-                        {a.phone && (
-                          <p className="mt-0.5 text-xs text-muted-foreground tabular">{a.phone}</p>
-                        )}
                       </TableCell>
 
                       <TableCell className="px-4 text-sm tabular text-foreground">

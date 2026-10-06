@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ShieldCheck, PhoneCall, UserCheck, ClipboardCheck, CalendarClock,
+  PhoneCall, UserCheck, ClipboardCheck, CalendarClock,
   Send, AlertTriangle, Mail, ChevronDown,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { LogoAssureur } from '@/features/insurers/insurer-logo';
 import { cn } from '@/lib/utils';
 import { trouverAssureur } from '@/services/insurers-service';
 
@@ -69,7 +70,7 @@ export function ProcedureAssureur({ nomSaisi }: ProcedureAssureurProps) {
         aria-expanded={deplie}
         className="flex w-full flex-wrap items-center gap-2 p-3 text-left"
       >
-        <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <LogoAssureur nom={assureur.name} taille="sm" />
         <span className="text-sm font-semibold text-foreground">{assureur.name}</span>
 
         {assureur.expertise_obligatoire && (
