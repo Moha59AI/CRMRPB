@@ -76,6 +76,17 @@ export function EnteteMessage({ email, nom, correspondant, aRattacher }: EnteteM
           <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', deplie && 'rotate-180')} />
         </button>
 
+        {!entrant && email.email_smtp_accepted_at && (
+          <p className="mt-1 text-xs">
+            <span className="font-medium text-done">Accepté par le serveur SMTP IONOS</span>
+            <span className="text-muted-foreground">
+              {email.email_sent_copy_saved_at
+                ? ' · copie classée dans le dossier Envoyés IONOS.'
+                : ' · transmission confirmée, copie du webmail non confirmée.'}
+            </span>
+          </p>
+        )}
+
         {deplie && (
           <dl className="mt-2 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
             <dt className="text-muted-foreground">De</dt>

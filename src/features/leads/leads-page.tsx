@@ -746,6 +746,18 @@ function libelleAge(date: string): string {
   return `il y a ${jours} jours`;
 }
 
+/**
+ * Donne une lecture immediate des deux etats qui demandent le plus de
+ * contraste dans une liste dense. La selection reste prioritaire : une fiche
+ * cochee ne doit jamais se confondre avec sa couleur de statut.
+ */
+function couleurLigneLead(status: LeadStatus, selectionnee: boolean): string {
+  if (selectionnee) return 'bg-primary/[0.08] hover:bg-primary/[0.12]';
+  if (status === 'nrp') return 'bg-destructive/[0.08] hover:bg-destructive/[0.12]';
+  if (status === 'lost') return 'bg-foreground/[0.045] hover:bg-foreground/[0.075]';
+  return 'hover:bg-muted/40';
+}
+
 // ============ VIEW TOGGLE BUTTON ============
 
 function ViewToggleButton({
@@ -800,7 +812,10 @@ function ListeMobile({
         {leads.map((lead) => (
           <li
             key={lead.id}
-            className={cn('flex items-stretch', selection.has(lead.id) && 'bg-primary/[0.045]')}
+            className={cn(
+              'flex items-stretch transition-colors',
+              couleurLigneLead(lead.status, selection.has(lead.id)),
+            )}
           >
             <div className="flex w-11 shrink-0 items-center justify-center">
               <Checkbox
@@ -909,8 +924,8 @@ function LeadsTable({
           <TableRow
             key={lead.id}
             className={cn(
-              'cursor-pointer hover:bg-muted/40',
-              selection.has(lead.id) && 'bg-primary/[0.045]',
+              'cursor-pointer',
+              couleurLigneLead(lead.status, selection.has(lead.id)),
             )}
             onClick={() => onRowClick(lead)}
           >

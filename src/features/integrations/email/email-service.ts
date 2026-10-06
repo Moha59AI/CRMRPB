@@ -60,7 +60,8 @@ const EMAIL_LIST_COLUMNS = [
   'id', 'workspace_id', 'lead_id', 'case_id', 'contact_id', 'user_id',
   'type', 'direction', 'status', 'content', 'subject', 'duration_seconds',
   'recording_url', 'provider', 'external_id', 'delivered_at', 'sender_email',
-  'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_attachments',
+  'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_smtp_accepted_at',
+  'email_sent_copy_saved_at', 'email_attachments',
   'created_at',
 ].join(',');
 

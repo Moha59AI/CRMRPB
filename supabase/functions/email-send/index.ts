@@ -1,7 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import { ImapFlow } from 'npm:imapflow@2.0.6';
 import nodemailer from 'npm:nodemailer@10.0.10';
 import { Buffer } from 'node:buffer';
 import {
+  IONOS_IMAP_HOST,
+  IONOS_IMAP_PORT,
   IONOS_SMTP_HOST,
   IONOS_SMTP_PORT,
   readIonosPassword,
@@ -125,6 +128,137 @@ function echapperHtml(value: string): string {
     .replaceAll("'", '&#039;');
 }
 
+function base64Mime(value: string | Buffer): string {
+  const encoded = Buffer.isBuffer(value)
+    ? value.toString('base64')
+    : Buffer.from(value, 'utf8').toString('base64');
+  return encoded.match(/.{1,76}/g)?.join('\r\n') ?? '';
+}
+
+function enteteUtf8(value: string): string {
+  return `=?UTF-8?B?${Buffer.from(value.replace(/[\r\n]+/g, ' '), 'utf8').toString('base64')}?=`;
+}
+
+function messageReferenceValide(value: string | null): value is string {
+  return Boolean(value && /^<[^<>\r\n]+>$/.test(value));
+}
+
+/**
+ * Reconstruit la copie RFC 5322 deposee dans « Envoyes ». L'envoi lui-meme
+ * reste assure par Nodemailer/SMTP ; cette copie IMAP sert uniquement a ce que
+ * le webmail IONOS et les autres appareils montrent le meme historique.
+ */
+function construireCopieMime(options: {
+  senderName: string;
+  senderEmail: string;
+  recipientEmail: string;
+  subject: string;
+  content: string;
+  htmlContent: string;
+  messageId: string;
+  inReplyTo: string | null;
+  attachments: OutboundAttachment[];
+}): Buffer {
+  const alternative = `alternative-${crypto.randomUUID()}`;
+  const mixed = `mixed-${crypto.randomUUID()}`;
+  const headers = [
+    `From: ${enteteUtf8(options.senderName)} <${options.senderEmail}>`,
+    `To: <${options.recipientEmail}>`,
+    `Subject: ${enteteUtf8(options.subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: ${options.messageId}`,
+    'MIME-Version: 1.0',
+  ];
+  if (messageReferenceValide(options.inReplyTo)) {
+    headers.push(`In-Reply-To: ${options.inReplyTo}`, `References: ${options.inReplyTo}`);
+  }
+
+  const corpsAlternatif = [
+    `--${alternative}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Mime(options.content),
+    `--${alternative}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Mime(options.htmlContent),
+    `--${alternative}--`,
+  ];
+
+  if (options.attachments.length === 0) {
+    return Buffer.from([
+      ...headers,
+      `Content-Type: multipart/alternative; boundary="${alternative}"`,
+      '',
+      ...corpsAlternatif,
+      '',
+    ].join('\r\n'), 'utf8');
+  }
+
+  const pieces = options.attachments.flatMap((attachment) => {
+    const asciiFilename = attachment.filename
+      .replace(/[^\x20-\x7E]/g, '_')
+      .replace(/["\\]/g, '_');
+    return [
+      `--${mixed}`,
+      `Content-Type: ${attachment.contentType}; name="${asciiFilename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
+      '',
+      base64Mime(Buffer.from(attachment.contentBase64, 'base64')),
+    ];
+  });
+
+  return Buffer.from([
+    ...headers,
+    `Content-Type: multipart/mixed; boundary="${mixed}"`,
+    '',
+    `--${mixed}`,
+    `Content-Type: multipart/alternative; boundary="${alternative}"`,
+    '',
+    ...corpsAlternatif,
+    ...pieces,
+    `--${mixed}--`,
+    '',
+  ].join('\r\n'), 'utf8');
+}
+
+async function copierDansEnvoyesIonos(options: {
+  senderEmail: string;
+  password: string;
+  rawMessage: Buffer;
+}): Promise<string> {
+  const client = new ImapFlow({
+    host: IONOS_IMAP_HOST,
+    port: IONOS_IMAP_PORT,
+    secure: true,
+    auth: { user: options.senderEmail, pass: options.password },
+    logger: false,
+    disableAutoIdle: true,
+    disableCompression: true,
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 45_000,
+    tls: { minVersion: 'TLSv1.2', servername: IONOS_IMAP_HOST },
+  });
+  client.on('error', (error) => console.error('IONOS IMAP SENT:', error.message));
+
+  try {
+    await client.connect();
+    const mailboxes = await client.list();
+    const sent = mailboxes.find((mailbox) => mailbox.specialUse === '\\Sent')
+      ?? mailboxes.find((mailbox) => /^(sent|sent items|gesendet|envoy[eé]s|messages envoy[eé]s)$/i.test(mailbox.path));
+    if (!sent) throw new Error('DOSSIER_ENVOYES_INTROUVABLE');
+    const appended = await client.append(sent.path, options.rawMessage, ['\\Seen'], new Date());
+    if (!appended) throw new Error('COPIE_ENVOYES_REFUSEE');
+    return sent.path;
+  } finally {
+    if (client.usable) await client.logout().catch(() => undefined);
+  }
+}
+
 async function utilisateur(req: Request) {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
   const { data, error } = await admin.auth.getUser(token);
@@ -242,6 +376,9 @@ Deno.serve(async (req) => {
     });
 
     let smtpMessageId = messageId;
+    let smtpAcceptedAt: string | null = null;
+    let sentCopySavedAt: string | null = null;
+    let sentCopyError: string | null = null;
     const htmlContent = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`;
     try {
       const result = await transporter.sendMail({
@@ -267,11 +404,34 @@ Deno.serve(async (req) => {
       smtpMessageId = typeof result.messageId === 'string' && result.messageId
         ? result.messageId
         : messageId;
+      smtpAcceptedAt = new Date().toISOString();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(`IONOS_SMTP_ERROR: ${detail}`);
     } finally {
       transporter.close();
+    }
+
+    // Un SMTP accepte confirme la transmission au serveur IONOS, mais ne
+    // remplit pas le dossier « Envoyes ». La copie IMAP est donc une seconde
+    // operation. Son echec ne doit jamais provoquer un deuxieme envoi.
+    try {
+      const rawMessage = construireCopieMime({
+        senderName,
+        senderEmail,
+        recipientEmail: recipient.email,
+        subject,
+        content,
+        htmlContent,
+        messageId: smtpMessageId,
+        inReplyTo,
+        attachments,
+      });
+      await copierDansEnvoyesIonos({ senderEmail, password, rawMessage });
+      sentCopySavedAt = new Date().toISOString();
+    } catch (error) {
+      sentCopyError = error instanceof Error ? error.message : String(error);
+      console.error('IONOS SENT COPY:', sentCopyError);
     }
 
     const { data: communication, error: communicationError } = await admin
@@ -289,6 +449,9 @@ Deno.serve(async (req) => {
         email_html: htmlContent,
         provider: 'ionos-smtp',
         external_id: smtpMessageId,
+        email_message_id: smtpMessageId,
+        email_smtp_accepted_at: smtpAcceptedAt,
+        email_sent_copy_saved_at: sentCopySavedAt,
         sender_email: senderEmail,
         recipient_email: recipient.email,
         email_in_reply_to: inReplyTo,
@@ -307,7 +470,7 @@ Deno.serve(async (req) => {
       status: 'connected',
       last_tested_at: new Date().toISOString(),
       last_success_at: new Date().toISOString(),
-      last_error: null,
+      last_error: sentCopyError ? `COPIE_ENVOYES_IONOS_IMPOSSIBLE: ${sentCopyError}` : null,
     }).eq('id', connection.id);
 
     return json({ success: true, communication });

@@ -211,9 +211,9 @@ export function GoogleCalendarControl({ onSynced }: { onSynced: () => void }) {
                       Reprendre les rendez-vous créés dans Google
                     </Label>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Tout événement de cet agenda devient un rendez-vous CRM de type « autre »,
-                      sans lead ni technicien. Les événements « journée entière » sont ignorés.
-                      Désactivé, seuls les rendez-vous nés dans le CRM sont relus.
+                      Tout événement de cet agenda, y compris un rendez-vous synchronisé depuis
+                      Onify, apparaît dans le CRM. Si le client est reconnu, sa fiche passe
+                      automatiquement à « RDV pris ». Les événements « journée entière » sont ignorés.
                     </p>
                   </div>
                   <Switch

@@ -451,6 +451,10 @@ export interface Communication {
   recipient_email: string | null;
   email_message_id: string | null;
   email_in_reply_to: string | null;
+  /** Le serveur SMTP IONOS a accepte le message. */
+  email_smtp_accepted_at: string | null;
+  /** La copie est visible dans le dossier Envoyes IONOS. */
+  email_sent_copy_saved_at: string | null;
   email_attachments: Array<{
     id: string;
     filename: string;

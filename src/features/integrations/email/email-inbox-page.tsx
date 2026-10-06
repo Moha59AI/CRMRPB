@@ -207,6 +207,8 @@ function statusLabel(email: Communication): string {
   if (email.direction === 'inbound') return 'Reçu';
   if (email.status === 'failed') return 'Échec';
   if (email.status === 'delivered') return 'Livré';
+  if (email.email_sent_copy_saved_at) return 'Envoyé · copie IONOS';
+  if (email.email_smtp_accepted_at) return 'Accepté par IONOS';
   if (email.status === 'sent') return 'Envoyé';
   return 'En cours';
 }
@@ -730,7 +732,11 @@ function NewEmailDialog({
     },
     onSuccess: async (email) => {
       await queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
-      toast.success('Email envoyé depuis votre boîte IONOS');
+      if (email.email_sent_copy_saved_at) {
+        toast.success('Email accepté et classé dans les Envoyés IONOS');
+      } else {
+        toast.warning('Email accepté par IONOS, mais sa copie n’a pas pu être classée dans Envoyés');
+      }
       onSent(email);
       reset();
       onOpenChange(false);
@@ -948,13 +954,17 @@ function EmailDetail({
         attachments,
       });
     },
-    onSuccess: () => {
+    onSuccess: (sentEmail) => {
       setReplyContent('');
       setReplyAttachments([]);
       setReponseOuverte(false);
       void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
       void queryClient.invalidateQueries({ queryKey: ['communications'] });
-      toast.success('Réponse envoyée depuis votre boîte IONOS');
+      if (sentEmail.email_sent_copy_saved_at) {
+        toast.success('Réponse acceptée et classée dans les Envoyés IONOS');
+      } else {
+        toast.warning('Réponse acceptée par IONOS, mais sa copie n’a pas pu être classée dans Envoyés');
+      }
     },
     onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer la réponse"),
   });

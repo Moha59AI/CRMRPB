@@ -30,9 +30,30 @@ test('les emails sortants passent par le serveur et sont journalises seulement a
   assert.match(edge, /IONOS_SMTP_PORT/);
   assert.match(edge, /readIonosPassword/);
   assert.match(edge, /provider: 'ionos-smtp'/);
+  assert.match(edge, /email_smtp_accepted_at: smtpAcceptedAt/);
+  assert.match(edge, /email_sent_copy_saved_at: sentCopySavedAt/);
   assert.doesNotMatch(edge, /api\.resend\.com/);
   assert.match(page, /sendIonosEmail/);
   assert.doesNotMatch(page, /Email envoyé \(mode démo\)/);
+});
+
+test('un email accepte par SMTP est copie dans les Envoyes IONOS sans risque de double envoi', async () => {
+  const [edge, migration, header, types] = await Promise.all([
+    read('supabase/functions/email-send/index.ts'),
+    read('supabase/migrations/20261006120000_preuve_envoi_email_ionos.sql'),
+    read('src/features/integrations/email/entete-message.tsx'),
+    read('src/types/index.ts'),
+  ]);
+
+  assert.match(edge, /ImapFlow/);
+  assert.match(edge, /mailbox\.specialUse === '\\\\Sent'/);
+  assert.match(edge, /client\.append\(sent\.path, options\.rawMessage, \['\\\\Seen'\]/);
+  assert.match(edge, /Son echec ne doit jamais provoquer un deuxieme envoi/);
+  assert.match(migration, /email_smtp_accepted_at timestamptz/);
+  assert.match(migration, /email_sent_copy_saved_at timestamptz/);
+  assert.match(header, /Accepté par le serveur SMTP IONOS/);
+  assert.match(header, /copie classée dans le dossier Envoyés IONOS/);
+  assert.match(types, /email_sent_copy_saved_at: string \| null/);
 });
 
 test('la synchronisation IMAP rattache les messages et notifie les utilisateurs', async () => {
