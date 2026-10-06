@@ -149,7 +149,7 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.match(routes, /path="integrations\/email"/);
   assert.match(navigation, /path: '\/settings\/integrations\/email'/);
   assert.match(permissions, /'\/settings\/integrations\/email': \['admin'\]/);
-  assert.match(list, /Boîte mail IONOS/);
+  assert.match(list, /Emails et signature/);
   assert.match(settings, /Connexion directe à IONOS, sans Resend/);
   assert.match(settings, /Synchroniser maintenant/);
   assert.match(settings, /Enregistrer et vérifier/);
@@ -272,6 +272,9 @@ test('la signature est personnalisee, apercue puis rendue en HTML compatible ema
   assert.match(service, /Service client/);
   assert.match(settings, /Signature automatique/);
   assert.match(settings, /Appliquer le modèle pro/);
+  assert.match(settings, /id="signature-email"/);
+  assert.match(inbox, /settings\/integrations\/email#signature-email/);
+  assert.match(inbox, />\s*Signature\s*</);
   assert.match(inbox, /<EmailSignaturePreview/);
   assert.match(inbox, /signature,/);
   assert.match(preview, /Aperçu de la signature/);

@@ -29,8 +29,8 @@ const integrations: IntegrationCard[] = [
     available: true,
   },
   {
-    name: 'Boîte mail IONOS',
-    description: 'Envoi réel depuis le CRM et rattachement automatique des nouveaux emails aux clients.',
+    name: 'Emails et signature',
+    description: 'Boîte IONOS, signature professionnelle et rattachement automatique des emails aux clients.',
     icon: Mail,
     path: '/settings/integrations/email',
     available: true,

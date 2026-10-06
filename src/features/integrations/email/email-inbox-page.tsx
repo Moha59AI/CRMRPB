@@ -18,6 +18,7 @@ import {
   Reply,
   Search,
   Send,
+  Settings2,
   ShieldCheck,
   Star,
   UserRound,
@@ -442,6 +443,17 @@ export function EmailInboxPage() {
           action={
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
               <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full justify-center rounded-full sm:w-auto"
+              >
+                <Link to="/settings/integrations/email#signature-email">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Signature
+                </Link>
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 className="w-full justify-center rounded-full sm:w-auto"
@@ -453,7 +465,7 @@ export function EmailInboxPage() {
               </Button>
               <Button
                 size="sm"
-                className="w-full justify-center rounded-full sm:w-auto"
+                className="col-span-2 w-full justify-center rounded-full sm:col-span-1 sm:w-auto"
                 onClick={() => setComposeOpen(true)}
               >
                 <PenLine className="mr-2 h-4 w-4" />

@@ -5,6 +5,7 @@ import {
   Send, Server, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ function erreurLisible(error: unknown): string {
 
 export function EmailSettingsPage() {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [form, setForm] = useState<IonosEmailSettings>({
@@ -64,6 +66,14 @@ export function EmailSettingsPage() {
   useEffect(() => {
     if (connectionQuery.data !== undefined) setForm(parseIonosSettings(connectionQuery.data));
   }, [connectionQuery.data]);
+
+  useEffect(() => {
+    if (location.hash !== '#signature-email') return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('signature-email')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash]);
 
   const saveMutation = useMutation({
     mutationFn: () => saveIonosSettings(form),
@@ -164,8 +174,8 @@ export function EmailSettingsPage() {
   return (
     <>
       <PageHeader
-        title="Boîte mail IONOS"
-        description="Envoyez depuis votre adresse professionnelle et rattachez les réponses aux clients"
+        title="Boîte mail et signature IONOS"
+        description="Gérez votre adresse professionnelle, votre signature et la synchronisation des emails"
         action={
           <Badge variant="outline" className={connected
             ? 'rounded-full border-done/25 bg-done-soft text-done'
@@ -235,7 +245,10 @@ export function EmailSettingsPage() {
 
           <Separator className="my-5" />
 
-          <div className="space-y-3">
+          <div
+            id="signature-email"
+            className="-m-2 scroll-mt-24 space-y-3 rounded-xl p-2 transition-shadow target:ring-2 target:ring-primary/30"
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <Label htmlFor="ionos-signature">Signature automatique</Label>
