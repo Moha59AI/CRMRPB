@@ -39,14 +39,9 @@ function echapperHtml(value: string): string {
     .replaceAll("'", '&#039;');
 }
 
-function urlRetour(req: Request): string {
-  const origin = req.headers.get('Origin')?.trim() ?? '';
-  if (/^https:\/\/crm\.relaisparebrise\.fr$/i.test(origin)) {
-    return `${origin}/update-password`;
-  }
-  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
-    return `${origin}/update-password`;
-  }
+function urlRetour(): string {
+  // Une invitation peut etre declenchee depuis l'aperçu local de l'admin,
+  // mais son destinataire doit toujours arriver sur le CRM public.
   return 'https://crm.relaisparebrise.fr/update-password';
 }
 
@@ -197,17 +192,21 @@ Deno.serve(async (req) => {
 
     const mailbox = await boiteIonos(caller.workspaceId);
     const existingUser = await utilisateurParEmail(email);
+    let existingProfile: { id: string; workspace_id: string; role: string } | null = null;
     if (existingUser) {
-      const { data: existingProfile, error: profileError } = await admin
+      const { data, error: profileError } = await admin
         .from('profiles')
-        .select('id, workspace_id')
+        .select('id, workspace_id, role')
         .eq('id', existingUser.id)
         .maybeSingle();
       if (profileError) throw new Error(profileError.message);
-      if (existingProfile?.workspace_id === caller.workspaceId) {
+      existingProfile = data;
+      if (existingProfile?.workspace_id === caller.workspaceId && existingUser.last_sign_in_at) {
         throw new Error('UTILISATEUR_DEJA_MEMBRE');
       }
-      if (existingProfile) throw new Error('UTILISATEUR_DEJA_RATTACHE');
+      if (existingProfile && existingProfile.workspace_id !== caller.workspaceId) {
+        throw new Error('UTILISATEUR_DEJA_RATTACHE');
+      }
     }
 
     const invitation = await creerOuProlongerInvitation(
@@ -221,15 +220,17 @@ Deno.serve(async (req) => {
 
     let actionLink = '';
     if (existingUser) {
-      const { error: profileInsertError } = await admin.from('profiles').insert({
-        id: existingUser.id,
-        workspace_id: caller.workspaceId,
-        first_name: '',
-        last_name: '',
-        role,
-      });
-      if (profileInsertError) throw new Error(profileInsertError.message);
-      profileIdToDelete = existingUser.id;
+      if (!existingProfile) {
+        const { error: profileInsertError } = await admin.from('profiles').insert({
+          id: existingUser.id,
+          workspace_id: caller.workspaceId,
+          first_name: '',
+          last_name: '',
+          role,
+        });
+        if (profileInsertError) throw new Error(profileInsertError.message);
+        profileIdToDelete = existingUser.id;
+      }
       const { error: invitationError } = await admin.from('invitations').update({
         accepted_at: new Date().toISOString(),
       }).eq('id', invitationId);
@@ -238,7 +239,7 @@ Deno.serve(async (req) => {
       const { data, error } = await admin.auth.admin.generateLink({
         type: 'recovery',
         email,
-        options: { redirectTo: urlRetour(req) },
+        options: { redirectTo: urlRetour() },
       });
       if (error) throw new Error(error.message);
       actionLink = data.properties.action_link;
@@ -246,7 +247,7 @@ Deno.serve(async (req) => {
       const { data, error } = await admin.auth.admin.generateLink({
         type: 'invite',
         email,
-        options: { redirectTo: urlRetour(req) },
+        options: { redirectTo: urlRetour() },
       });
       if (error) throw new Error(error.message);
       userIdToDelete = data.user.id;

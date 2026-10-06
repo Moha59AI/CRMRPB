@@ -15,8 +15,18 @@ test('une invitation utilisateur passe par une fonction serveur authentifiee', a
   assert.doesNotMatch(service, /rpc\('creer_invitation'/);
   assert.match(edge, /profile\.role !== 'admin'/);
   assert.match(edge, /type: 'invite'/);
-  assert.match(edge, /redirectTo: urlRetour\(req\)/);
+  assert.match(edge, /return 'https:\/\/crm\.relaisparebrise\.fr\/update-password'/);
+  assert.match(edge, /redirectTo: urlRetour\(\)/);
+  assert.doesNotMatch(edge, /localhost|127\.0\.0\.1/);
   assert.match(config, /\[functions\.user-invite\][\s\S]*verify_jwt = true/);
+});
+
+test('une invitation locale renvoie vers la production et peut etre reemise avant la premiere connexion', async () => {
+  const edge = await read('supabase/functions/user-invite/index.ts');
+
+  assert.match(edge, /existingProfile\?\.workspace_id === caller\.workspaceId && existingUser\.last_sign_in_at/);
+  assert.match(edge, /if \(!existingProfile\)/);
+  assert.match(edge, /type: 'recovery'/);
 });
 
 test('le mail d invitation est envoye par IONOS et confirme seulement apres acceptation SMTP', async () => {
