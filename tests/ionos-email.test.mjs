@@ -180,7 +180,9 @@ test('les PDF de VSF et Pilkington sont sortis dans les documents fournisseur', 
   assert.match(sync, /storage_path: storagePath/);
   assert.match(inbox, /function isPdfAttachment/);
   assert.match(inbox, /Documents fournisseur/);
-  assert.match(inbox, /détecté et sorti/);
+  // Le libellé a été resserré sur une ligne ; il dit toujours que le PDF a
+  // été sorti de l'email sans qu'on le demande.
+  assert.match(inbox, /sorti'\} automatiquement/);
   assert.match(inbox, /supplierPdfs\.map/);
   assert.match(inbox, /openAttachment\(attachment\)/);
 });

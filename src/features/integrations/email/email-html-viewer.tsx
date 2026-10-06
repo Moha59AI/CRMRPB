@@ -18,10 +18,13 @@ export function EmailHtmlViewer({ html, text, subject }: EmailHtmlViewerProps) {
   );
 
   if (!html || showText) {
+    // Le corps d'un message n'est pas un objet pose sur la page : c'est la
+    // page. Gmail ne l'encadre pas, et le cadre coutait ici 48 px de marges
+    // autour d'un texte souvent court.
     return (
-      <div className="mt-4 min-h-48 rounded-xl border border-border bg-card p-5 sm:p-6">
+      <div className="mt-4 min-h-32">
         {html && (
-          <div className="mb-4 flex justify-end">
+          <div className="mb-3 flex justify-end">
             <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setShowText(false)}>
               <Eye className="mr-2 h-4 w-4" />
               Voir la mise en forme
@@ -37,7 +40,7 @@ export function EmailHtmlViewer({ html, text, subject }: EmailHtmlViewerProps) {
 
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-col gap-2 border-b border-border px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+      <div className="flex flex-col gap-2 border-b border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <FileText className="h-4 w-4 text-primary" />
           Mise en forme originale sécurisée

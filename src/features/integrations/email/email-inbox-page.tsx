@@ -808,6 +808,7 @@ function EmailDetail({
   const inbound = email.direction === 'inbound';
   const queryClient = useQueryClient();
   const [replyContent, setReplyContent] = useState('');
+  const [reponseOuverte, setReponseOuverte] = useState(false);
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [leadLinkOpen, setLeadLinkOpen] = useState(false);
   const [attachmentViewer, setAttachmentViewer] = useState<AttachmentViewerState | null>(null);
@@ -858,6 +859,7 @@ function EmailDetail({
     onSuccess: () => {
       setReplyContent('');
       setReplyAttachments([]);
+      setReponseOuverte(false);
       void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
       void queryClient.invalidateQueries({ queryKey: ['communications'] });
       toast.success('Réponse envoyée depuis votre boîte IONOS');
@@ -996,20 +998,19 @@ function EmailDetail({
             aRattacher={!email.contact_id && !email.lead_id}
           />
 
+          {/* Trois lignes et une icone de 40 px pour annoncer un fichier : le
+              titre et le compte tiennent sur une ligne, et le fichier
+              lui-meme porte le reste. */}
           {supplierPdfs.length > 0 && (
-            <div className="mt-4 rounded-xl border border-due/25 bg-due-soft p-4 sm:p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background text-due shadow-sm">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground">Documents fournisseur</h3>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {supplierPdfs.length} PDF {supplierPdfs.length > 1 ? 'détectés et sortis' : 'détecté et sorti'} automatiquement de cet email.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="mt-4 rounded-xl border border-due/25 bg-due-soft px-3 py-2.5 sm:px-4">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <Package className="h-4 w-4 shrink-0 text-due" aria-hidden />
+                Documents fournisseur
+                <span className="font-normal text-muted-foreground">
+                  · {supplierPdfs.length} PDF {supplierPdfs.length > 1 ? 'sortis' : 'sorti'} automatiquement
+                </span>
+              </h3>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {supplierPdfs.map((attachment, index) => (
                   <button
                     key={`${attachment.id}-supplier-${index}`}
@@ -1112,7 +1113,30 @@ function EmailDetail({
             </div>
           )}
 
-          {inbound && (
+          {/* La zone de reponse etait toujours ouverte, avec six lignes de
+              saisie vides sous chaque message. On ne repond pas a tout : un
+              bouton, et l'editeur n'arrive qu'au clic. */}
+          {inbound && !reponseOuverte && (
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setReponseOuverte(true)}
+                disabled={!recipient}
+              >
+                <Reply className="mr-2 h-4 w-4" />
+                Répondre
+              </Button>
+              {!recipient && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  L’adresse de l’expéditeur est introuvable : impossible de répondre depuis le CRM.
+                </p>
+              )}
+            </div>
+          )}
+
+          {inbound && reponseOuverte && (
             <div className="mt-4 rounded-xl border border-border bg-card p-4 sm:p-5">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -1124,6 +1148,16 @@ function EmailDetail({
                     À : {recipient ?? 'adresse expéditeur indisponible'} · Objet : {replySubject}
                   </p>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setReponseOuverte(false)}
+                  disabled={replyMutation.isPending}
+                >
+                  Annuler
+                </Button>
               </div>
 
               <Textarea

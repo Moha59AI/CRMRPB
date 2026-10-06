@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { LigneEmail } from '@/features/integrations/email/ligne-email';
 import { EnteteMessage } from '@/features/integrations/email/entete-message';
+import { EmailHtmlViewer } from '@/features/integrations/email/email-html-viewer';
 import type { Communication } from '@/types';
 
 const HEURE = 3_600_000;
@@ -133,6 +134,22 @@ export function ApercuMail() {
               nom="Dorothée Vandeven"
             />
           </div>
+        </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Corps du message, sans cadre
+        </h2>
+        <div className="max-w-4xl">
+          <EmailHtmlViewer
+            html={null}
+            text={[
+              'Bonjour,',
+              'Votre marchandise est partie du dépôt de Saint-Amand Longpré.',
+              'Veuillez trouver ci-joint la copie de votre facture.',
+              'Bonne réception.',
+            ].join('\n\n')}
+            subject="Facture n° 963028"
+          />
         </div>
 
         <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
