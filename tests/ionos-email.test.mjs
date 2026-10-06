@@ -82,6 +82,7 @@ test('le HTML des emails reste isole et les anciens messages sont enrichis progr
   assert.match(viewer, /Afficher les images externes/);
   assert.doesNotMatch(viewer, /dangerouslySetInnerHTML/);
   assert.match(migration, /add column if not exists email_html text/);
+  assert.ok(migration.startsWith('/*\n'));
   assert.match(types, /email_html: string \| null/);
 });
 
