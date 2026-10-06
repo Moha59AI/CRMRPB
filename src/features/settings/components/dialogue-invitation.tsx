@@ -46,11 +46,12 @@ export function DialogueInvitation({ ouvert, onOuvertChange }: DialogueInvitatio
 
   const mutation = useMutation({
     mutationFn: (v: Formulaire) => creerInvitation(v.email, v.role),
-    onSuccess: (_id, v) => {
+    onSuccess: (_invitation, v) => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
       queryClient.invalidateQueries({ queryKey: ['etat-systeme'] });
-      toast.success(`${v.email} est invité`, {
-        description: "La personne doit créer son compte avec cette adresse exacte, sous 7 jours.",
+      toast.success(`Invitation envoyée à ${v.email}`, {
+        description: 'IONOS a accepté le message. Le lien permet de choisir le mot de passe du CRM.',
       });
       reset();
       onOuvertChange(false);
@@ -67,8 +68,8 @@ export function DialogueInvitation({ ouvert, onOuvertChange }: DialogueInvitatio
           </div>
           <DialogTitle>Inviter quelqu'un</DialogTitle>
           <DialogDescription>
-            L'accès est ouvert uniquement à l'adresse invitée. Sans invitation, un compte
-            créé ne voit rien.
+            La personne recevra un email Relais Pare-Brise avec un lien sécurisé pour choisir
+            son mot de passe et accéder au CRM.
           </DialogDescription>
         </DialogHeader>
 

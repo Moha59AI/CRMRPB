@@ -72,3 +72,6 @@ verify_jwt = true
 
 [functions.ionos-mail-sync]
 verify_jwt = false
+
+[functions.user-invite]
+verify_jwt = true
