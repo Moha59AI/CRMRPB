@@ -21,6 +21,7 @@ function message(partiel: Partial<Communication> & { id: string; heures: number 
     subject: null,
     content: null,
     email_attachments: [],
+    read_at: null,
     created_at: new Date(Date.now() - partiel.heures * HEURE).toISOString(),
     ...partiel,
   } as Communication;
@@ -39,7 +40,7 @@ const CAS: { correspondant: string; aRattacher?: boolean; pdf?: number; email: C
     correspondant: 'MAIF Sinistres',
     pdf: 2,
     email: message({
-      id: '2', heures: 5,
+      id: '2', heures: 5, read_at: new Date().toISOString(),
       subject: 'Prise en charge dossier 2026-04417 — accord de règlement',
       content: 'Nous vous confirmons la prise en charge au titre du contrat bris de glace.',
       email_attachments: [{ id: 'a', filename: 'accord.pdf', content_type: 'application/pdf' }],
@@ -61,7 +62,7 @@ const CAS: { correspondant: string; aRattacher?: boolean; pdf?: number; email: C
   {
     correspondant: 'Ahmed Kacet',
     email: message({
-      id: '4', heures: 50, direction: 'outbound', type: 'email_outbound', status: 'sent',
+      id: '4', heures: 50, read_at: new Date().toISOString(), direction: 'outbound', type: 'email_outbound', status: 'sent',
       subject: 'Votre intervention de mardi',
       content: 'Bonjour Monsieur Kacet, je reviens vers vous concernant le créneau de mardi.',
     }),
@@ -69,7 +70,7 @@ const CAS: { correspondant: string; aRattacher?: boolean; pdf?: number; email: C
   {
     correspondant: 'noreply@plateforme-assurance.fr',
     aRattacher: true,
-    email: message({ id: '5', heures: 100 }),
+    email: message({ id: '5', heures: 100, read_at: new Date().toISOString() }),
   },
 ];
 

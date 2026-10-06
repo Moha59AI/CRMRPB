@@ -437,6 +437,8 @@ export interface Communication {
   content: string | null;
   /** Corps HTML original de l'email. Toujours afficher dans un contexte isole. */
   email_html: string | null;
+  /** Première ouverture du message dans le CRM. Nul = non lu. */
+  read_at: string | null;
   subject: string | null;
   duration_seconds: number | null;
   recording_url: string | null;

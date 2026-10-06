@@ -54,22 +54,12 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  buildSignedEmailContent,
-  fetchEmailAttachment,
-  fetchEmailHtml,
-  fetchMailboxEmails,
-  getIonosConnection,
-  getIonosMailboxStatus,
-  parseIonosSettings,
-  prepareEmailAttachments,
-  sendIonosEmail,
-  syncIonosMailbox,
-  type IonosMailboxStatus,
+  buildSignedEmailContent, fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
-import { LigneEmail } from './ligne-email';
+import { LigneEmail, estNonLu } from './ligne-email';
 
 type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -355,6 +345,14 @@ export function EmailInboxPage() {
   const openEmail = (id: string) => {
     setSelectedId(id);
     setMobileDetailOpen(true);
+
+    // L'affichage ne dépend pas de l'écriture : le message s'ouvre tout de
+    // suite, et la liste se rafraîchit quand la base a pris la marque.
+    const email = emailsQuery.data?.find((item) => item.id === id);
+    if (!email || !estNonLu(email)) return;
+    void marquerEmailLu(id)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['emails'] }))
+      .catch(() => { /* Un marquage manqué se rattrape à la prochaine ouverture. */ });
   };
 
   const syncMutation = useMutation({
@@ -479,8 +477,11 @@ export function EmailInboxPage() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-        <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 lg:border-r lg:border-border`}>
+      {/* Tant qu'aucun message n'est ouvert, la liste prend toute la largeur :
+          c'est la vue par defaut de Gmail, et c'est elle qui permet de
+          balayer. Le volet de lecture n'apparait qu'a l'ouverture. */}
+      <div className={`grid min-h-0 flex-1 ${selectedEmail ? 'lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+        <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 ${selectedEmail ? 'lg:border-r lg:border-border' : ''}`}>
           {emailsQuery.isLoading && (
             <div className="space-y-2 p-4">
               {Array.from({ length: 7 }).map((_, index) => (
@@ -548,7 +549,7 @@ export function EmailInboxPage() {
           )}
         </section>
 
-        <section className={`${mobileDetailOpen ? 'flex' : 'hidden lg:flex'} min-h-0 flex-col bg-background`}>
+        <section className={`${mobileDetailOpen ? 'flex' : selectedEmail ? 'hidden lg:flex' : 'hidden'} min-h-0 flex-col bg-background`}>
           {selectedEmail ? (
             <EmailDetail
               key={selectedEmail.id}

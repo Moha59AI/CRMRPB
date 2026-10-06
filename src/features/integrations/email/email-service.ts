@@ -358,6 +358,22 @@ export async function sendIonosEmail(input: SendIonosEmailInput): Promise<Commun
   return result.communication;
 }
 
+/**
+ * Marque un message recu comme lu.
+ *
+ * Une seule ecriture, la premiere : `read_at` garde la date de la premiere
+ * ouverture, pas de la derniere. Rouvrir un message dix fois ne doit pas
+ * deplacer ce reperage.
+ */
+export async function marquerEmailLu(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('communications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('read_at', null);
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchEmailAttachment(input: FetchEmailAttachmentInput): Promise<Blob> {
   const accessToken = await jetonSession();
   const response = await fetch(`${supabaseUrl}/functions/v1/email-attachment`, {
