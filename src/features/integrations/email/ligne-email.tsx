@@ -27,6 +27,10 @@ export interface LigneEmailProps {
   pdfFournisseur?: number;
   actif: boolean;
   onOuvrir: () => void;
+  /** Coche de selection, pour les actions groupees. */
+  selectionne?: boolean;
+  onSelectionner?: (selectionne: boolean) => void;
+  onSuivre?: (suivi: boolean) => void;
 }
 
 export function dateCourte(iso: string): string {
@@ -48,9 +52,11 @@ export function estNonLu(email: Communication): boolean {
 
 export function LigneEmail({
   email, correspondant, badge, aRattacher, pdfFournisseur = 0, actif, onOuvrir,
+  selectionne = false, onSelectionner, onSuivre,
 }: LigneEmailProps) {
   const sortant = email.direction !== 'inbound';
   const nonLu = estNonLu(email);
+  const suivi = Boolean(email.starred_at);
   const extrait = (email.content ?? '').replace(/\s+/g, ' ').trim();
   const pieces = email.email_attachments?.length ?? 0;
 
@@ -70,16 +76,46 @@ export function LigneEmail({
         'group flex h-[42px] cursor-pointer items-center gap-2 px-2 text-left transition-colors sm:gap-3 sm:px-3',
         // Gmail teinte le lu et laisse le non-lu en blanc : c'est le fond,
         // pas seulement la graisse, qui fait ressortir ce qui reste a voir.
-        actif ? 'bg-primary/[0.07]' : nonLu ? 'bg-card hover:bg-surface' : 'bg-surface/60 hover:bg-surface',
+        selectionne ? 'bg-due-soft/60 hover:bg-due-soft'
+          : actif ? 'bg-primary/[0.07]'
+            : nonLu ? 'bg-card hover:bg-surface' : 'bg-surface/60 hover:bg-surface',
       )}
     >
-      {/* L'etoile n'agit pas encore : elle tient sa colonne pour que les
-          lignes restent alignees le jour ou elle agira. */}
-      <Star
-        aria-hidden
-        className="hidden h-4 w-4 shrink-0 text-faint/50 sm:block"
-        strokeWidth={1.5}
-      />
+      {onSelectionner && (
+        <label
+          className="hidden shrink-0 cursor-pointer p-1 sm:block"
+          onClick={(evenement) => evenement.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={selectionne}
+            onChange={(evenement) => onSelectionner(evenement.target.checked)}
+            className="h-4 w-4 cursor-pointer accent-primary"
+            aria-label={`Sélectionner le message de ${correspondant}`}
+          />
+        </label>
+      )}
+
+      {onSuivre && (
+        <button
+          type="button"
+          onClick={(evenement) => {
+            evenement.stopPropagation();
+            onSuivre(!suivi);
+          }}
+          aria-pressed={suivi}
+          title={suivi ? 'Ne plus suivre' : 'Suivre ce message'}
+          className="hidden shrink-0 p-1 sm:block"
+        >
+          <Star
+            className={cn(
+              'h-4 w-4 transition-colors',
+              suivi ? 'fill-due text-due' : 'text-faint/50 hover:text-due',
+            )}
+            strokeWidth={1.5}
+          />
+        </button>
+      )}
 
       {/* Colonne d'expediteur a largeur fixe : c'est elle qui fait l'alignement. */}
       <span

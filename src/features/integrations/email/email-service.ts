@@ -359,6 +359,35 @@ export async function sendIonosEmail(input: SendIonosEmailInput): Promise<Commun
 }
 
 /**
+ * Suit ou cesse de suivre un message.
+ *
+ * Le suivi est partage : une seule boite pour l'equipe, donc ce que l'un
+ * signale, l'autre doit le voir.
+ */
+export async function basculerSuiviEmail(id: string, suivi: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('communications')
+    .update({ starred_at: suivi ? new Date().toISOString() : null })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Marque plusieurs messages lus ou non lus.
+ *
+ * Remettre en non lu efface la date : le repere redevient « jamais ouvert »,
+ * ce qui est bien ce qu'on demande en le faisant.
+ */
+export async function marquerEmailsLus(ids: string[], lu: boolean): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from('communications')
+    .update({ read_at: lu ? new Date().toISOString() : null })
+    .in('id', ids);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Marque un message recu comme lu.
  *
  * Une seule ecriture, la premiere : `read_at` garde la date de la premiere

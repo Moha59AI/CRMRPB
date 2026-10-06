@@ -146,12 +146,14 @@ test('la boite mail separe les recus des envoyes et detecte assureurs experts et
 
   assert.match(routes, /path="\/emails"/);
   assert.match(navigation, /label: 'Boîte mail'/);
-  assert.match(inbox, /key: 'inbound', label: 'Reçus'/);
-  assert.match(inbox, /key: 'suppliers', label: 'Fournisseurs'/);
-  assert.match(inbox, /key: 'insurers', label: 'Assureurs'/);
-  assert.match(inbox, /key: 'experts', label: 'Experts'/);
-  assert.match(inbox, /key: 'outbound', label: 'Envoyés'/);
-  assert.match(inbox, /key: 'unlinked', label: 'Non rattachés'/);
+  // Les vues sont passees des pastilles horizontales au rail vertical, mais
+  // ce sont les memes, toutes atteignables.
+  assert.match(inbox, /label: 'Boîte de réception'/);
+  assert.match(inbox, /label: 'Fournisseurs'/);
+  assert.match(inbox, /label: 'Assureurs'/);
+  assert.match(inbox, /label: 'Experts'/);
+  assert.match(inbox, /label: 'Envoyés'/);
+  assert.match(inbox, /label: 'Non rattachés'/);
   assert.match(inbox, /Voir la fiche/);
   assert.match(inbox, /Pièces jointes/);
   assert.match(service, /\.in\('type', \['email_inbound', 'email_outbound'\]\)/);

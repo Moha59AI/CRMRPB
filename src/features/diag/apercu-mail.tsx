@@ -11,6 +11,9 @@ import { useState } from 'react';
 import { LigneEmail } from '@/features/integrations/email/ligne-email';
 import { EnteteMessage } from '@/features/integrations/email/entete-message';
 import { EmailHtmlViewer } from '@/features/integrations/email/email-html-viewer';
+import { RailMail } from '@/features/integrations/email/rail-mail';
+import { BarreOutilsMail } from '@/features/integrations/email/barre-outils-mail';
+import { Inbox, Link2, Mail, Package, Search, Send, ShieldCheck, Star } from 'lucide-react';
 import type { Communication } from '@/types';
 
 const HEURE = 3_600_000;
@@ -77,7 +80,10 @@ const CAS: { correspondant: string; aRattacher?: boolean; pdf?: number; email: C
 ];
 
 export function ApercuMail() {
+  const rien = () => {};
   const [actif, setActif] = useState('1');
+  const [railActif, setRailActif] = useState('inbound');
+  const [selection, setSelection] = useState<Set<string>>(new Set());
 
   return (
     <div className="min-h-full bg-background">
@@ -86,6 +92,62 @@ export function ApercuMail() {
       </p>
 
       <div className="gutter-x py-5">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Rail et barre d’outils
+        </h2>
+        <div className="flex h-[420px] overflow-hidden rounded-xl border border-border bg-card">
+          <RailMail
+            entrees={[
+              { cle: 'inbound', label: 'Boîte de réception', Icone: Inbox, nonLus: 12, total: 545 },
+              { cle: 'starred', label: 'Messages suivis', Icone: Star, total: 3 },
+              { cle: 'outbound', label: 'Envoyés', Icone: Send, total: 128 },
+              { cle: 'all', label: 'Tous les messages', Icone: Mail, nonLus: 12, total: 678 },
+            ]}
+            categories={[
+              { cle: 'suppliers', label: 'Fournisseurs', Icone: Package, nonLus: 4, total: 61 },
+              { cle: 'insurers', label: 'Assureurs', Icone: ShieldCheck, nonLus: 2, total: 44 },
+              { cle: 'experts', label: 'Experts', Icone: Search, total: 9 },
+              { cle: 'unlinked', label: 'Non rattachés', Icone: Link2, nonLus: 6, total: 37 },
+            ]}
+            active={railActif}
+            onChanger={setRailActif}
+            onEcrire={rien}
+          />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <BarreOutilsMail
+              total={CAS.length}
+              selection={selection.size}
+              toutSelectionne={selection.size === CAS.length}
+              onToutSelectionner={(choisi) => setSelection(
+                choisi ? new Set(CAS.map((c) => c.email.id)) : new Set(),
+              )}
+              onActualiser={rien}
+              onMarquerLus={rien}
+              onSuivre={rien}
+            />
+            <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+              {CAS.map((cas) => (
+                <LigneEmail
+                  key={cas.email.id}
+                  email={cas.email}
+                  correspondant={cas.correspondant}
+                  aRattacher={cas.aRattacher}
+                  pdfFournisseur={cas.pdf}
+                  actif={cas.email.id === actif}
+                  onOuvrir={() => setActif(cas.email.id)}
+                  selectionne={selection.has(cas.email.id)}
+                  onSelectionner={(choisi) => setSelection((courante) => {
+                    const suivante = new Set(courante);
+                    if (choisi) suivante.add(cas.email.id); else suivante.delete(cas.email.id);
+                    return suivante;
+                  })}
+                  onSuivre={rien}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Liste de la boîte mail
         </h2>

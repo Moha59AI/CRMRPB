@@ -439,6 +439,8 @@ export interface Communication {
   email_html: string | null;
   /** Première ouverture du message dans le CRM. Nul = non lu. */
   read_at: string | null;
+  /** Message suivi, pour toute l'équipe. Nul = non suivi. */
+  starred_at: string | null;
   subject: string | null;
   duration_seconds: number | null;
   recording_url: string | null;

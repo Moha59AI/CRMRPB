@@ -19,6 +19,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Star,
   UserRound,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -54,29 +55,17 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  buildSignedEmailContent, fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu,
+  buildSignedEmailContent, fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
 import { LigneEmail, estNonLu } from './ligne-email';
 import { EnteteMessage } from './entete-message';
+import { RailMail } from './rail-mail';
+import { BarreOutilsMail } from './barre-outils-mail';
 
-type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
-
-const mailboxViews: Array<{
-  key: MailboxView;
-  label: string;
-  Icon: typeof Mail;
-}> = [
-  { key: 'inbound', label: 'Reçus', Icon: Inbox },
-  { key: 'suppliers', label: 'Fournisseurs', Icon: Package },
-  { key: 'insurers', label: 'Assureurs', Icon: ShieldCheck },
-  { key: 'experts', label: 'Experts', Icon: Search },
-  { key: 'outbound', label: 'Envoyés', Icon: Send },
-  { key: 'all', label: 'Tous', Icon: Mail },
-  { key: 'unlinked', label: 'Non rattachés', Icon: Link2 },
-];
+type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked' | 'starred';
 
 const OTHER_CLASSIFICATION: EmailPartyClassification = {
   category: 'other',
@@ -180,6 +169,7 @@ function matchesMailboxView(
   if (view === 'insurers') return email.direction === 'inbound' && classification.category === 'insurer';
   if (view === 'experts') return email.direction === 'inbound' && classification.category === 'expert';
   if (view === 'outbound') return email.direction === 'outbound';
+  if (view === 'starred') return Boolean(email.starred_at);
   if (view === 'unlinked') return !email.contact_id && !email.lead_id;
   return true;
 }
@@ -236,6 +226,8 @@ export function EmailInboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [actionEnCours, setActionEnCours] = useState(false);
 
   const emailsQuery = useQuery({
     queryKey: ['mailbox-emails'],
@@ -305,8 +297,44 @@ export function EmailInboxPage() {
       outbound: emails.filter((email) => email.direction === 'outbound').length,
       all: emails.length,
       unlinked: emails.filter((email) => !email.contact_id && !email.lead_id).length,
+      starred: emails.filter((email) => email.starred_at).length,
     } satisfies Record<MailboxView, number>;
   }, [emailsQuery.data, classificationMap]);
+
+  /** Non-lus par vue : c'est ce chiffre qui appelle une action, pas le total. */
+  const nonLus = useMemo(() => {
+    const emails = (emailsQuery.data ?? []).filter(estNonLu);
+    const parVue = (cle: MailboxView) => emails.filter((email) => (
+      matchesMailboxView(email, cle, classificationMap.get(email.id) ?? OTHER_CLASSIFICATION)
+    )).length;
+    return {
+      inbound: parVue('inbound'), suppliers: parVue('suppliers'),
+      insurers: parVue('insurers'), experts: parVue('experts'),
+      outbound: 0, all: parVue('all'), unlinked: parVue('unlinked'),
+      starred: emails.filter((email) => email.starred_at).length,
+    };
+  }, [emailsQuery.data, classificationMap]);
+
+  const suivis = useMemo(
+    () => (emailsQuery.data ?? []).filter((email) => email.starred_at).length,
+    [emailsQuery.data],
+  );
+
+  // Le rail reprend l'ordre de Gmail : ce qui arrive, ce qu'on a mis de
+  // cote, ce qu'on a envoye ; les categories metier en dessous.
+  const entreesRail = useMemo(() => ([
+    { cle: 'inbound' as MailboxView, label: 'Boîte de réception', Icone: Inbox, nonLus: nonLus.inbound, total: counts.inbound },
+    { cle: 'starred' as MailboxView, label: 'Messages suivis', Icone: Star, total: suivis },
+    { cle: 'outbound' as MailboxView, label: 'Envoyés', Icone: Send, total: counts.outbound },
+    { cle: 'all' as MailboxView, label: 'Tous les messages', Icone: Mail, nonLus: nonLus.all, total: counts.all },
+  ]), [counts, nonLus, suivis]);
+
+  const categoriesRail = useMemo(() => ([
+    { cle: 'suppliers' as MailboxView, label: 'Fournisseurs', Icone: Package, nonLus: nonLus.suppliers, total: counts.suppliers },
+    { cle: 'insurers' as MailboxView, label: 'Assureurs', Icone: ShieldCheck, nonLus: nonLus.insurers, total: counts.insurers },
+    { cle: 'experts' as MailboxView, label: 'Experts', Icone: Search, nonLus: nonLus.experts, total: counts.experts },
+    { cle: 'unlinked' as MailboxView, label: 'Non rattachés', Icone: Link2, nonLus: nonLus.unlinked, total: counts.unlinked },
+  ]), [counts, nonLus]);
 
   const filteredEmails = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('fr-FR');
@@ -342,6 +370,29 @@ export function EmailInboxPage() {
 
   const selectedEmail = filteredEmails.find((email) => email.id === selectedId) ?? null;
   const emailSignature = parseIonosSettings(ionosConnectionQuery.data ?? null).signature;
+
+  const rafraichirListe = () => queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
+
+  const basculerSelection = (id: string, choisi: boolean) => {
+    setSelection((courante) => {
+      const suivante = new Set(courante);
+      if (choisi) suivante.add(id); else suivante.delete(id);
+      return suivante;
+    });
+  };
+
+  const agirSurSelection = async (action: () => Promise<void>) => {
+    setActionEnCours(true);
+    try {
+      await action();
+      setSelection(new Set());
+      await rafraichirListe();
+    } catch (erreur) {
+      toast.error(erreur instanceof Error ? erreur.message : 'Action impossible');
+    } finally {
+      setActionEnCours(false);
+    }
+  };
 
   const openEmail = (id: string) => {
     setSelectedId(id);
@@ -437,52 +488,52 @@ export function EmailInboxPage() {
         )}
       </div>
 
+      {/* Les vues passent dans le rail, a gauche : en haut il ne reste que
+          la recherche, large, comme chez Gmail. */}
       <div className={`${mobileDetailOpen ? 'hidden lg:block' : ''} border-b border-border bg-background gutter-x py-3`}>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex snap-x gap-1 overflow-x-auto pb-1 scrollbar-thin xl:pb-0">
-            {mailboxViews.map(({ key, label, Icon }) => {
-              const active = view === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setView(key);
-                    setMobileDetailOpen(false);
-                  }}
-                  className={`flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-full px-3 text-sm font-medium transition ${
-                    active
-                      ? 'bg-secondary text-secondary-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-primary/10 text-primary' : 'bg-muted'}`}>
-                    {counts[key]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="relative w-full xl:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher un email, un client…"
-              className="h-10 rounded-full pl-9"
-            />
-          </div>
+        <div className="relative mx-auto w-full max-w-3xl">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Rechercher dans les messages"
+            className="h-11 rounded-full border-transparent bg-surface pl-11 focus-visible:border-border focus-visible:bg-card"
+          />
         </div>
       </div>
 
       {/* Tant qu'aucun message n'est ouvert, la liste prend toute la largeur :
           c'est la vue par defaut de Gmail, et c'est elle qui permet de
           balayer. Le volet de lecture n'apparait qu'a l'ouverture. */}
+      <div className={`flex min-h-0 flex-1 ${mobileDetailOpen ? '' : ''}`}>
+        <div className={`${mobileDetailOpen ? 'hidden' : 'hidden sm:flex'} min-h-0`}>
+          <RailMail
+            entrees={entreesRail}
+            categories={categoriesRail}
+            active={view}
+            onChanger={(cle) => { setView(cle); setMobileDetailOpen(false); }}
+            onEcrire={() => setComposeOpen(true)}
+          />
+        </div>
+
       <div className={`grid min-h-0 flex-1 ${selectedEmail ? 'lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
         <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 ${selectedEmail ? 'lg:border-r lg:border-border' : ''}`}>
+          <BarreOutilsMail
+            total={filteredEmails.length}
+            selection={selection.size}
+            toutSelectionne={filteredEmails.length > 0 && filteredEmails.every((email) => selection.has(email.id))}
+            onToutSelectionner={(choisi) => setSelection(
+              choisi ? new Set(filteredEmails.map((email) => email.id)) : new Set(),
+            )}
+            onActualiser={() => void rafraichirListe()}
+            actualisation={emailsQuery.isFetching}
+            onMarquerLus={(lus) => void agirSurSelection(() => marquerEmailsLus([...selection], lus))}
+            onSuivre={() => void agirSurSelection(async () => {
+              await Promise.all([...selection].map((id) => basculerSuiviEmail(id, true)));
+            })}
+            actionEnCours={actionEnCours}
+          />
+
           {emailsQuery.isLoading && (
             <div className="space-y-2 p-4">
               {Array.from({ length: 7 }).map((_, index) => (
@@ -543,6 +594,11 @@ export function EmailInboxPage() {
                     pdfFournisseur={supplierPdfCount}
                     actif={active}
                     onOuvrir={() => openEmail(email.id)}
+                    selectionne={selection.has(email.id)}
+                    onSelectionner={(choisi) => basculerSelection(email.id, choisi)}
+                    onSuivre={(suivi) => void agirSurSelection(
+                      () => basculerSuiviEmail(email.id, suivi),
+                    )}
                   />
                 );
               })}
@@ -571,6 +627,7 @@ export function EmailInboxPage() {
             </div>
           )}
         </section>
+      </div>
       </div>
 
       <NewEmailDialog
