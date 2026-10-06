@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { LigneEmail } from '@/features/integrations/email/ligne-email';
+import { EnteteMessage } from '@/features/integrations/email/entete-message';
 import type { Communication } from '@/types';
 
 const HEURE = 3_600_000;
@@ -102,6 +103,36 @@ export function ApercuMail() {
               onOuvrir={() => setActif(cas.email.id)}
             />
           ))}
+        </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          En-tête d’un message ouvert
+        </h2>
+        <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+          <EnteteMessage
+            email={message({
+              id: 'e1', heures: 2,
+              subject: 'Facture n° 963028 — Ref Cde : *N***TOURCOING',
+              sender_email: 'contact@vsf41.com',
+              recipient_email: 'contact@relaisparebrise.fr',
+              provider: 'ionos-imap',
+            })}
+            nom={null}
+            correspondant="Fournisseur · VSF"
+            aRattacher
+          />
+          <div className="border-t border-border pt-4">
+            <EnteteMessage
+              email={message({
+                id: 'e2', heures: 20,
+                subject: 'Confirmation de rendez-vous',
+                sender_email: 'dorothee.vandeven@example.fr',
+                recipient_email: 'contact@relaisparebrise.fr',
+                provider: 'ionos-imap',
+              })}
+              nom="Dorothée Vandeven"
+            />
+          </div>
         </div>
 
         <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

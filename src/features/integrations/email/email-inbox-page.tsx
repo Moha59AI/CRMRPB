@@ -60,6 +60,7 @@ import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
 import { LigneEmail, estNonLu } from './ligne-email';
+import { EnteteMessage } from './entete-message';
 
 type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -986,38 +987,14 @@ function EmailDetail({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-thin sm:p-6">
         <div className="mx-auto max-w-4xl">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm sm:grid-cols-[90px_minmax(0,1fr)]">
-              <span className="text-muted-foreground">De</span>
-              <div className="min-w-0">
-                {inbound && person && <p className="font-medium text-foreground">{person}</p>}
-                <p className="break-all text-muted-foreground">{email.sender_email ?? 'Adresse inconnue'}</p>
-              </div>
-
-              <span className="text-muted-foreground">À</span>
-              <p className="break-all text-muted-foreground">{email.recipient_email ?? 'Adresse inconnue'}</p>
-
-              <span className="text-muted-foreground">Date</span>
-              <p className="capitalize text-foreground">{formatFullDate(email.created_at)}</p>
-
-              {classification.category !== 'other' && (
-                <>
-                  <span className="text-muted-foreground">Correspondant</span>
-                  <p className="font-medium text-foreground">
-                    {partyLabel(classification)}
-                    {classification.organization ? ` · ${classification.organization}` : ' · à confirmer'}
-                  </p>
-                </>
-              )}
-
-              {!email.contact_id && !email.lead_id && (
-                <>
-                  <span className="text-muted-foreground">Rattachement</span>
-                  <p className="font-medium text-due">Aucun client ou lead correspondant</p>
-                </>
-              )}
-            </div>
-          </div>
+          <EnteteMessage
+            email={email}
+            nom={inbound ? person : null}
+            correspondant={classification.category !== 'other'
+              ? `${partyLabel(classification)}${classification.organization ? ` · ${classification.organization}` : ' · à confirmer'}`
+              : null}
+            aRattacher={!email.contact_id && !email.lead_id}
+          />
 
           {supplierPdfs.length > 0 && (
             <div className="mt-4 rounded-xl border border-due/25 bg-due-soft p-4 sm:p-5">

@@ -250,13 +250,18 @@ test('la signature est personnalisable visible pendant la redaction et jointe au
 });
 
 test('la boite mail reste exploitable sur telephone sans comprimer la lecture ni la redaction', async () => {
-  const [inbox, settings] = await Promise.all([
+  const [inbox, settings, entete] = await Promise.all([
     read('src/features/integrations/email/email-inbox-page.tsx'),
     read('src/features/integrations/email/email-settings-page.tsx'),
+    read('src/features/integrations/email/entete-message.tsx'),
   ]);
 
   assert.match(inbox, /mobileDetailOpen \? 'hidden lg:block'/);
-  assert.match(inbox, /grid-cols-\[64px_minmax\(0,1fr\)\]/);
+  // Les metadonnees etaient un tableau encadre de cinq lignes, toujours
+  // deplie. Elles tiennent desormais dans un en-tete repliable, dont le
+  // detail garde une colonne d'etiquettes lisible sur telephone.
+  assert.match(entete, /grid-cols-\[72px_minmax\(0,1fr\)\]/);
+  assert.match(entete, /min-w-0 truncate/);
   assert.match(inbox, /h-\[100dvh\][^\n]*grid-rows-\[auto_minmax\(0,1fr\)_auto\]/);
   assert.match(settings, /mt-5 grid gap-2 sm:flex sm:flex-wrap/);
 });
