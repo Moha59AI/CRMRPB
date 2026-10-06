@@ -85,12 +85,10 @@ import { cn } from '@/lib/utils';
 import { fetchCases } from '@/services/cases-service';
 import { fetchLeads, updateLead } from '@/services/leads-service';
 import {
-  clientDuRendezVous, createAppointment, deleteAppointment, fetchAppointments,
-  lieuDuRendezVous, updateAppointment,
+  clientDuRendezVous, createAppointment, deleteAppointment, fetchAppointments, updateAppointment,
   type AppointmentAvecClient,
 } from '@/services/planning-service';
 import { lienItineraire } from '@/services/adresse-service';
-import { SectionDeplacement } from '@/features/deplacements/section-deplacement';
 import { fetchProfiles } from '@/services/profiles-service';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import type {
@@ -738,7 +736,6 @@ function AppointmentDetailSheet({
   const Icon = TYPE_ICONS[appointment.type] ?? CalendarIcon;
   const assigned = profiles.find((p) => p.id === appointment.assigned_user_id);
   const client = clientDuRendezVous(appointment as AppointmentAvecClient);
-  const lieu = lieuDuRendezVous(appointment as AppointmentAvecClient);
   // L'itineraire part de l'adresse en texte : un rendez-vous repris de Google
   // n'a pas ses propres coordonnees, et celles du lead peuvent designer un
   // autre lieu que l'adresse affichee.
@@ -844,17 +841,6 @@ function AppointmentDetailSheet({
             <p className="text-xs text-muted-foreground">
               Aucun client rattaché : ni adresse ni téléphone à afficher.
             </p>
-          )}
-
-          {/* Seulement pour une intervention : un appel ou une réunion ne
-              coûte pas de déplacement. Le panneau est étroit, la carte reste
-              sur la fiche. */}
-          {appointment.type === 'intervention' && (
-            <SectionDeplacement
-              destination={lieu}
-              adresseArrivee={lieu.label}
-              sansCarte
-            />
           )}
 
           {/* Offre commerciale : ce que le client attend en plus de la pose.

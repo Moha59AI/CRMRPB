@@ -18,7 +18,6 @@ import {
   WalletCards,
   Mail,
   FileLock2,
-  Navigation,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -223,12 +222,6 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/documents',
         icon: Files,
         description: 'Page client et pièces demandées',
-      },
-      {
-        label: 'Déplacements',
-        path: '/settings/deplacements',
-        icon: Navigation,
-        description: 'Adresse de départ et coût réel d’un kilomètre',
       },
     ],
   },

@@ -26,8 +26,6 @@ import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
 import { LeadOverviewSummary } from './lead-overview-summary';
-import { SectionDeplacement } from '@/features/deplacements/section-deplacement';
-import { lieuInterventionDuLead } from '@/features/deplacements/lieu-intervention';
 
 interface EvenementTimeline {
   cle: string;
@@ -165,7 +163,6 @@ export function DossierContenu({
   }
 
   const conseiller = profiles.find((p) => p.id === lead.assigned_user_id) ?? null;
-  const lieuDeplacement = lieuInterventionDuLead(lead);
   const attributionMeta = lead.source === 'meta' ? lireAttributionMeta(lead) : null;
   const lignesDossier: [string, string | null][] = attributionMeta
     ? [
@@ -198,13 +195,6 @@ export function DossierContenu({
           lead={lead}
           onUpdate={onUpdate}
           disabled={enregistrement}
-        />
-
-        {/* Juste sous l'adresse : le coût du deplacement est une consequence
-            de l'adresse, et se lit dans la foulee. */}
-        <SectionDeplacement
-          destination={lieuDeplacement}
-          adresseArrivee={lieuDeplacement.label}
         />
 
         <Bloc titre="Note rapide">

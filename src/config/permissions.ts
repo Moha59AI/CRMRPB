@@ -35,7 +35,6 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/settings/insurers': ['admin', 'manager'],
   '/settings/relances': ['admin', 'manager'],
   '/settings/documents': ['admin', 'manager'],
-  '/settings/deplacements': ['admin', 'manager'],
   '/settings/users': ['admin'],
 };
 

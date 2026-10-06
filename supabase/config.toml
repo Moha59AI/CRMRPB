@@ -75,6 +75,3 @@ verify_jwt = false
 
 [functions.user-invite]
 verify_jwt = true
-
-[functions.openrouteservice-route]
-verify_jwt = true
