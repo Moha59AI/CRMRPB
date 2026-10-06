@@ -20,6 +20,7 @@ import {
   Trash2,
   CircleAlert,
   Gift,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   format,
@@ -81,6 +82,7 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { useEstMobile } from '@/hooks/use-media-query';
 
 import { fetchCases } from '@/services/cases-service';
 import { fetchLeads, updateLead } from '@/services/leads-service';
@@ -142,6 +144,15 @@ const STATUS_PILL: Record<AppointmentStatus, string> = {
   completed: 'bg-muted/80 text-muted-foreground',
   cancelled: 'bg-urgent-soft/80 text-urgent line-through',
   no_show: 'bg-due-soft/80 text-due',
+};
+
+/** Les memes couleurs que les pastilles, reduites a un point pour le mois. */
+const STATUS_POINT: Record<AppointmentStatus, string> = {
+  scheduled: 'bg-upcoming',
+  confirmed: 'bg-done',
+  completed: 'bg-muted-foreground/50',
+  cancelled: 'bg-urgent/50',
+  no_show: 'bg-due',
 };
 
 const TYPE_ICONS: Record<AppointmentType, typeof Car> = {
@@ -410,7 +421,7 @@ function TimeColumn() {
 // Day view
 // ---------------------------------------------------------------------------
 
-function DayView({
+export function DayView({
   currentDate,
   appts,
   today,
@@ -437,10 +448,121 @@ function DayView({
 }
 
 // ---------------------------------------------------------------------------
+// La semaine sur un telephone
+// ---------------------------------------------------------------------------
+
+/**
+ * Sept colonnes ne tiennent pas sur 375 px.
+ *
+ * La grille horaire demandait 700 px de large : sur un telephone, on voyait
+ * lundi et un morceau de mardi, et il fallait faire defiler lateralement pour
+ * atteindre jeudi. Un planning qu'on ne voit pas d'un coup ne sert a rien --
+ * c'est justement pour l'embrasser du regard qu'on l'ouvre.
+ *
+ * La semaine devient donc une liste : un jour apres l'autre, du haut vers le
+ * bas, chaque rendez-vous sur toute la largeur. On perd la lecture des
+ * chevauchements et des trous entre deux interventions ; on gagne de voir la
+ * semaine. Sur un ecran large, la grille reste.
+ *
+ * Les jours vides restent affiches : savoir que mercredi est libre fait
+ * partie de ce qu'on vient chercher.
+ */
+function SemaineEnListe({
+  jours,
+  appts,
+  today,
+  onApptClick,
+}: {
+  jours: Date[];
+  appts: Appointment[];
+  today: Date;
+  onApptClick: (appt: Appointment) => void;
+}) {
+  return (
+    <div className="divide-y divide-border">
+      {jours.map((day) => {
+        const duJour = appts
+          .filter((a) => isSameDay(new Date(a.start_time), day))
+          .sort((a, b) => a.start_time.localeCompare(b.start_time));
+        const estAujourdhui = isSameDay(day, today);
+
+        return (
+          <section key={day.toISOString()} className="py-2">
+            <h3 className={cn(
+              'flex items-baseline gap-2 px-1 pb-1.5 text-sm',
+              estAujourdhui ? 'font-semibold text-primary' : 'font-medium text-foreground',
+            )}>
+              {cap(format(day, 'EEEE d MMMM', { locale: fr }))}
+              <span className="ml-auto text-xs font-normal tabular-nums text-muted-foreground">
+                {duJour.length === 0 ? 'libre' : duJour.length}
+              </span>
+            </h3>
+
+            {duJour.length > 0 && (
+              <ul className="space-y-1.5">
+                {duJour.map((appt) => (
+                  <li key={appt.id}>
+                    <RendezVousEnLigne appt={appt} onApptClick={onApptClick} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Un rendez-vous sur toute la largeur, assez haut pour le doigt. */
+function RendezVousEnLigne({
+  appt,
+  onApptClick,
+}: {
+  appt: Appointment;
+  onApptClick: (appt: Appointment) => void;
+}) {
+  const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
+  const { adresse } = clientDuRendezVous(appt as AppointmentAvecClient);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onApptClick(appt)}
+      className={cn(
+        'flex min-h-[44px] w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-shadow active:shadow-sm',
+        STATUS_STYLES[appt.status],
+      )}
+    >
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="shrink-0 text-xs font-semibold tabular-nums">
+            {formatTime(appt.start_time)}
+          </span>
+          <span className="truncate text-sm font-medium">{appt.title}</span>
+        </span>
+        <span className="mt-0.5 flex items-center gap-1 text-[11px] opacity-80">
+          <span className="shrink-0 tabular-nums">
+            jusqu’à {formatTime(appt.end_time)}
+          </span>
+          {adresse && (
+            <>
+              <MapPin className="ml-1 h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{adresse}</span>
+            </>
+          )}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Week view
 // ---------------------------------------------------------------------------
 
-function WeekView({
+export function WeekView({
   currentDate,
   appts,
   today,
@@ -451,6 +573,7 @@ function WeekView({
   today: Date;
   onApptClick: (appt: Appointment) => void;
 }) {
+  const estMobile = useEstMobile();
   const weekDays = useMemo(
     () =>
       eachDayOfInterval({
@@ -460,8 +583,14 @@ function WeekView({
     [currentDate]
   );
 
+  if (estMobile) {
+    return (
+      <SemaineEnListe jours={weekDays} appts={appts} today={today} onApptClick={onApptClick} />
+    );
+  }
+
   return (
-    <div className="min-w-[700px] md:min-w-0">
+    <div className="md:min-w-0">
       {/* Day headers */}
       <div className="flex border-b border-border">
         <div className="w-16 shrink-0" />
@@ -512,7 +641,7 @@ function WeekView({
 // Month view
 // ---------------------------------------------------------------------------
 
-function MonthView({
+export function MonthView({
   currentDate,
   appts,
   today,
@@ -531,6 +660,7 @@ function MonthView({
     return eachDayOfInterval({ start, end });
   }, [currentDate]);
 
+  const estMobile = useEstMobile();
   const apptsByDay = useMemo(() => {
     const map = new Map<string, Appointment[]>();
     for (const appt of appts) {
@@ -542,7 +672,7 @@ function MonthView({
   }, [appts]);
 
   return (
-    <div className="min-w-[640px] md:min-w-0">
+    <div className="md:min-w-0">
       {/* Weekday headers */}
       <div className="grid grid-cols-7 border-b border-border">
         {WEEKDAY_LABELS.map((label) => (
@@ -566,7 +696,11 @@ function MonthView({
             <div
               key={day.toISOString()}
               className={cn(
-                'min-h-[112px] border-b border-r border-border p-1.5',
+                'border-b border-r border-border p-1.5',
+                // Sur telephone, 7 colonnes font 48 px : un titre n'y tient
+                // pas, et une case haute de 112 px reduirait le mois a trois
+                // semaines visibles.
+                estMobile ? 'min-h-[58px]' : 'min-h-[112px]',
                 !inMonth && 'bg-muted/30'
               )}
             >
@@ -589,7 +723,25 @@ function MonthView({
                 </span>
               </button>
 
-              {/* Appointment pills */}
+              {/* Sur telephone, des points : a 48 px de large, « 09:30 I… »
+                  n'apprend rien, alors que la densite d'une journee se lit
+                  d'un coup d'oeil. Le jour s'ouvre d'une tape. */}
+              {estMobile ? (
+                dayAppts.length > 0 && (
+                  <div className="flex flex-wrap gap-0.5">
+                    {dayAppts.slice(0, 4).map((appt) => (
+                      <span
+                        key={appt.id}
+                        className={cn('h-1.5 w-1.5 rounded-full', STATUS_POINT[appt.status])}
+                        aria-hidden
+                      />
+                    ))}
+                    <span className="sr-only">
+                      {dayAppts.length} rendez-vous
+                    </span>
+                  </div>
+                )
+              ) : (
               <div className="space-y-0.5">
                 {dayAppts.slice(0, 3).map((appt) => (
                   <button
@@ -617,6 +769,7 @@ function MonthView({
                   </button>
                 )}
               </div>
+              )}
             </div>
           );
         })}
@@ -1605,6 +1758,13 @@ export function CalendarPage() {
     },
   });
 
+  // Les filtres sont replies par defaut sur telephone : on vient voir le
+  // planning, pas le restreindre.
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
+  const estMobile = useEstMobile();
+  const filtresActifs = [advisorFilter, techFilter, statusFilter]
+    .filter((v) => v !== 'all').length;
+
   // ---- Client-side status filter ----
   const filteredAppts = useMemo(() => {
     const appts = appointmentsQuery.data ?? [];
@@ -1762,20 +1922,26 @@ export function CalendarPage() {
   }
 
   // ---- Period label ----
+  // Entre deux fleches et le bouton « Aujourd'hui », il reste environ 150 px
+  // sur un telephone : « Mardi 6 octobre 2026 » y passe a la ligne et pousse
+  // toute la barre. L'annee se devine, le jour abrege se lit.
   const periodLabel = useMemo(() => {
     if (view === 'day') {
-      return cap(format(currentDate, 'EEEE d MMMM yyyy', { locale: fr }));
+      return cap(format(currentDate, estMobile ? 'EEE d MMM' : 'EEEE d MMMM yyyy', { locale: fr }));
     }
     if (view === 'week' || view === 'carte') {
       const start = startOfWeek(currentDate, { weekStartsOn: 1 });
       const end = endOfWeek(currentDate, { weekStartsOn: 1 });
+      if (estMobile) {
+        return `${format(start, 'd', { locale: fr })} – ${format(end, 'd MMM', { locale: fr })}`;
+      }
       if (isSameMonth(start, end)) {
         return `${format(start, 'd', { locale: fr })} – ${format(end, 'd MMMM yyyy', { locale: fr })}`;
       }
       return `${format(start, 'd MMM', { locale: fr })} – ${format(end, 'd MMM yyyy', { locale: fr })}`;
     }
-    return cap(format(currentDate, 'MMMM yyyy', { locale: fr }));
-  }, [view, currentDate]);
+    return cap(format(currentDate, estMobile ? 'MMM yyyy' : 'MMMM yyyy', { locale: fr }));
+  }, [view, currentDate, estMobile]);
 
   const isLoading = appointmentsQuery.isLoading;
   const hasAppts = filteredAppts.length > 0;
@@ -1839,6 +2005,33 @@ export function CalendarPage() {
               ))}
             </div>
 
+            {/* Trois listes deroulantes repoussaient le premier rendez-vous
+                sous la ligne de flottaison d'un telephone. Elles se replient,
+                et le bouton dit combien de filtres sont actifs -- sans quoi
+                on ne saurait pas qu'une vue est restreinte. */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="col-span-2 rounded-full sm:hidden"
+              onClick={() => setFiltresOuverts((ouverts) => !ouverts)}
+              aria-expanded={filtresOuverts}
+            >
+              <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+              Filtres
+              {filtresActifs > 0 && (
+                <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground">
+                  {filtresActifs}
+                </span>
+              )}
+            </Button>
+
+            <div className={cn(
+              // `contents` au-dessus de `sm` : les trois listes retrouvent
+              // leur place dans la barre, comme si ce conteneur n'existait pas.
+              'col-span-2 grid grid-cols-1 gap-2 sm:contents',
+              !filtresOuverts && 'hidden sm:contents',
+            )}>
             {/* Advisor filter */}
             <Select
               value={advisorFilter}
@@ -1883,7 +2076,7 @@ export function CalendarPage() {
 
             {/* Status filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="col-span-2 w-full sm:w-[150px] md:h-8">
+              <SelectTrigger className="w-full sm:w-[150px] md:h-8">
                 <SelectValue placeholder="Statut" />
               </SelectTrigger>
               <SelectContent>
@@ -1895,6 +2088,7 @@ export function CalendarPage() {
                 <SelectItem value="no_show">Absent</SelectItem>
               </SelectContent>
             </Select>
+            </div>
           </div>
         </div>
       </div>
@@ -1933,7 +2127,9 @@ export function CalendarPage() {
             </Button>
           </div>
         ) : view === 'carte' ? (
-          <div className="h-[calc(100vh-16rem)] min-h-[420px]">
+          /* `dvh` et non `vh` : sur telephone la barre d'adresse se retracte,
+             et `100vh` laissait la carte depasser sous l'ecran. */
+          <div className="h-[calc(100dvh-20rem)] min-h-[360px] sm:h-[calc(100dvh-16rem)] sm:min-h-[420px]">
             <CarteInterventions
               interventions={carte?.interventions ?? []}
               tronque={carte?.tronque ?? false}

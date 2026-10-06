@@ -53,6 +53,7 @@ const BancFiche = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({
 const ApercuAccueil = lazy(() => import('@/features/diag/apercu-accueil').then((m) => ({ default: m.ApercuAccueil })));
 const ApercuLeads = lazy(() => import('@/features/diag/apercu-leads').then((m) => ({ default: m.ApercuLeads })));
 const ApercuMail = lazy(() => import('@/features/diag/apercu-mail').then((m) => ({ default: m.ApercuMail })));
+const ApercuAgenda = lazy(() => import('@/features/diag/apercu-agenda').then((m) => ({ default: m.ApercuAgenda })));
 
 function ChargementPage({ superposee = false }: { superposee?: boolean }) {
   return (
@@ -104,6 +105,7 @@ export function AppRoutes() {
             <Route path="/apercu-accueil" element={charger(<ApercuAccueil />)} />
             <Route path="/apercu-leads" element={charger(<ApercuLeads />)} />
             <Route path="/apercu-mail" element={charger(<ApercuMail />)} />
+            <Route path="/apercu-agenda" element={charger(<ApercuAgenda />)} />
             <Route path="/diag-fiche/:id" element={charger(<BancFiche pleinePage />)} />
           </>
         )}

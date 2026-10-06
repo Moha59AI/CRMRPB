@@ -30,7 +30,9 @@ test('agenda et relances restent exploitables sur un ecran etroit', async () => 
 
   assert.match(agenda, /matchMedia\('\(max-width: 767px\)'\)\.matches[\s\S]*\? 'day'/);
   assert.match(agenda, /grid w-full grid-cols-2/);
-  assert.match(agenda, /min-w-\[700px\] md:min-w-0/);
+  // La semaine se faisait defiler lateralement sur 700 px : elle est
+  // desormais une liste sur telephone, verifiee dans agenda-telephone.test.mjs.
+  assert.doesNotMatch(agenda, /min-w-\[700px\]/);
   assert.match(relances, /flex-nowrap[\s\S]*overflow-x-auto/);
   assert.match(relances, /grid grid-cols-2 items-center/);
 });
