@@ -746,6 +746,37 @@ function libelleAge(date: string): string {
   return `il y a ${jours} jours`;
 }
 
+/**
+ * Donne une lecture immediate des deux etats qui demandent le plus de
+ * contraste dans une liste dense. La selection reste prioritaire : une fiche
+ * cochee ne doit jamais se confondre avec sa couleur de statut.
+ */
+function couleurLigneLead(status: LeadStatus, selectionnee: boolean): string {
+  if (selectionnee) return 'bg-primary/[0.08] hover:bg-primary/[0.12]';
+  if (status === 'nrp') return 'bg-destructive/[0.08] hover:bg-destructive/[0.12]';
+  if (status === 'lost') return 'bg-foreground/[0.045] hover:bg-foreground/[0.075]';
+  return 'hover:bg-muted/40';
+}
+
+/** Meme lecture visuelle dans le pipeline que dans les listes de leads. */
+function couleurEntetePipeline(stage: string, survole: boolean): string {
+  if (survole) return 'border-primary/40 bg-primary/10';
+  if (stage === 'nrp') return 'border-destructive/20 bg-destructive/[0.08]';
+  if (stage === 'perdu') return 'border-foreground/15 bg-foreground/[0.055]';
+  return 'border-transparent bg-surface';
+}
+
+function couleurCartePipeline(status: LeadStatus, selectionnee: boolean): string {
+  if (selectionnee) return 'border-primary/30 bg-primary/[0.045] ring-1 ring-primary/15';
+  if (status === 'nrp') {
+    return 'border-destructive/25 bg-destructive/[0.08] hover:border-destructive/35 hover:bg-destructive/[0.12]';
+  }
+  if (status === 'lost') {
+    return 'border-foreground/15 bg-foreground/[0.045] hover:border-foreground/25 hover:bg-foreground/[0.075]';
+  }
+  return 'border-border bg-card hover:border-border-strong';
+}
+
 // ============ VIEW TOGGLE BUTTON ============
 
 function ViewToggleButton({
@@ -800,7 +831,10 @@ function ListeMobile({
         {leads.map((lead) => (
           <li
             key={lead.id}
-            className={cn('flex items-stretch', selection.has(lead.id) && 'bg-primary/[0.045]')}
+            className={cn(
+              'flex items-stretch transition-colors',
+              couleurLigneLead(lead.status, selection.has(lead.id)),
+            )}
           >
             <div className="flex w-11 shrink-0 items-center justify-center">
               <Checkbox
@@ -909,8 +943,8 @@ function LeadsTable({
           <TableRow
             key={lead.id}
             className={cn(
-              'cursor-pointer hover:bg-muted/40',
-              selection.has(lead.id) && 'bg-primary/[0.045]',
+              'cursor-pointer',
+              couleurLigneLead(lead.status, selection.has(lead.id)),
             )}
             onClick={() => onRowClick(lead)}
           >
@@ -1061,9 +1095,7 @@ function KanbanBoard({
               <div
                 className={cn(
                   'mb-2 rounded-xl border px-3 py-2.5 transition-colors',
-                  dragOverColumn === stage.key
-                    ? 'border-primary/40 bg-primary/10'
-                    : 'border-transparent bg-surface',
+                  couleurEntetePipeline(stage.key, dragOverColumn === stage.key),
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -1138,11 +1170,11 @@ export function KanbanCard({
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={cn(
-        'group cursor-grab rounded-xl border border-border bg-card p-3 shadow-sm',
+        'group cursor-grab rounded-xl border p-3 shadow-sm',
         'transition-[box-shadow,transform,border-color] duration-200',
-        'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg',
+        'hover:-translate-y-0.5 hover:shadow-lg',
         'active:cursor-grabbing active:translate-y-0',
-        selectionne && 'border-primary/30 bg-primary/[0.045] ring-1 ring-primary/15',
+        couleurCartePipeline(lead.status, selectionne === true),
         isDragging && 'rotate-1 opacity-40 shadow-none',
       )}
     >

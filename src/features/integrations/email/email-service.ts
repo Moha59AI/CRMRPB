@@ -34,6 +34,7 @@ export interface SendIonosEmailInput {
   lead_id?: string;
   subject: string;
   content: string;
+  signature?: string;
   in_reply_to?: string;
   attachments?: EmailAttachmentInput[];
 }
@@ -60,7 +61,8 @@ const EMAIL_LIST_COLUMNS = [
   'id', 'workspace_id', 'lead_id', 'case_id', 'contact_id', 'user_id',
   'type', 'direction', 'status', 'content', 'subject', 'duration_seconds',
   'recording_url', 'provider', 'external_id', 'delivered_at', 'sender_email',
-  'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_attachments',
+  'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_smtp_accepted_at',
+  'email_sent_copy_saved_at', 'email_attachments',
   'created_at',
 ].join(',');
 
@@ -151,14 +153,8 @@ export async function prepareEmailAttachments(files: readonly File[]): Promise<E
 
 export function buildDefaultEmailSignature(senderName: string, emailAddress: string): string {
   const identity = senderName.trim() || 'Relais Pare-Brise';
-  const details = [identity, emailAddress.trim(), 'www.relaisparebrise.fr'].filter(Boolean);
+  const details = [identity, 'Service client', emailAddress.trim(), 'www.relaisparebrise.fr'].filter(Boolean);
   return `Cordialement,\n\n${details.join('\n')}`;
-}
-
-export function buildSignedEmailContent(content: string, signature: string): string {
-  const body = content.trim();
-  const footer = signature.trim();
-  return footer ? `${body}\n\n${footer}` : body;
 }
 
 type EmailFunctionResponse = {

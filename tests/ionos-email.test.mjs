@@ -30,9 +30,30 @@ test('les emails sortants passent par le serveur et sont journalises seulement a
   assert.match(edge, /IONOS_SMTP_PORT/);
   assert.match(edge, /readIonosPassword/);
   assert.match(edge, /provider: 'ionos-smtp'/);
+  assert.match(edge, /email_smtp_accepted_at: smtpAcceptedAt/);
+  assert.match(edge, /email_sent_copy_saved_at: sentCopySavedAt/);
   assert.doesNotMatch(edge, /api\.resend\.com/);
   assert.match(page, /sendIonosEmail/);
   assert.doesNotMatch(page, /Email envoyé \(mode démo\)/);
+});
+
+test('un email accepte par SMTP est copie dans les Envoyes IONOS sans risque de double envoi', async () => {
+  const [edge, migration, header, types] = await Promise.all([
+    read('supabase/functions/email-send/index.ts'),
+    read('supabase/migrations/20261006120000_preuve_envoi_email_ionos.sql'),
+    read('src/features/integrations/email/entete-message.tsx'),
+    read('src/types/index.ts'),
+  ]);
+
+  assert.match(edge, /ImapFlow/);
+  assert.match(edge, /mailbox\.specialUse === '\\\\Sent'/);
+  assert.match(edge, /client\.append\(sent\.path, options\.rawMessage, \['\\\\Seen'\]/);
+  assert.match(edge, /Son echec ne doit jamais provoquer un deuxieme envoi/);
+  assert.match(migration, /email_smtp_accepted_at timestamptz/);
+  assert.match(migration, /email_sent_copy_saved_at timestamptz/);
+  assert.match(header, /Accepté par le serveur SMTP IONOS/);
+  assert.match(header, /copie classée dans le dossier Envoyés IONOS/);
+  assert.match(types, /email_sent_copy_saved_at: string \| null/);
 });
 
 test('la synchronisation IMAP rattache les messages et notifie les utilisateurs', async () => {
@@ -128,7 +149,7 @@ test('les reglages IONOS sont accessibles aux administrateurs depuis les integra
   assert.match(routes, /path="integrations\/email"/);
   assert.match(navigation, /path: '\/settings\/integrations\/email'/);
   assert.match(permissions, /'\/settings\/integrations\/email': \['admin'\]/);
-  assert.match(list, /Boîte mail IONOS/);
+  assert.match(list, /Emails et signature/);
   assert.match(settings, /Connexion directe à IONOS, sans Resend/);
   assert.match(settings, /Synchroniser maintenant/);
   assert.match(settings, /Enregistrer et vérifier/);
@@ -237,20 +258,31 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
   assert.match(config, /\[functions\.email-attachment\][\s\S]*verify_jwt = true/);
 });
 
-test('la signature est personnalisable visible pendant la redaction et jointe aux emails', async () => {
-  const [service, settings, inbox] = await Promise.all([
+test('la signature est personnalisee, apercue puis rendue en HTML compatible email', async () => {
+  const [service, settings, inbox, preview, edge] = await Promise.all([
     read('src/features/integrations/email/email-service.ts'),
     read('src/features/integrations/email/email-settings-page.tsx'),
     read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/integrations/email/email-signature-preview.tsx'),
+    read('supabase/functions/email-send/index.ts'),
   ]);
 
   assert.match(service, /signature: string/);
   assert.match(service, /buildDefaultEmailSignature/);
-  assert.match(service, /buildSignedEmailContent/);
+  assert.match(service, /Service client/);
   assert.match(settings, /Signature automatique/);
-  assert.match(settings, /Aperçu de la signature/);
-  assert.match(inbox, /Signature ajoutée à l’envoi/);
-  assert.match(inbox, /buildSignedEmailContent\(content, signature\)/);
+  assert.match(settings, /Appliquer le modèle pro/);
+  assert.match(settings, /id="signature-email"/);
+  assert.match(inbox, /settings\/integrations\/email#signature-email/);
+  assert.match(inbox, />\s*Signature\s*</);
+  assert.match(inbox, /<EmailSignaturePreview/);
+  assert.match(inbox, /signature,/);
+  assert.match(preview, /Aperçu de la signature/);
+  assert.match(preview, />\s*RPB\s*</);
+  assert.match(preview, /Service client · Relais Pare-Brise/);
+  assert.match(edge, /function construireSignatureHtml/);
+  assert.match(edge, /text: fullContent/);
+  assert.match(edge, /html: htmlContent/);
 });
 
 test('la boite mail reste exploitable sur telephone sans comprimer la lecture ni la redaction', async () => {

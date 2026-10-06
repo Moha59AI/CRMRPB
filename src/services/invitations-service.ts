@@ -1,9 +1,8 @@
 // Invitations d'acces
 //
 // Un compte authentifie ne donne acces a rien par lui-meme : seul un profil
-// rattache a un espace le fait, et un profil n'est cree que par le trigger
-// handle_new_user, s'il trouve une invitation valide. Toute la verification
-// vit donc en base -- ce fichier ne fait qu'appeler.
+// rattache a un espace le fait. La fonction Edge reservee aux administrateurs
+// cree cet acces et envoie le lien personnel depuis la boite IONOS.
 
 import { supabase } from '@/lib/supabase';
 import type { UserRole } from '@/types';
@@ -29,20 +28,55 @@ export async function fetchInvitations(): Promise<Invitation[]> {
   return (data ?? []) as Invitation[];
 }
 
+export interface InvitationEnvoyee {
+  invitation_id: string;
+  email: string;
+  message_id: string;
+}
+
+const erreursInvitation: Record<string, string> = {
+  UNAUTHORIZED: 'Votre session a expiré. Reconnectez-vous avant de réessayer.',
+  FORBIDDEN: 'Seul un administrateur peut inviter un utilisateur.',
+  EMAIL_INVALIDE: "L'adresse email est invalide.",
+  ROLE_INVALIDE: "Le rôle sélectionné n'est pas reconnu.",
+  BOITE_IONOS_NON_CONFIGUREE: "Configurez d'abord la boîte mail IONOS dans les réglages.",
+  MOT_DE_PASSE_IONOS_ABSENT: 'Le mot de passe IONOS doit être enregistré dans les réglages.',
+  UTILISATEUR_DEJA_MEMBRE: 'Cette personne fait déjà partie de votre espace.',
+  UTILISATEUR_DEJA_RATTACHE: 'Ce compte est déjà rattaché à un autre espace.',
+  IONOS_A_REFUSE_LE_DESTINATAIRE: "IONOS a refusé l'adresse du destinataire.",
+  ENVOI_INVITATION_IMPOSSIBLE: "L'email d'invitation n'a pas pu être envoyé. Aucun accès n'a été créé.",
+};
+
+function erreurInvitation(message: string): string {
+  return erreursInvitation[message] ?? message;
+}
+
 /**
- * Cree ou prolonge une invitation.
- *
- * La fonction SQL verifie que l'appelant est administrateur : le masquage du
- * bouton cote interface n'est pas une securite.
+ * Cree l'acces, genere le lien de choix du mot de passe et l'envoie par IONOS.
+ * La fonction Edge controle elle-meme le role administrateur et annule le
+ * compte cree si le serveur SMTP refuse le message.
  */
-export async function creerInvitation(email: string, role: UserRole): Promise<string> {
-  const { data, error } = await supabase.rpc('creer_invitation', {
-    p_email: email,
-    p_role: role,
+export async function creerInvitation(email: string, role: UserRole): Promise<InvitationEnvoyee> {
+  const { data, error } = await supabase.functions.invoke<InvitationEnvoyee & {
+    success?: boolean;
+    error?: string;
+  }>('user-invite', {
+    body: { email: email.trim().toLowerCase(), role },
   });
 
-  if (error) throw new Error(error.message);
-  return data as string;
+  if (error) {
+    let message = error.message;
+    const response = (error as { context?: Response }).context;
+    if (response) {
+      const payload = await response.clone().json().catch(() => null) as { error?: string } | null;
+      if (payload?.error) message = payload.error;
+    }
+    throw new Error(erreurInvitation(message));
+  }
+  if (!data?.invitation_id || !data.email || !data.message_id) {
+    throw new Error(erreurInvitation(data?.error || "Le serveur n'a pas confirmé l'envoi de l'invitation"));
+  }
+  return data;
 }
 
 export async function annulerInvitation(id: string): Promise<void> {

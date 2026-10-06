@@ -266,10 +266,10 @@ export const settingsNavSections: NavSection[] = [
         description: 'Import en lecture seule vers le nouveau CRM',
       },
       {
-        label: 'Boîte mail IONOS',
+        label: 'Emails et signature',
         path: '/settings/integrations/email',
         icon: Mail,
-        description: 'Envoi et réception des emails clients',
+        description: 'Boîte IONOS, identité d’envoi et signature',
       },
       {
         label: 'Webhooks',

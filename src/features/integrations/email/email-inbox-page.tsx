@@ -18,6 +18,7 @@ import {
   Reply,
   Search,
   Send,
+  Settings2,
   ShieldCheck,
   Star,
   UserRound,
@@ -55,11 +56,12 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  buildSignedEmailContent, fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
+  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
+import { EmailSignaturePreview } from './email-signature-preview';
 import { LigneEmail, estNonLu } from './ligne-email';
 import { EnteteMessage } from './entete-message';
 import { RailMail } from './rail-mail';
@@ -207,6 +209,8 @@ function statusLabel(email: Communication): string {
   if (email.direction === 'inbound') return 'Reçu';
   if (email.status === 'failed') return 'Échec';
   if (email.status === 'delivered') return 'Livré';
+  if (email.email_sent_copy_saved_at) return 'Envoyé · copie IONOS';
+  if (email.email_smtp_accepted_at) return 'Accepté par IONOS';
   if (email.status === 'sent') return 'Envoyé';
   return 'En cours';
 }
@@ -369,7 +373,9 @@ export function EmailInboxPage() {
   }, [filteredEmails, selectedId]);
 
   const selectedEmail = filteredEmails.find((email) => email.id === selectedId) ?? null;
-  const emailSignature = parseIonosSettings(ionosConnectionQuery.data ?? null).signature;
+  const emailSettings = parseIonosSettings(ionosConnectionQuery.data ?? null);
+  const emailSignature = emailSettings.signature;
+  const emailSenderName = emailSettings.sender_name;
 
   const rafraichirListe = () => queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
 
@@ -437,6 +443,17 @@ export function EmailInboxPage() {
           action={
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
               <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full justify-center rounded-full sm:w-auto"
+              >
+                <Link to="/settings/integrations/email#signature-email">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Signature
+                </Link>
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 className="w-full justify-center rounded-full sm:w-auto"
@@ -448,7 +465,7 @@ export function EmailInboxPage() {
               </Button>
               <Button
                 size="sm"
-                className="w-full justify-center rounded-full sm:w-auto"
+                className="col-span-2 w-full justify-center rounded-full sm:col-span-1 sm:w-auto"
                 onClick={() => setComposeOpen(true)}
               >
                 <PenLine className="mr-2 h-4 w-4" />
@@ -649,6 +666,7 @@ export function EmailInboxPage() {
                 person={resolvePerson(selectedEmail, contactMap, leadMap)}
                 classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
                 signature={emailSignature}
+                senderName={emailSenderName}
                 leads={allLeads}
                 onBack={() => { setMobileDetailOpen(false); setSelectedId(null); }}
               />
@@ -672,6 +690,7 @@ export function EmailInboxPage() {
         contacts={contactsQuery.data ?? []}
         mailboxStatus={mailboxStatus}
         signature={emailSignature}
+        senderName={emailSenderName}
         onSent={(email) => {
           setView('outbound');
           setSelectedId(email.id);
@@ -689,6 +708,7 @@ function NewEmailDialog({
   contacts,
   mailboxStatus,
   signature,
+  senderName,
   onSent,
 }: {
   open: boolean;
@@ -697,6 +717,7 @@ function NewEmailDialog({
   contacts: Contact[];
   mailboxStatus?: IonosMailboxStatus;
   signature: string;
+  senderName: string;
   onSent: (email: Communication) => void;
 }) {
   const queryClient = useQueryClient();
@@ -724,13 +745,18 @@ function NewEmailDialog({
         contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
         lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
         subject: subject.trim(),
-        content: buildSignedEmailContent(content, signature),
+        content: content.trim(),
+        signature,
         attachments: preparedAttachments,
       });
     },
     onSuccess: async (email) => {
       await queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
-      toast.success('Email envoyé depuis votre boîte IONOS');
+      if (email.email_sent_copy_saved_at) {
+        toast.success('Email accepté et classé dans les Envoyés IONOS');
+      } else {
+        toast.warning('Email accepté par IONOS, mais sa copie n’a pas pu être classée dans Envoyés');
+      }
       onSent(email);
       reset();
       onOpenChange(false);
@@ -837,14 +863,13 @@ function NewEmailDialog({
               className="min-h-40 resize-y rounded-lg"
             />
             {signature.trim() && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                  Signature ajoutée à l’envoi
-                </p>
-                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                  {signature}
-                </p>
-              </div>
+              <EmailSignaturePreview
+                signature={signature}
+                senderName={senderName}
+                compact
+                showLabel={false}
+                className="mt-2"
+              />
             )}
           </div>
 
@@ -887,6 +912,7 @@ function EmailDetail({
   person,
   classification,
   signature,
+  senderName,
   leads,
   onBack,
 }: {
@@ -894,6 +920,7 @@ function EmailDetail({
   person: string | null;
   classification: EmailPartyClassification;
   signature: string;
+  senderName: string;
   leads: Lead[];
   onBack: () => void;
 }) {
@@ -943,18 +970,23 @@ function EmailDetail({
         contact_id: email.contact_id ?? undefined,
         lead_id: email.lead_id ?? undefined,
         subject: replySubject,
-        content: buildSignedEmailContent(content, signature),
+        content,
+        signature,
         in_reply_to: email.email_message_id ?? undefined,
         attachments,
       });
     },
-    onSuccess: () => {
+    onSuccess: (sentEmail) => {
       setReplyContent('');
       setReplyAttachments([]);
       setReponseOuverte(false);
       void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
       void queryClient.invalidateQueries({ queryKey: ['communications'] });
-      toast.success('Réponse envoyée depuis votre boîte IONOS');
+      if (sentEmail.email_sent_copy_saved_at) {
+        toast.success('Réponse acceptée et classée dans les Envoyés IONOS');
+      } else {
+        toast.warning('Réponse acceptée par IONOS, mais sa copie n’a pas pu être classée dans Envoyés');
+      }
     },
     onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer la réponse"),
   });
@@ -1264,14 +1296,13 @@ function EmailDetail({
                 disabled={!recipient || replyMutation.isPending}
               />
               {signature.trim() && (
-                <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                    Signature ajoutée à l’envoi
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                    {signature}
-                  </p>
-                </div>
+                <EmailSignaturePreview
+                  signature={signature}
+                  senderName={senderName}
+                  compact
+                  showLabel={false}
+                  className="mt-2"
+                />
               )}
               <div className="mt-3">
                 <EmailAttachmentPicker
