@@ -34,6 +34,7 @@ export interface SendIonosEmailInput {
   lead_id?: string;
   subject: string;
   content: string;
+  signature?: string;
   in_reply_to?: string;
   attachments?: EmailAttachmentInput[];
 }
@@ -152,14 +153,8 @@ export async function prepareEmailAttachments(files: readonly File[]): Promise<E
 
 export function buildDefaultEmailSignature(senderName: string, emailAddress: string): string {
   const identity = senderName.trim() || 'Relais Pare-Brise';
-  const details = [identity, emailAddress.trim(), 'www.relaisparebrise.fr'].filter(Boolean);
+  const details = [identity, 'Service client', emailAddress.trim(), 'www.relaisparebrise.fr'].filter(Boolean);
   return `Cordialement,\n\n${details.join('\n')}`;
-}
-
-export function buildSignedEmailContent(content: string, signature: string): string {
-  const body = content.trim();
-  const footer = signature.trim();
-  return footer ? `${body}\n\n${footer}` : body;
 }
 
 type EmailFunctionResponse = {

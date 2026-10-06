@@ -128,6 +128,55 @@ function echapperHtml(value: string): string {
     .replaceAll("'", '&#039;');
 }
 
+function ligneSignatureHtml(line: string): string {
+  const normalized = line.trim();
+  if (emailValide(normalized)) {
+    return `<a href="mailto:${echapperHtml(normalized)}" style="color:#15803d;text-decoration:none">${echapperHtml(normalized)}</a>`;
+  }
+  if (/^(https?:\/\/|www\.)[^\s]+$/i.test(normalized)) {
+    const href = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+    return `<a href="${echapperHtml(href)}" style="color:#15803d;text-decoration:none">${echapperHtml(normalized)}</a>`;
+  }
+  return echapperHtml(normalized);
+}
+
+function construireSignatureHtml(signature: string, senderName: string, senderEmail: string): string {
+  if (!signature.trim()) return '';
+  const lines = signature.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const greeting = lines.find((line) => /^cordialement[,.]?$/i.test(line)) ?? 'Cordialement,';
+  const details = lines.filter((line) => (
+    !/^cordialement[,.]?$/i.test(line)
+    && !/^service client$/i.test(line)
+    && line.localeCompare(senderName, 'fr', { sensitivity: 'base' }) !== 0
+  ));
+  if (!details.some((line) => emailValide(line))) details.push(senderEmail);
+  if (!details.some((line) => /^(https?:\/\/|www\.)/i.test(line))) details.push('www.relaisparebrise.fr');
+
+  return [
+    '<div style="margin-top:28px;padding-top:18px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif">',
+    `<div style="margin-bottom:12px;font-size:13px;color:#6b7280">${echapperHtml(greeting)}</div>`,
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">',
+    '<tr>',
+    '<td style="vertical-align:middle;padding-right:14px">',
+    '<div style="width:54px;height:54px;border-radius:16px;background:#16a34a;color:#ffffff;font-size:14px;font-weight:800;line-height:54px;text-align:center;letter-spacing:-1px">RPB</div>',
+    '</td>',
+    '<td style="vertical-align:middle;border-left:3px solid #16a34a;padding-left:14px">',
+    `<div style="font-size:17px;font-weight:700;line-height:1.25;color:#111827">${echapperHtml(senderName)}</div>`,
+    '<div style="margin-top:3px;font-size:11px;font-weight:700;line-height:1.4;color:#16a34a;text-transform:uppercase;letter-spacing:.6px">Service client · Relais Pare-Brise</div>',
+    `<div style="margin-top:7px;font-size:12px;line-height:1.55;color:#6b7280;word-break:break-word">${details.map(ligneSignatureHtml).join(' &nbsp;·&nbsp; ')}</div>`,
+    '</td>',
+    '</tr>',
+    '</table>',
+    '<div style="margin-top:12px;font-size:10px;line-height:1.45;color:#9ca3af">Ce message vous est adressé par Relais Pare-Brise dans le cadre du suivi de votre dossier.</div>',
+    '</div>',
+  ].join('');
+}
+
+function construireEmailHtml(content: string, signature: string, senderName: string, senderEmail: string): string {
+  const body = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;color:#111827;font-size:14px">${echapperHtml(content)}</div>`;
+  return `<div style="max-width:680px">${body}${construireSignatureHtml(signature, senderName, senderEmail)}</div>`;
+}
+
 function base64Mime(value: string | Buffer): string {
   const encoded = Buffer.isBuffer(value)
     ? value.toString('base64')
@@ -354,6 +403,7 @@ Deno.serve(async (req) => {
 
     const subject = texte(body.subject, 200);
     const content = texte(body.content, 20_000);
+    const signature = texte(body.signature, 2_000);
     if (!subject) throw new Error('OBJET_REQUIS');
     if (!content) throw new Error('MESSAGE_REQUIS');
     const attachments = piecesJointes(body.attachments);
@@ -379,14 +429,15 @@ Deno.serve(async (req) => {
     let smtpAcceptedAt: string | null = null;
     let sentCopySavedAt: string | null = null;
     let sentCopyError: string | null = null;
-    const htmlContent = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`;
+    const fullContent = signature ? `${content}\n\n${signature}` : content;
+    const htmlContent = construireEmailHtml(content, signature, senderName, senderEmail);
     try {
       const result = await transporter.sendMail({
         from: { name: senderName, address: senderEmail },
         to: recipient.email,
         replyTo: senderEmail,
         subject,
-        text: content,
+        text: fullContent,
         html: htmlContent,
         messageId,
         ...(inReplyTo ? { inReplyTo, references: [inReplyTo] } : {}),
@@ -421,7 +472,7 @@ Deno.serve(async (req) => {
         senderEmail,
         recipientEmail: recipient.email,
         subject,
-        content,
+        content: fullContent,
         htmlContent,
         messageId: smtpMessageId,
         inReplyTo,
@@ -445,7 +496,7 @@ Deno.serve(async (req) => {
         direction: 'outbound',
         status: 'sent',
         subject,
-        content,
+        content: fullContent,
         email_html: htmlContent,
         provider: 'ionos-smtp',
         external_id: smtpMessageId,

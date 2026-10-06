@@ -55,11 +55,12 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  buildSignedEmailContent, fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
+  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
+import { EmailSignaturePreview } from './email-signature-preview';
 import { LigneEmail, estNonLu } from './ligne-email';
 import { EnteteMessage } from './entete-message';
 import { RailMail } from './rail-mail';
@@ -371,7 +372,9 @@ export function EmailInboxPage() {
   }, [filteredEmails, selectedId]);
 
   const selectedEmail = filteredEmails.find((email) => email.id === selectedId) ?? null;
-  const emailSignature = parseIonosSettings(ionosConnectionQuery.data ?? null).signature;
+  const emailSettings = parseIonosSettings(ionosConnectionQuery.data ?? null);
+  const emailSignature = emailSettings.signature;
+  const emailSenderName = emailSettings.sender_name;
 
   const rafraichirListe = () => queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
 
@@ -651,6 +654,7 @@ export function EmailInboxPage() {
                 person={resolvePerson(selectedEmail, contactMap, leadMap)}
                 classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
                 signature={emailSignature}
+                senderName={emailSenderName}
                 leads={allLeads}
                 onBack={() => { setMobileDetailOpen(false); setSelectedId(null); }}
               />
@@ -674,6 +678,7 @@ export function EmailInboxPage() {
         contacts={contactsQuery.data ?? []}
         mailboxStatus={mailboxStatus}
         signature={emailSignature}
+        senderName={emailSenderName}
         onSent={(email) => {
           setView('outbound');
           setSelectedId(email.id);
@@ -691,6 +696,7 @@ function NewEmailDialog({
   contacts,
   mailboxStatus,
   signature,
+  senderName,
   onSent,
 }: {
   open: boolean;
@@ -699,6 +705,7 @@ function NewEmailDialog({
   contacts: Contact[];
   mailboxStatus?: IonosMailboxStatus;
   signature: string;
+  senderName: string;
   onSent: (email: Communication) => void;
 }) {
   const queryClient = useQueryClient();
@@ -726,7 +733,8 @@ function NewEmailDialog({
         contact_id: parsed?.kind === 'contact' ? parsed.id : undefined,
         lead_id: parsed?.kind === 'lead' ? parsed.id : undefined,
         subject: subject.trim(),
-        content: buildSignedEmailContent(content, signature),
+        content: content.trim(),
+        signature,
         attachments: preparedAttachments,
       });
     },
@@ -843,14 +851,13 @@ function NewEmailDialog({
               className="min-h-40 resize-y rounded-lg"
             />
             {signature.trim() && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                  Signature ajoutée à l’envoi
-                </p>
-                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                  {signature}
-                </p>
-              </div>
+              <EmailSignaturePreview
+                signature={signature}
+                senderName={senderName}
+                compact
+                showLabel={false}
+                className="mt-2"
+              />
             )}
           </div>
 
@@ -893,6 +900,7 @@ function EmailDetail({
   person,
   classification,
   signature,
+  senderName,
   leads,
   onBack,
 }: {
@@ -900,6 +908,7 @@ function EmailDetail({
   person: string | null;
   classification: EmailPartyClassification;
   signature: string;
+  senderName: string;
   leads: Lead[];
   onBack: () => void;
 }) {
@@ -949,7 +958,8 @@ function EmailDetail({
         contact_id: email.contact_id ?? undefined,
         lead_id: email.lead_id ?? undefined,
         subject: replySubject,
-        content: buildSignedEmailContent(content, signature),
+        content,
+        signature,
         in_reply_to: email.email_message_id ?? undefined,
         attachments,
       });
@@ -1274,14 +1284,13 @@ function EmailDetail({
                 disabled={!recipient || replyMutation.isPending}
               />
               {signature.trim() && (
-                <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                    Signature ajoutée à l’envoi
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                    {signature}
-                  </p>
-                </div>
+                <EmailSignaturePreview
+                  signature={signature}
+                  senderName={senderName}
+                  compact
+                  showLabel={false}
+                  className="mt-2"
+                />
               )}
               <div className="mt-3">
                 <EmailAttachmentPicker

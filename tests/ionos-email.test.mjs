@@ -258,20 +258,28 @@ test('les pieces jointes sont ouvertes via un relais authentifie et les reponses
   assert.match(config, /\[functions\.email-attachment\][\s\S]*verify_jwt = true/);
 });
 
-test('la signature est personnalisable visible pendant la redaction et jointe aux emails', async () => {
-  const [service, settings, inbox] = await Promise.all([
+test('la signature est personnalisee, apercue puis rendue en HTML compatible email', async () => {
+  const [service, settings, inbox, preview, edge] = await Promise.all([
     read('src/features/integrations/email/email-service.ts'),
     read('src/features/integrations/email/email-settings-page.tsx'),
     read('src/features/integrations/email/email-inbox-page.tsx'),
+    read('src/features/integrations/email/email-signature-preview.tsx'),
+    read('supabase/functions/email-send/index.ts'),
   ]);
 
   assert.match(service, /signature: string/);
   assert.match(service, /buildDefaultEmailSignature/);
-  assert.match(service, /buildSignedEmailContent/);
+  assert.match(service, /Service client/);
   assert.match(settings, /Signature automatique/);
-  assert.match(settings, /Aperçu de la signature/);
-  assert.match(inbox, /Signature ajoutée à l’envoi/);
-  assert.match(inbox, /buildSignedEmailContent\(content, signature\)/);
+  assert.match(settings, /Appliquer le modèle pro/);
+  assert.match(inbox, /<EmailSignaturePreview/);
+  assert.match(inbox, /signature,/);
+  assert.match(preview, /Aperçu de la signature/);
+  assert.match(preview, />\s*RPB\s*</);
+  assert.match(preview, /Service client · Relais Pare-Brise/);
+  assert.match(edge, /function construireSignatureHtml/);
+  assert.match(edge, /text: fullContent/);
+  assert.match(edge, /html: htmlContent/);
 });
 
 test('la boite mail reste exploitable sur telephone sans comprimer la lecture ni la redaction', async () => {

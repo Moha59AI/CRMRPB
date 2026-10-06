@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Mail, RefreshCw,
-  Send, Server, ShieldCheck,
+  Send, Server, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
@@ -15,11 +15,12 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  buildDefaultEmailSignature, buildSignedEmailContent,
+  buildDefaultEmailSignature,
   getIonosConnection, getIonosCredentialStatus, getIonosMailboxStatus,
   parseIonosSettings, saveIonosPassword, saveIonosSettings, sendIonosEmail,
   syncIonosMailbox, type IonosEmailSettings,
 } from './email-service';
+import { EmailSignaturePreview } from './email-signature-preview';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -116,10 +117,8 @@ export function EmailSettingsPage() {
       return sendIonosEmail({
         to: form.email_address,
         subject: 'Test de connexion du CRM Relais Pare-Brise',
-        content: buildSignedEmailContent(
-          'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis le module Boîte mail.',
-          form.signature,
-        ),
+        content: 'Votre boîte IONOS est bien reliée au CRM pour les envois. Vous pouvez maintenant envoyer des emails depuis le module Boîte mail.',
+        signature: form.signature,
       });
     },
     onSuccess: async () => {
@@ -237,27 +236,37 @@ export function EmailSettingsPage() {
           <Separator className="my-5" />
 
           <div className="space-y-3">
-            <div>
-              <Label htmlFor="ionos-signature">Signature automatique</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Elle sera visible pendant la rédaction et ajoutée automatiquement à chaque email et chaque réponse.
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <Label htmlFor="ionos-signature">Signature automatique</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Une ligne par information. Le CRM transforme ce texte en signature professionnelle dans l’email.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full shrink-0 rounded-full sm:w-auto"
+                onClick={() => setForm((value) => ({
+                  ...value,
+                  signature: buildDefaultEmailSignature(value.sender_name, value.email_address),
+                }))}
+              >
+                <Sparkles className="mr-2 h-3.5 w-3.5" />
+                Appliquer le modèle pro
+              </Button>
             </div>
             <Textarea
               id="ionos-signature"
               value={form.signature}
               onChange={(event) => setForm((value) => ({ ...value, signature: event.target.value }))}
-              rows={6}
+              rows={7}
               maxLength={2_000}
               className="resize-y rounded-lg"
-              placeholder="Cordialement,\n\nRelais Pare-Brise"
+              placeholder="Cordialement,\n\nRelais Pare-Brise\nService client\ncontact@relaisparebrise.fr\nwww.relaisparebrise.fr"
             />
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Aperçu de la signature</p>
-              <p className="mt-3 whitespace-pre-line break-words text-sm leading-relaxed text-foreground">
-                {form.signature.trim() || 'Aucune signature ne sera ajoutée.'}
-              </p>
-            </div>
+            <EmailSignaturePreview signature={form.signature} senderName={form.sender_name} />
           </div>
 
           <Separator className="my-5" />
