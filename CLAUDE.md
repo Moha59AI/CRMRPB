@@ -129,9 +129,9 @@ Voir `DATABASE.md` pour le schéma complet.
 Les tables métier : activities, after_sales_cases, appointments, audit_logs, campaigns,
 case_documents, communications, contacts, gifts, insurers, integration_connections,
 invoices, leads, meta_forms, notes, notifications, payments, profiles, quotes,
-sms_templates, tasks, vehicles, webhook_endpoints, webhook_events, windscreen_cases,
-workflow_runs, workflows, workspaces, google_ads_daily_metrics,
-google_ads_search_terms_daily.
+sms_templates, tasks, travel_routes, travel_settings, vehicles, webhook_endpoints,
+webhook_events, windscreen_cases, workflow_runs, workflows, workspaces,
+google_ads_daily_metrics, google_ads_search_terms_daily.
 Le référentiel `postal_code_cities` complète cette liste.
 
 **Toutes les tables ont RLS activé.** Ne jamais créer de table sans RLS.

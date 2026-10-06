@@ -146,6 +146,41 @@ documents sont limitées aux quatre types pris en charge et validées en base.
 | document_rules | jsonb | Libellé, visibilité et caractère obligatoire des quatre pièces |
 | updated_by, created_at, updated_at | uuid/timestamptz | Traçabilité du réglage |
 
+### travel_settings
+Point de départ des interventions et barème de coût kilométrique, un jeu par
+espace de travail. L'adresse est choisie dans la Base Adresse Nationale comme
+partout ailleurs : ses coordonnées sont enregistrées ici une fois, et plus
+jamais regéocodées.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| workspace_id | uuid PK → workspaces | Un réglage par espace |
+| depart_label, depart_address, depart_postal_code, depart_city, depart_citycode | text | Adresse de départ, telle que la BAN l'a rendue |
+| depart_latitude, depart_longitude | double precision | Le point envoyé à OpenRouteService. Les deux ou aucune |
+| fuel_price_per_liter | numeric(6,3) | €/L, 1,700 par défaut |
+| consumption_l_per_100km | numeric(5,2) | L/100 km, 6,50 par défaut |
+| vehicle_cost_per_km | numeric(6,3) | €/km, 0,200 par défaut |
+| labour_cost_per_hour | numeric(7,2) | €/h chargé, 20,00 par défaut |
+| updated_by, created_at, updated_at | uuid/timestamptz | Traçabilité du réglage |
+
+### travel_routes
+Cache des itinéraires OpenRouteService. La clé est le couple de coordonnées,
+pas la fiche : deux clients de la même rue partagent la route, et un
+déménagement change la clé donc laisse l'ancien calcul inutilisé au lieu de le
+salir. Les coordonnées sont arrondies à cinq décimales (~1 m) à l'écriture
+comme à la lecture.
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid PK | |
+| workspace_id | uuid → workspaces | |
+| depart_latitude, depart_longitude, arrivee_latitude, arrivee_longitude | double precision | Clé du cache, avec `profile` |
+| profile | text | `driving-car` ou `driving-hgv` |
+| depart_label, arrivee_label | text | Adresses au moment du calcul |
+| distance_m, duration_s | integer | Trajet aller seul, tel que rendu par l'API |
+| geometry | jsonb | Tracé routier réel, `[longitude, latitude]`. null si illisible |
+| fuel_price_per_liter, consumption_l_per_100km, vehicle_cost_per_km, labour_cost_per_hour | numeric | Barème appliqué, pour que le montant reste explicable |
+| fuel_cost, vehicle_cost, labour_cost, total_cost | numeric(10,2) | Coûts de l'aller-retour |
+| calculated_at, created_at | timestamptz | Date du dernier calcul |
+
 ### postal_code_cities
 Référentiel local des couples code postal/commune de France.
 Il sert à compléter la ville lorsqu'un formulaire ne transmet que le code
@@ -420,6 +455,18 @@ Journal d'audit des actions administratives.
 ### meta_forms
 - SELECT : membres du workspace
 - INSERT/UPDATE/DELETE : admin uniquement
+
+### travel_settings
+- SELECT : membres du workspace — le coût s'affiche sur la fiche, chacun doit pouvoir le lire
+- INSERT/UPDATE : admin et responsable — un barème faux se propage partout sans se signaler
+- DELETE : admin uniquement
+
+### travel_routes
+- SELECT : membres du workspace
+- INSERT/UPDATE : membres du workspace. L'écriture normale passe par l'Edge Function
+  `openrouteservice-route` ; la politique sert au rechiffrage local quand seul le barème
+  a changé, qui ne demande aucun appel externe
+- DELETE : admin et responsable
 
 ### webhook_endpoints
 - SELECT : membres du workspace

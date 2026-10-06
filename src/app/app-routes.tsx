@@ -48,11 +48,13 @@ const InsurersPage = lazy(() => import('@/features/settings/insurers-page').then
 const CadencesPage = lazy(() => import('@/features/settings/cadences-page').then((m) => ({ default: m.CadencesPage })));
 const ClientDocumentsPage = lazy(() => import('@/features/client-documents/client-documents-page').then((m) => ({ default: m.ClientDocumentsPage })));
 const ClientDocumentSettingsPage = lazy(() => import('@/features/client-documents/client-document-settings-page').then((m) => ({ default: m.ClientDocumentSettingsPage })));
+const ReglagesDeplacementsPage = lazy(() => import('@/features/settings/deplacements-page').then((m) => ({ default: m.ReglagesDeplacementsPage })));
 const BancListe = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancListe })));
 const BancFiche = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancFiche })));
 const ApercuAccueil = lazy(() => import('@/features/diag/apercu-accueil').then((m) => ({ default: m.ApercuAccueil })));
 const ApercuLeads = lazy(() => import('@/features/diag/apercu-leads').then((m) => ({ default: m.ApercuLeads })));
 const ApercuMail = lazy(() => import('@/features/diag/apercu-mail').then((m) => ({ default: m.ApercuMail })));
+const ApercuDeplacement = lazy(() => import('@/features/diag/apercu-deplacement').then((m) => ({ default: m.ApercuDeplacement })));
 
 function ChargementPage({ superposee = false }: { superposee?: boolean }) {
   return (
@@ -104,6 +106,7 @@ export function AppRoutes() {
             <Route path="/apercu-accueil" element={charger(<ApercuAccueil />)} />
             <Route path="/apercu-leads" element={charger(<ApercuLeads />)} />
             <Route path="/apercu-mail" element={charger(<ApercuMail />)} />
+            <Route path="/apercu-deplacement" element={charger(<ApercuDeplacement />)} />
             <Route path="/diag-fiche/:id" element={charger(<BancFiche pleinePage />)} />
           </>
         )}
@@ -146,6 +149,7 @@ export function AppRoutes() {
             <Route path="insurers" element={charger(<InsurersPage />)} />
             <Route path="relances" element={charger(<CadencesPage />)} />
             <Route path="documents" element={charger(<ClientDocumentSettingsPage />)} />
+            <Route path="deplacements" element={charger(<ReglagesDeplacementsPage />)} />
           </Route>
         </Route>
 

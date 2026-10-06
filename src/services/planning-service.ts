@@ -12,6 +12,9 @@ export interface ClientRendezVous {
   address: string | null;
   postal_code: string | null;
   city: string | null;
+  /** Posees par la Base Adresse Nationale a la saisie de l'adresse. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface LeadRendezVous extends ClientRendezVous {
@@ -19,6 +22,8 @@ export interface LeadRendezVous extends ClientRendezVous {
   intervention_address: string | null;
   intervention_postal_code: string | null;
   intervention_city: string | null;
+  intervention_latitude: number | null;
+  intervention_longitude: number | null;
   /** Offre ou cadeau annonce au client. Vit sur le lead : une offre par intervention. */
   offer: string | null;
 }
@@ -35,7 +40,7 @@ export interface AppointmentAvecClient extends Appointment {
   contacts?: ClientRendezVous | null;
 }
 
-const CHAMPS_CLIENT = 'first_name, last_name, phone, address, postal_code, city';
+const CHAMPS_CLIENT = 'first_name, last_name, phone, address, postal_code, city, latitude, longitude';
 
 export async function fetchAppointments(params: {
   startDate?: string;
@@ -44,7 +49,7 @@ export async function fetchAppointments(params: {
 }): Promise<AppointmentAvecClient[]> {
   let query = supabase
     .from('appointments')
-    .select(`*, leads(id, ${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city, offer), contacts(${CHAMPS_CLIENT})`)
+    .select(`*, leads(id, ${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city, intervention_latitude, intervention_longitude, offer), contacts(${CHAMPS_CLIENT})`)
     .order('start_time', { ascending: true });
   if (params.startDate) query = query.gte('start_time', params.startDate);
   if (params.endDate) query = query.lte('start_time', params.endDate);
@@ -95,6 +100,62 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
     nom, adresse, telephone,
     offre,
     leadId: lead?.id ?? appt.lead_id ?? null,
+  };
+}
+
+/**
+ * Ou se rend-on, et avec quelles coordonnees.
+ *
+ * Meme ordre de priorite que `clientDuRendezVous`, et une regle qui ne se
+ * contourne pas : un rendez-vous qui porte sa propre adresse n'emprunte jamais
+ * les coordonnees du lead. Elles decrivent un autre lieu. Le trajet calcule
+ * annoncerait une adresse et chiffrerait un parcours vers une autre -- un
+ * point faux est plus dangereux qu'une absence de point, parce qu'il ne se
+ * signale pas.
+ */
+export function lieuDuRendezVous(appt: AppointmentAvecClient): {
+  label: string | null;
+  latitude: number | null;
+  longitude: number | null;
+} {
+  const lead = appt.leads ?? null;
+  const contact = appt.contacts ?? null;
+
+  const joindre = (...parts: (string | null | undefined)[]) =>
+    parts.map((p) => p?.trim()).filter(Boolean).join(' ') || null;
+
+  if (appt.address?.trim()) {
+    return {
+      label: appt.address.trim(),
+      latitude: appt.latitude,
+      longitude: appt.longitude,
+    };
+  }
+
+  const adresseIntervention = joindre(
+    lead?.intervention_address, lead?.intervention_postal_code, lead?.intervention_city,
+  );
+  if (adresseIntervention) {
+    return {
+      label: adresseIntervention,
+      latitude: lead?.intervention_latitude ?? null,
+      longitude: lead?.intervention_longitude ?? null,
+    };
+  }
+
+  const domicileLead = joindre(lead?.address, lead?.postal_code, lead?.city);
+  if (domicileLead) {
+    return {
+      label: domicileLead,
+      latitude: lead?.latitude ?? null,
+      longitude: lead?.longitude ?? null,
+    };
+  }
+
+  return {
+    label: joindre(contact?.address, contact?.postal_code, contact?.city),
+    latitude: contact?.latitude ?? null,
+    longitude: contact?.longitude ?? null,
   };
 }
 

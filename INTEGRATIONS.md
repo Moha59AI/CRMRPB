@@ -150,3 +150,57 @@ Fonctionnalités prévues :
 4. Le statut est "Non configuré"
 5. Le webhook est accessible mais sans traitement tant que les secrets ne sont pas configurés
 6. Les webhooks génériques fonctionnent indépendamment de Meta
+
+## OpenRouteService — itinéraires et coût des déplacements
+
+Calcule la distance routière réelle, la durée et le tracé entre l'atelier et
+le lieu d'une intervention, puis en déduit le coût du déplacement.
+
+**OpenRouteService ne géocode rien.** Les adresses et leurs coordonnées
+viennent de la Base Adresse Nationale, comme partout ailleurs dans le CRM
+(`src/services/adresse-service.ts`, `src/components/ChampAdresse.tsx`). Il
+n'intervient qu'une fois les deux points connus. Il n'y a pas deux systèmes
+d'adresses, et il ne doit jamais y en avoir deux.
+
+### Mise en service
+
+1. Créer un compte sur <https://openrouteservice.org/dev/> et générer une clé.
+   Le plan gratuit couvre 2 000 itinéraires par jour, très au-dessus du besoin.
+2. Poser la clé comme secret de fonction — **jamais** préfixée `VITE_`, qui la
+   publierait dans le bundle du navigateur :
+
+   ```
+   npx supabase secrets set OPENROUTESERVICE_API_KEY=<clé>
+   ```
+
+3. Dans le CRM, ouvrir **Réglages › Déplacements** et choisir l'adresse de
+   départ dans les suggestions. C'est la sélection qui enregistre les
+   coordonnées ; une adresse tapée sans être choisie reste du texte, et aucun
+   trajet ne peut être calculé.
+4. Ajuster le barème : prix du carburant, consommation, coût kilométrique du
+   véhicule, coût horaire chargé.
+
+Tant que la clé n'est pas posée, l'encart « Déplacement » affiche « Le service
+d'itinéraire n'est pas encore configuré par un administrateur ». Rien d'autre
+n'est affecté : la création d'un client, la modification d'une adresse et la
+prise de rendez-vous n'en dépendent pas.
+
+### Edge Function `openrouteservice-route`
+
+`verify_jwt = true`. Prend les coordonnées d'arrivée, lit le départ dans
+`travel_settings` côté serveur — le navigateur ne le choisit pas, sans quoi
+n'importe quelle paire de coordonnées consommerait le quota. Consulte le cache
+`travel_routes`, appelle OpenRouteService seulement en cas d'absence ou de
+recalcul forcé, enregistre le résultat et les coûts.
+
+Pannes rendues distinctement : clé absente ou refusée, quota dépassé, délai
+dépassé, coordonnées manquantes, aucune route, réponse illisible. Le délai est
+borné à 15 secondes.
+
+### Appels évités
+
+Dans l'ordre : coordonnées déjà en base, puis trajet déjà calculé pour ce
+couple de points, puis OpenRouteService. Changer le barème ne rappelle pas le
+service — la route n'a pas bougé, seule l'arithmétique est refaite, localement.
+Déménager un client change la clé du cache, donc le trajet est recalculé sans
+qu'aucune détection ne soit nécessaire.
