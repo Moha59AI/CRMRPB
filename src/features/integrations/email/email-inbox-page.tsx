@@ -58,6 +58,7 @@ import {
 import {
   buildSignedEmailContent,
   fetchEmailAttachment,
+  fetchEmailHtml,
   fetchMailboxEmails,
   getIonosConnection,
   getIonosMailboxStatus,
@@ -68,6 +69,8 @@ import {
   type IonosMailboxStatus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
+import { EmailHtmlViewer } from './email-html-viewer';
+import { EmailLeadLinkDialog } from './email-lead-link-dialog';
 
 type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -271,6 +274,10 @@ export function EmailInboxPage() {
   });
   const contactsQuery = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const leadsQuery = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
+  const archivedLeadsQuery = useQuery({
+    queryKey: ['leads-archived-mail-link'],
+    queryFn: () => fetchLeads({ archives: true }),
+  });
   const insurersQuery = useQuery({
     queryKey: ['mailbox-insurers'],
     queryFn: () => fetchInsurers({ inclureInactifs: true }),
@@ -283,11 +290,18 @@ export function EmailInboxPage() {
     return map;
   }, [contactsQuery.data]);
 
+  const allLeads = useMemo(() => {
+    const byId = new Map<string, Lead>();
+    [...(leadsQuery.data ?? []), ...(archivedLeadsQuery.data ?? [])]
+      .forEach((lead) => byId.set(lead.id, lead));
+    return [...byId.values()];
+  }, [leadsQuery.data, archivedLeadsQuery.data]);
+
   const leadMap = useMemo(() => {
     const map = new Map<string, Lead>();
-    (leadsQuery.data ?? []).forEach((lead) => map.set(lead.id, lead));
+    allLeads.forEach((lead) => map.set(lead.id, lead));
     return map;
-  }, [leadsQuery.data]);
+  }, [allLeads]);
 
   const classificationMap = useMemo(() => {
     const map = new Map<string, EmailPartyClassification>();
@@ -364,8 +378,12 @@ export function EmailInboxPage() {
         queryClient.invalidateQueries({ queryKey: ['ionos-email-connection'] }),
       ]);
       const importedLabel = result.imported > 1 ? 'emails importés' : 'email importé';
+      const enriched = result.enriched ?? 0;
+      const enrichedLabel = enriched > 0
+        ? ` ${enriched} ancien${enriched > 1 ? 's' : ''} email${enriched > 1 ? 's' : ''} remis en forme.`
+        : '';
       const historyLabel = result.remaining_history ? ' La suite de l’historique sera récupérée à la prochaine synchronisation.' : '';
-      toast.success(`${result.imported} ${importedLabel}.${historyLabel}`);
+      toast.success(`${result.imported} ${importedLabel}.${enrichedLabel}${historyLabel}`);
     },
     onError: (error) => toast.error((error as Error)?.message || 'Synchronisation IONOS impossible'),
   });
@@ -593,6 +611,7 @@ export function EmailInboxPage() {
               person={resolvePerson(selectedEmail, contactMap, leadMap)}
               classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
               signature={emailSignature}
+              leads={allLeads}
               onBack={() => setMobileDetailOpen(false)}
             />
           ) : (
@@ -829,22 +848,30 @@ function EmailDetail({
   person,
   classification,
   signature,
+  leads,
   onBack,
 }: {
   email: Communication;
   person: string | null;
   classification: EmailPartyClassification;
   signature: string;
+  leads: Lead[];
   onBack: () => void;
 }) {
   const inbound = email.direction === 'inbound';
   const queryClient = useQueryClient();
   const [replyContent, setReplyContent] = useState('');
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
+  const [leadLinkOpen, setLeadLinkOpen] = useState(false);
   const [attachmentViewer, setAttachmentViewer] = useState<AttachmentViewerState | null>(null);
   const attachmentRequestId = useRef(0);
   const attachmentUrl = useRef<string | null>(null);
   const recipient = inbound ? email.sender_email?.trim() || null : null;
+  const emailHtmlQuery = useQuery({
+    queryKey: ['email-html', email.id],
+    queryFn: () => fetchEmailHtml(email.id),
+    staleTime: 10 * 60 * 1000,
+  });
   const originalSubject = email.subject?.trim() || '(Sans objet)';
   const replySubject = /^re\s*:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
   const relatedPath = email.lead_id
@@ -856,6 +883,14 @@ function EmailDetail({
   const otherAttachments = supplierPdfs.length > 0
     ? email.email_attachments.filter((attachment) => !isPdfAttachment(attachment))
     : email.email_attachments;
+
+  const handleLinked = (updatedEmail: Communication) => {
+    queryClient.setQueryData<Communication[]>(['mailbox-emails'], (current) => (
+      current?.map((item) => item.id === updatedEmail.id ? updatedEmail : item) ?? current
+    ));
+    void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
+    void queryClient.invalidateQueries({ queryKey: ['communications'] });
+  };
 
   const replyMutation = useMutation({
     mutationFn: async () => {
@@ -980,14 +1015,26 @@ function EmailDetail({
             </h2>
           </div>
 
-          {relatedPath && (
-            <Button asChild variant="outline" size="sm" className="w-full shrink-0 justify-center rounded-full sm:w-auto">
-              <Link to={relatedPath}>
-                <UserRound className="mr-2 h-4 w-4" />
-                Voir la fiche
-              </Link>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full justify-center rounded-full sm:w-auto"
+              onClick={() => setLeadLinkOpen(true)}
+            >
+              <Link2 className="mr-2 h-4 w-4" />
+              {email.lead_id ? 'Changer le lead' : 'Rattacher à un lead'}
             </Button>
-          )}
+            {relatedPath && (
+              <Button asChild variant="outline" size="sm" className="w-full justify-center rounded-full sm:w-auto">
+                <Link to={relatedPath}>
+                  <UserRound className="mr-2 h-4 w-4" />
+                  Voir la fiche
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1066,11 +1113,23 @@ function EmailDetail({
             </div>
           )}
 
-          <div className="mt-4 min-h-48 rounded-xl border border-border bg-card p-5 sm:p-6">
-            <div className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
-              {email.content || 'Aucun contenu texte n’a été fourni avec cet email.'}
-            </div>
-          </div>
+          {emailHtmlQuery.isLoading ? (
+            <Skeleton className="mt-4 h-[420px] rounded-xl" />
+          ) : (
+            <>
+              {emailHtmlQuery.isError && (
+                <div className="mt-4 flex items-center gap-2 rounded-xl border border-due/25 bg-due-soft px-4 py-3 text-xs text-due">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  La mise en forme n’a pas pu être chargée. La version texte reste disponible.
+                </div>
+              )}
+              <EmailHtmlViewer
+                html={emailHtmlQuery.data ?? email.email_html}
+                text={email.content}
+                subject={email.subject}
+              />
+            </>
+          )}
 
           {otherAttachments.length > 0 && (
             <div className="mt-4 rounded-xl border border-border bg-card p-4">
@@ -1276,6 +1335,14 @@ function EmailDetail({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EmailLeadLinkDialog
+        email={email}
+        leads={leads}
+        open={leadLinkOpen}
+        onOpenChange={setLeadLinkOpen}
+        onLinked={handleLinked}
+      />
     </div>
   );
 }

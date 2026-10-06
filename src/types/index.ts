@@ -435,6 +435,8 @@ export interface Communication {
   direction: 'inbound' | 'outbound';
   status: CommunicationStatus;
   content: string | null;
+  /** Corps HTML original de l'email. Toujours afficher dans un contexte isole. */
+  email_html: string | null;
   subject: string | null;
   duration_seconds: number | null;
   recording_url: string | null;

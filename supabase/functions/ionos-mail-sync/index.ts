@@ -2,7 +2,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
 import { ImapFlow } from 'npm:imapflow@2.0.6';
 import PostalMime from 'npm:postal-mime@3.0.0';
 import {
-  emailAlreadyImported,
   storeInboundEmail,
   type StoredInboundAttachment,
 } from '../_shared/inbound-email.ts';
@@ -29,11 +28,17 @@ const MAX_MESSAGES_PER_SYNC = 8;
 const MAX_MESSAGE_BYTES = 30 * 1024 * 1024;
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const MAX_ATTACHMENTS_TOTAL_BYTES = 30 * 1024 * 1024;
+const MAX_HTML_BYTES = 500_000;
 
 type IonosConnection = {
   id: string;
   workspace_id: string;
   settings: Record<string, unknown> | null;
+};
+
+type ImportedEmail = {
+  id: string;
+  email_html: string | null;
 };
 
 function json(body: unknown, status = 200) {
@@ -182,6 +187,44 @@ async function stockerPiecesJointes(
   return stored;
 }
 
+async function emailImporte(
+  workspaceId: string,
+  externalId: string,
+): Promise<ImportedEmail | null> {
+  const { data, error } = await admin
+    .from('communications')
+    .select('id, email_html')
+    .eq('workspace_id', workspaceId)
+    .eq('provider', PROVIDER)
+    .eq('external_id', externalId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ImportedEmail | null;
+}
+
+async function uidsSansHtml(
+  workspaceId: string,
+  uidValidity: string,
+): Promise<number[]> {
+  const { data, error } = await admin
+    .from('communications')
+    .select('external_id')
+    .eq('workspace_id', workspaceId)
+    .eq('provider', PROVIDER)
+    .is('email_html', null)
+    .not('external_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(MAX_MESSAGES_PER_SYNC * 4);
+  if (error) throw new Error(error.message);
+
+  const prefix = `${MAILBOX}:${uidValidity}:`;
+  return (data ?? [])
+    .map((row) => typeof row.external_id === 'string' && row.external_id.startsWith(prefix)
+      ? Number(row.external_id.slice(prefix.length))
+      : 0)
+    .filter((uid) => Number.isSafeInteger(uid) && uid > 0);
+}
+
 async function syncWorkspace(connection: IonosConnection) {
   const settings = (connection.settings ?? {}) as Record<string, unknown>;
   const emailAddress = typeof settings.email_address === 'string'
@@ -239,19 +282,30 @@ async function syncWorkspace(connection: IonosConnection) {
       lastUid = Math.max(lastUid, ...newCandidates);
     }
 
-    const remaining = MAX_MESSAGES_PER_SYNC - selected.length;
+    let remaining = MAX_MESSAGES_PER_SYNC - selected.length;
+    if (remaining > 0) {
+      const missingHtml = (await uidsSansHtml(connection.workspace_id, uidValidity))
+        .filter((uid) => allUids.includes(uid) && !selected.includes(uid))
+        .slice(0, remaining);
+      selected.push(...missingHtml);
+      remaining = MAX_MESSAGES_PER_SYNC - selected.length;
+    }
     if (remaining > 0 && backfillBeforeUid > 1) {
-      const older = allUids.filter((uid) => uid < backfillBeforeUid).slice(-remaining);
+      const older = allUids
+        .filter((uid) => uid < backfillBeforeUid && !selected.includes(uid))
+        .slice(-remaining);
       selected.push(...older);
       if (older.length > 0) backfillBeforeUid = Math.min(...older);
     }
 
     let imported = 0;
+    let enriched = 0;
     let duplicates = 0;
     let skipped = 0;
     for (const uid of selected.sort((a, b) => a - b)) {
       const externalId = `${MAILBOX}:${uidValidity}:${uid}`;
-      if (await emailAlreadyImported(admin, connection.workspace_id, PROVIDER, externalId)) {
+      const existingEmail = await emailImporte(connection.workspace_id, externalId);
+      if (existingEmail && existingEmail.email_html !== null) {
         duplicates += 1;
         continue;
       }
@@ -276,6 +330,21 @@ async function syncWorkspace(connection: IonosConnection) {
       }
       const subject = (parsed.subject?.trim() || '(Sans objet)').slice(0, 200);
       const content = (parsed.text?.trim() || (parsed.html ? htmlVersTexte(parsed.html) : '')).slice(0, 50_000);
+      const html = typeof parsed.html === 'string' && parsed.html.trim()
+        ? parsed.html.trim().slice(0, MAX_HTML_BYTES)
+        : null;
+
+      if (existingEmail) {
+        const { error: enrichError } = await admin
+          .from('communications')
+          .update({ email_html: html ?? '' })
+          .eq('id', existingEmail.id)
+          .eq('workspace_id', connection.workspace_id);
+        if (enrichError) throw new Error(enrichError.message);
+        enriched += 1;
+        continue;
+      }
+
       const attachments = await stockerPiecesJointes(
         connection.workspace_id,
         uidValidity,
@@ -297,6 +366,7 @@ async function syncWorkspace(connection: IonosConnection) {
         recipient: emailAddress,
         subject,
         content,
+        html,
         messageId: typeof parsed.messageId === 'string' ? parsed.messageId.slice(0, 500) : null,
         attachments,
         createdAt,
@@ -324,7 +394,7 @@ async function syncWorkspace(connection: IonosConnection) {
     }).eq('id', connection.id);
     if (updateError) throw new Error(updateError.message);
 
-    return { imported, duplicates, skipped, remaining_history: backfillBeforeUid > 1 };
+    return { imported, enriched, duplicates, skipped, remaining_history: backfillBeforeUid > 1 };
   } finally {
     lock?.release();
     if (client.usable) await client.logout().catch(() => client.close());

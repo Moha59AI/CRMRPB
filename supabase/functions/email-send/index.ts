@@ -242,6 +242,7 @@ Deno.serve(async (req) => {
     });
 
     let smtpMessageId = messageId;
+    const htmlContent = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`;
     try {
       const result = await transporter.sendMail({
         from: { name: senderName, address: senderEmail },
@@ -249,7 +250,7 @@ Deno.serve(async (req) => {
         replyTo: senderEmail,
         subject,
         text: content,
-        html: `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.55;color:#101318">${echapperHtml(content)}</div>`,
+        html: htmlContent,
         messageId,
         ...(inReplyTo ? { inReplyTo, references: [inReplyTo] } : {}),
         ...(attachments.length ? {
@@ -285,6 +286,7 @@ Deno.serve(async (req) => {
         status: 'sent',
         subject,
         content,
+        email_html: htmlContent,
         provider: 'ionos-smtp',
         external_id: smtpMessageId,
         sender_email: senderEmail,

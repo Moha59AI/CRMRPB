@@ -52,6 +52,7 @@ test('la synchronisation IMAP rattache les messages et notifie les utilisateurs'
   assert.match(ingest, /\.from\('leads'\)/);
   assert.match(ingest, /\.from\('notifications'\)/);
   assert.match(ingest, /type: 'email_inbound'/);
+  assert.match(ingest, /email_html: email\.html/);
   assert.match(ingest, /classifierCorrespondant/);
   assert.match(ingest, /extraireImmatriculations/);
   assert.match(ingest, /vehicle_registration/);
@@ -61,6 +62,47 @@ test('la synchronisation IMAP rattache les messages et notifie les utilisateurs'
   assert.match(config, /\[functions\.email-send\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-email-secret\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-mail-sync\][\s\S]*verify_jwt = false/);
+});
+
+test('le HTML des emails reste isole et les anciens messages sont enrichis progressivement', async () => {
+  const [sync, viewer, security, migration, types] = await Promise.all([
+    read('supabase/functions/ionos-mail-sync/index.ts'),
+    read('src/features/integrations/email/email-html-viewer.tsx'),
+    read('src/features/integrations/email/email-html-security.ts'),
+    read('supabase/migrations/20261005110000_email_html_manual_lead_link.sql'),
+    read('src/types/index.ts'),
+  ]);
+
+  assert.match(sync, /parsed\.html\.trim\(\)\.slice\(0, MAX_HTML_BYTES\)/);
+  assert.match(sync, /uidsSansHtml/);
+  assert.match(sync, /update\(\{ email_html: html \?\? '' \}\)/);
+  assert.match(security, /Content-Security-Policy/);
+  assert.match(viewer, /sandbox=""/);
+  assert.match(viewer, /referrerPolicy="no-referrer"/);
+  assert.match(viewer, /Afficher les images externes/);
+  assert.doesNotMatch(viewer, /dangerouslySetInnerHTML/);
+  assert.match(migration, /add column if not exists email_html text/);
+  assert.match(types, /email_html: string \| null/);
+});
+
+test('un email peut etre rattache manuellement a un lead sans modifier son contenu', async () => {
+  const [migration, service, dialog, inbox] = await Promise.all([
+    read('supabase/migrations/20261005110000_email_html_manual_lead_link.sql'),
+    read('src/features/integrations/email/email-service.ts'),
+    read('src/features/integrations/email/email-lead-link-dialog.tsx'),
+    read('src/features/integrations/email/email-inbox-page.tsx'),
+  ]);
+
+  assert.match(migration, /function public\.rattacher_email_au_lead/);
+  assert.match(migration, /type in \('email_inbound', 'email_outbound'\)/);
+  assert.match(migration, /set lead_id = v_lead\.id/);
+  assert.doesNotMatch(migration, /set content\s*=/);
+  assert.match(migration, /'email_lead_linked'/);
+  assert.match(migration, /insert into public\.audit_logs/);
+  assert.match(service, /rpc\('rattacher_email_au_lead'/);
+  assert.match(dialog, /Rattacher cet email à un lead/);
+  assert.match(inbox, /Rattacher à un lead/);
+  assert.match(inbox, /EmailLeadLinkDialog/);
 });
 
 test('le webhook Resend est définitivement neutralise pour la boite mail', async () => {
@@ -110,6 +152,8 @@ test('la boite mail separe les recus des envoyes et detecte assureurs experts et
   assert.match(inbox, /Voir la fiche/);
   assert.match(inbox, /Pièces jointes/);
   assert.match(service, /\.in\('type', \['email_inbound', 'email_outbound'\]\)/);
+  assert.match(service, /EMAIL_LIST_COLUMNS/);
+  assert.match(service, /fetchEmailHtml/);
   assert.match(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
   assert.match(classification, /insurer\.claims_email/);
   assert.match(classification, /solutions-expertises\.com/);

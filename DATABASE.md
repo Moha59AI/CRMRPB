@@ -176,10 +176,9 @@ Connexions aux services externes.
 **Note** : Les secrets (App Secret, tokens) ne sont JAMAIS stockés dans `settings`. Ils sont stockés via Supabase Vault avec une référence dans `settings`.
 
 Pour `ionos`, `settings` contient uniquement l'adresse professionnelle, le nom
-d'expéditeur et l'adresse de transfert Resend Inbound. Le mot de passe de la
-boîte IONOS n'entre jamais dans le CRM. L'envoi passe par Resend ; IONOS
-transfère une copie des nouveaux messages vers Resend pour les rattacher aux
-clients et aux leads.
+d'expéditeur et la signature. Le mot de passe de la boîte IONOS est chiffré
+dans Supabase Vault et n'entre jamais dans le navigateur ni dans `settings`.
+L'envoi passe directement par SMTP IONOS et la réception par IMAP IONOS.
 
 ### communications — champs email
 Les emails réels utilisent le même historique que les appels et SMS.
@@ -190,9 +189,10 @@ Les emails réels utilisent le même historique que les appels et SMS.
 | email_message_id | text | Identifiant RFC du message reçu |
 | email_in_reply_to | text | Identifiant du message auquel une réponse se rattache |
 | email_attachments | jsonb | Métadonnées des pièces jointes ; aucune URL temporaire conservée |
+| email_html | text | Corps HTML non fiable, affiché uniquement dans une iframe isolée |
 
-Les emails sortants ont le provider `resend-ionos`. Les emails entrants sont
-créés par le webhook signé Resend avec la service role, puis associés par
+Les emails sortants ont le provider `ionos-smtp`. Les emails entrants sont
+importés depuis INBOX par la fonction `ionos-mail-sync`, puis associés par
 adresse email à un client et, si possible, à son lead le plus récent. Quand
 l'expéditeur n'est pas le client, le webhook recherche aussi une immatriculation
 SIV dans l'objet ou le corps afin de rattacher les retours d'assureurs et
@@ -207,7 +207,10 @@ contenu reste dans le bucket privé. La fonction authentifiée `email-attachment
 vérifie le workspace et le rôle avant de servir le fichier au navigateur. Une
 réponse envoyée depuis la boîte mail du
 CRM reprend `email_message_id` dans l'en-tête `In-Reply-To` afin de rester dans
-le fil de discussion du client.
+le fil de discussion du client. Un administrateur, responsable ou conseiller
+peut corriger le rattachement d'un email par la fonction
+`rattacher_email_au_lead` ; seul le lien métier change et l'opération est
+inscrite dans `audit_logs`.
 
 ### lead_ai_insights
 Historique immuable des analyses IA demandées depuis une fiche lead. Les

@@ -50,6 +50,10 @@ téléphone, il ne peut ni prévenir d'un retard ni se faire ouvrir un portail.
 
 Notes et communications ne se modifient ni ne s'effacent : un échange consigné
 est une trace, pas un brouillon.
+Le rattachement d'un email à un lead est la seule exception : admin,
+responsable et conseiller peuvent corriger ce lien via une fonction contrôlée.
+Le contenu, l'objet, l'expéditeur et la date restent immuables, et chaque
+changement de rattachement est inscrit dans `audit_logs`.
 Les analyses IA suivent la même logique : elles sont ajoutées et consultées,
 jamais réécrites. Seul l'administrateur peut les supprimer.
 

@@ -21,6 +21,8 @@ export interface IonosCredentialStatus {
 
 export interface IonosSyncResult {
   imported: number;
+  /** Anciens messages dont la version HTML vient d'être récupérée. */
+  enriched?: number;
   duplicates: number;
   skipped: number;
   remaining_history: boolean;
@@ -48,7 +50,19 @@ export interface FetchEmailAttachmentInput {
   attachmentId: string;
 }
 
+export interface LinkEmailToLeadInput {
+  communicationId: string;
+  leadId: string;
+}
+
 const EMAIL_PAGE_SIZE = 500;
+const EMAIL_LIST_COLUMNS = [
+  'id', 'workspace_id', 'lead_id', 'case_id', 'contact_id', 'user_id',
+  'type', 'direction', 'status', 'content', 'subject', 'duration_seconds',
+  'recording_url', 'provider', 'external_id', 'delivered_at', 'sender_email',
+  'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_attachments',
+  'created_at',
+].join(',');
 
 export const MAX_EMAIL_ATTACHMENTS = 5;
 export const MAX_EMAIL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -296,20 +310,43 @@ export async function fetchMailboxEmails(): Promise<Communication[]> {
   while (true) {
     const { data, error } = await supabase
       .from('communications')
-      .select('*')
+      // Le HTML peut peser plusieurs centaines de Ko : la liste reste legere
+      // et le charge seulement pour le message effectivement ouvert.
+      .select(EMAIL_LIST_COLUMNS)
       .in('type', ['email_inbound', 'email_outbound'])
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(offset, offset + EMAIL_PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
 
-    const page = (data as Communication[] | null) ?? [];
+    const page = ((data ?? []) as unknown as Array<Omit<Communication, 'email_html'>>)
+      .map((email) => ({ ...email, email_html: null }));
     emails.push(...page);
     if (page.length < EMAIL_PAGE_SIZE) break;
     offset += EMAIL_PAGE_SIZE;
   }
 
   return emails;
+}
+
+export async function fetchEmailHtml(communicationId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('communications')
+    .select('email_html')
+    .eq('id', communicationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return typeof data?.email_html === 'string' ? data.email_html : null;
+}
+
+export async function linkEmailToLead(input: LinkEmailToLeadInput): Promise<Communication> {
+  const { data, error } = await supabase.rpc('rattacher_email_au_lead', {
+    p_communication_id: input.communicationId,
+    p_lead_id: input.leadId,
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Le rattachement n'a pas été enregistré");
+  return data as Communication;
 }
 
 export async function sendIonosEmail(input: SendIonosEmailInput): Promise<Communication> {

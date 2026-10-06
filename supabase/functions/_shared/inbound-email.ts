@@ -18,6 +18,7 @@ export type InboundEmail = {
   recipient: string;
   subject: string;
   content: string;
+  html: string | null;
   messageId: string | null;
   attachments: StoredInboundAttachment[];
   createdAt: string;
@@ -216,6 +217,7 @@ export async function storeInboundEmail(
     status: 'received',
     subject: email.subject,
     content: email.content.slice(0, 50_000) || null,
+    email_html: email.html ?? '',
     provider: email.provider,
     external_id: email.externalId,
     sender_email: email.sender,
