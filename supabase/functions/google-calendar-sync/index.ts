@@ -7,6 +7,32 @@ const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const DEFAULT_CALENDAR_ID = 'primary';
 const TIME_ZONE = 'Europe/Paris';
 
+/*
+  Reconnaitre une intervention dans un evenement Google.
+
+  Les rendez-vous se posent dans Google Agenda, et le CRM les importe. Tout
+  importer en `other` revenait a dire qu'aucun n'etait une intervention : la
+  carte, qui ne charge que celles-la, restait vide une semaine entiere alors
+  que les rendez-vous etaient bien la. La reprise en lot des coordonnees, qui
+  filtre pareil, ne les voyait pas davantage.
+
+  Le signal n'est pas a inventer : l'atelier ecrit la plaque entre parentheses
+  dans le titre, et c'est deja de cette convention que
+  `rattacher_rendez_vous_clients` se sert pour retrouver le client. Un titre
+  qui dit « Intervention » compte aussi -- il ne reste alors qu'a lui trouver
+  un lieu.
+
+  Un « Rappel - ... » n'en est pas une, et doit rester `other`.
+*/
+const PLAQUE_ENTRE_PARENTHESES = /\([A-Za-z0-9 -]{5,12}\)/;
+
+function typeDepuisTitre(titre: string): 'intervention' | 'other' {
+  const t = titre.trim();
+  return PLAQUE_ENTRE_PARENTHESES.test(t) || /^intervention\b/i.test(t)
+    ? 'intervention'
+    : 'other';
+}
+
 type AppointmentRow = {
   id: string;
   workspace_id: string;
@@ -441,7 +467,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncResult> {
         .from('appointments')
         .insert({
           ...importe,
-          type: 'other',
+          type: typeDepuisTitre(importe.title),
           status: 'scheduled',
           google_calendar_event_id: event.id,
           google_calendar_html_link: event.htmlLink ?? null,
