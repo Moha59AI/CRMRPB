@@ -82,7 +82,9 @@ test('le HTML des emails reste isole et les anciens messages sont enrichis progr
   assert.match(viewer, /Afficher les images externes/);
   assert.doesNotMatch(viewer, /dangerouslySetInnerHTML/);
   assert.match(migration, /add column if not exists email_html text/);
-  assert.ok(migration.startsWith('/*\n'));
+  // Indifférent aux fins de ligne : une copie de travail Windows contient
+  // `/*\r\n`, et l'assertion échouait sur tout poste Windows.
+  assert.match(migration, /^\/\*\r?\n/);
   assert.match(types, /email_html: string \| null/);
 });
 

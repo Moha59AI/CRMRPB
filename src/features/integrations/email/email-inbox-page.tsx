@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
-  ArrowDownLeft,
   ArrowLeft,
-  ArrowUpRight,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -71,6 +69,7 @@ import {
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
 import { EmailLeadLinkDialog } from './email-lead-link-dialog';
+import { LigneEmail } from './ligne-email';
 
 type MailboxView = 'inbound' | 'suppliers' | 'insurers' | 'experts' | 'outbound' | 'all' | 'unlinked';
 
@@ -114,18 +113,6 @@ function partyLabel(classification: EmailPartyClassification): string {
   if (classification.category === 'expert') return 'Cabinet d’expertise';
   if (classification.category === 'supplier') return 'Fournisseur';
   return 'Autre correspondant';
-}
-
-function formatMailboxDate(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) {
-    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  }
-  if (date.getFullYear() === today.getFullYear()) {
-    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  }
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function formatFullDate(iso: string): string {
@@ -534,7 +521,7 @@ export function EmailInboxPage() {
           )}
 
           {!emailsQuery.isLoading && !emailsQuery.isError && filteredEmails.length > 0 && (
-            <div className="min-h-0 flex-1 overflow-y-auto p-2 scrollbar-thin">
+            <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-thin">
               {filteredEmails.map((email) => {
                 const active = email.id === selectedId;
                 const inbound = email.direction === 'inbound';
@@ -545,58 +532,16 @@ export function EmailInboxPage() {
                   ? email.email_attachments.filter(isPdfAttachment).length
                   : 0;
                 return (
-                  <button
+                  <LigneEmail
                     key={email.id}
-                    type="button"
-                    onClick={() => openEmail(email.id)}
-                    className={`mb-1 w-full rounded-xl border p-3 text-left transition ${
-                      active
-                        ? 'border-primary/30 bg-primary/5 shadow-sm'
-                        : 'border-transparent hover:border-border hover:bg-background'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${inbound ? 'bg-done-soft text-done' : 'bg-upcoming-soft text-upcoming'}`}>
-                        {inbound ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-foreground">
-                            {person ?? address ?? 'Adresse inconnue'}
-                          </p>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {formatMailboxDate(email.created_at)}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 truncate text-sm font-medium text-foreground/90">
-                          {email.subject || '(Sans objet)'}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                          {email.content || 'Aucun contenu texte disponible.'}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <EmailPartyBadge classification={classification} />
-                          {!email.contact_id && !email.lead_id && (
-                            <span className="rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due">
-                              À rattacher
-                            </span>
-                          )}
-                          {supplierPdfCount > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due">
-                              <FileText className="h-3 w-3" />
-                              {supplierPdfCount} PDF
-                            </span>
-                          )}
-                          {email.email_attachments.length > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                              <Paperclip className="h-3 w-3" />
-                              {email.email_attachments.length}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
+                    email={email}
+                    correspondant={person ?? address ?? 'Adresse inconnue'}
+                    badge={<EmailPartyBadge classification={classification} />}
+                    aRattacher={!email.contact_id && !email.lead_id}
+                    pdfFournisseur={supplierPdfCount}
+                    actif={active}
+                    onOuvrir={() => openEmail(email.id)}
+                  />
                 );
               })}
             </div>
