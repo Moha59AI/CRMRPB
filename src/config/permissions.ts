@@ -57,7 +57,10 @@ export function cheminAutorise(chemin: string, role: UserRole | null): boolean {
 export function accueilDuRole(role: UserRole | null): string {
   switch (role) {
     case 'accountant': return '/billing';
-    case 'technician': return '/calendar';
+    // Le technicien ouvre le CRM pour savoir ou il va : la liste des
+    // interventions repond directement, la l'agenda demandait de choisir une
+    // vue puis de lire une grille.
+    case 'technician': return '/interventions';
     default: return '/today';
   }
 }

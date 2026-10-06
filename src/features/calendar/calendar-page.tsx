@@ -83,6 +83,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useEstMobile } from '@/hooks/use-media-query';
+import { LIBELLE_STATUT_RDV, PASTILLE_STATUT_RDV } from './statut-rendez-vous';
 
 import { fetchCases } from '@/services/cases-service';
 import { fetchLeads, updateLead } from '@/services/leads-service';
@@ -122,28 +123,12 @@ const HOURS = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, i) => i 
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  scheduled: 'Planifié',
-  confirmed: 'Confirmé',
-  completed: 'Terminé',
-  cancelled: 'Annulé',
-  no_show: 'Absent',
-};
-
 const STATUS_STYLES: Record<AppointmentStatus, string> = {
   scheduled: 'bg-upcoming-soft/80 border-upcoming/25/70 text-upcoming',
   confirmed: 'bg-done-soft/80 border-done/25/70 text-done',
   completed: 'bg-muted/80 border-border/70 text-muted-foreground',
   cancelled: 'bg-urgent-soft/70 border-urgent/25/70 text-urgent line-through opacity-60',
   no_show: 'bg-due-soft/80 border-due/25/70 text-due',
-};
-
-const STATUS_PILL: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-upcoming-soft/80 text-upcoming',
-  confirmed: 'bg-done-soft/80 text-done',
-  completed: 'bg-muted/80 text-muted-foreground',
-  cancelled: 'bg-urgent-soft/80 text-urgent line-through',
-  no_show: 'bg-due-soft/80 text-due',
 };
 
 /** Les memes couleurs que les pastilles, reduites a un point pour le mois. */
@@ -753,7 +738,7 @@ export function MonthView({
                     }}
                     className={cn(
                       'block w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight transition-opacity hover:opacity-80',
-                      STATUS_PILL[appt.status]
+                      PASTILLE_STATUT_RDV[appt.status]
                     )}
                   >
                     {formatTime(appt.start_time)} {appt.title}
@@ -934,7 +919,7 @@ function AppointmentDetailSheet({
                 appointment.status === 'no_show' && 'bg-due-soft text-due'
               )}
             >
-              {STATUS_LABELS[appointment.status]}
+              {LIBELLE_STATUT_RDV[appointment.status]}
             </Badge>
           </div>
 

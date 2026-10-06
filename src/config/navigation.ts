@@ -18,6 +18,7 @@ import {
   WalletCards,
   Mail,
   FileLock2,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -53,6 +54,12 @@ export const navSections: NavSection[] = [
   {
     titre: 'Quotidien',
     items: [
+      {
+        label: 'Interventions',
+        path: '/interventions',
+        icon: Wrench,
+        description: 'Où aller, quand, et comment s’y rendre',
+      },
       {
         label: "Aujourd'hui",
         path: '/today',
