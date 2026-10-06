@@ -26,6 +26,14 @@ export interface LigneEmailProps {
   /** Factures fournisseur a masquer avant transmission. */
   pdfFournisseur?: number;
   actif: boolean;
+  /**
+   * La liste partage l'ecran avec un message ouvert.
+   *
+   * Les points de rupture de Tailwind mesurent la fenetre, pas le
+   * conteneur : sur un grand ecran, une liste de 440 px recevait quand meme
+   * une colonne d'expediteur de 190 px et il ne restait rien pour l'objet.
+   */
+  etroite?: boolean;
   onOuvrir: () => void;
   /** Coche de selection, pour les actions groupees. */
   selectionne?: boolean;
@@ -52,7 +60,7 @@ export function estNonLu(email: Communication): boolean {
 
 export function LigneEmail({
   email, correspondant, badge, aRattacher, pdfFournisseur = 0, actif, onOuvrir,
-  selectionne = false, onSelectionner, onSuivre,
+  selectionne = false, onSelectionner, onSuivre, etroite = false,
 }: LigneEmailProps) {
   const sortant = email.direction !== 'inbound';
   const nonLu = estNonLu(email);
@@ -117,10 +125,15 @@ export function LigneEmail({
         </button>
       )}
 
-      {/* Colonne d'expediteur a largeur fixe : c'est elle qui fait l'alignement. */}
+      {/* Colonne d'expediteur : largeur constante dans une meme liste, donc
+          l'alignement tient, mais proportionnelle a la liste et non a la
+          fenetre. */}
       <span
         className={cn(
-          'w-[104px] shrink-0 truncate text-sm sm:w-[140px] xl:w-[190px]',
+          // Une part de la ligne plutot qu'une largeur fixe : la colonne
+          // suit la place disponible au lieu de la confisquer.
+          'shrink-0 truncate text-sm',
+          etroite ? 'w-[34%] max-w-[150px]' : 'w-[30%] max-w-[190px] min-w-[96px]',
           nonLu ? 'font-semibold text-foreground' : 'text-muted-foreground',
         )}
       >
@@ -133,32 +146,49 @@ export function LigneEmail({
           filtrer du regard sans lire. Les libelles ne se compriment pas, le
           reste cede la place. */}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        {badge && <span className="hidden max-w-[180px] shrink-0 md:inline">{badge}</span>}
-        {pdfFournisseur > 0 && (
+        {!etroite && badge && (
+          <span className="hidden max-w-[180px] shrink-0 md:inline">{badge}</span>
+        )}
+        {!etroite && pdfFournisseur > 0 && (
           <span className="hidden shrink-0 rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due sm:inline">
             {pdfFournisseur} PDF
           </span>
         )}
-        {aRattacher && (
+        {!etroite && aRattacher && (
           <span className="hidden shrink-0 rounded-full bg-due-soft px-2 py-0.5 text-[10px] font-medium text-due sm:inline">
             À rattacher
           </span>
         )}
-        {/* `shrink-0` sans plafond laissait un objet long passer sous la
-            date. Il ne depasse plus la moitie de la ligne : au-dela, c'est
-            l'extrait qui ne sert plus a rien, pas l'objet. */}
+        {/* Sur une liste large, l'objet s'arrete a la moitie pour laisser
+            voir l'extrait. Sur une liste etroite il prend tout : l'extrait
+            n'y tient pas de toute facon. */}
         <span className={cn(
-          'min-w-0 max-w-full shrink truncate text-sm sm:max-w-[52%] sm:shrink-0',
+          'min-w-0 flex-1 truncate text-sm',
+          // L'extrait cede avant l'objet : il n'a de valeur que s'il reste
+          // de la place apres lui.
+          etroite ? '' : 'sm:max-w-[55%] sm:flex-none sm:shrink-0',
           nonLu ? 'font-semibold text-foreground' : 'text-foreground/85',
         )}>
           {email.subject || '(Sans objet)'}
         </span>
-        {extrait && (
+        {extrait && !etroite && (
           <span className="hidden min-w-0 flex-1 truncate text-sm text-faint sm:inline">
             — {extrait}
           </span>
         )}
       </span>
+
+      {/* En etroit, un point remplace la pastille « A rattacher » : elle
+          prenait la place de l'objet, et presque tout le courrier entrant la
+          porte. Il se range avec le trombone, apres l'objet, pour ne pas
+          decaler la colonne d'une ligne a l'autre. */}
+      {etroite && aRattacher && (
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-due"
+          title="Aucun client ou lead correspondant"
+          aria-label="À rattacher"
+        />
+      )}
 
       {pieces > 0 && (
         <Paperclip

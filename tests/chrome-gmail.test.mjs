@@ -60,6 +60,32 @@ test('les actions groupées marquent lu, non lu et suivi', async () => {
   assert.match(page, /toast\.error\(erreur instanceof Error/);
 });
 
+test('la ligne se mesure a la liste, pas a la fenetre', async () => {
+  const ligne = await read(LIGNE);
+  const page = await read(PAGE);
+
+  // Les points de rupture de Tailwind mesurent la fenetre : sur un grand
+  // ecran, une liste de 440 px recevait quand meme un expediteur de 190 px
+  // et il ne restait rien pour l'objet.
+  assert.match(ligne, /etroite = false/);
+  assert.match(page, /etroite=\{Boolean\(selectedEmail\)\}/);
+  assert.doesNotMatch(ligne, /w-\[104px\]/);
+  // En etroit l'objet prend la place, et c'est l'extrait qui cede.
+  assert.match(ligne, /\{extrait && !etroite &&/);
+});
+
+test('le volet de lecture se ferme, sinon la liste reste étroite', async () => {
+  const page = await read(PAGE);
+
+  // Le rail ne doit pas dependre de `mobileDetailOpen`, qui passe a vrai sur
+  // tous les ecrans : il disparaissait des qu'on ouvrait un message.
+  assert.match(page, /<div className="hidden min-h-0 lg:flex">/);
+  // Le retour n'etait que sur mobile : sur grand ecran la liste restait a
+  // 440 px pour toujours.
+  assert.match(page, /setMobileDetailOpen\(false\); setSelectedId\(null\);/);
+  assert.match(page, /Retour à la liste/);
+});
+
 test('un clic sur la case ou l’étoile n’ouvre pas le message', async () => {
   const ligne = await read(LIGNE);
 

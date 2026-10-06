@@ -488,6 +488,31 @@ export function EmailInboxPage() {
         )}
       </div>
 
+      {/* Sous `lg`, le rail ne tient pas : les memes vues reviennent en une
+          bande horizontale, qui disparait pendant la lecture d'un message
+          pour laisser l'ecran au contenu. */}
+      {!mobileDetailOpen && (
+        <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-thin lg:hidden">
+          {[...entreesRail, ...categoriesRail].map(({ cle, label, Icone, nonLus = 0 }) => (
+            <button
+              key={cle}
+              type="button"
+              onClick={() => setView(cle)}
+              aria-current={view === cle ? 'page' : undefined}
+              className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors ${
+                view === cle
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-surface'
+              }`}
+            >
+              <Icone className="h-3.5 w-3.5" aria-hidden />
+              {label}
+              {nonLus > 0 && <span className="tabular-nums font-semibold">{nonLus}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Les vues passent dans le rail, a gauche : en haut il ne reste que
           la recherche, large, comme chez Gmail. */}
       <div className={`${mobileDetailOpen ? 'hidden lg:block' : ''} border-b border-border bg-background gutter-x py-3`}>
@@ -505,8 +530,14 @@ export function EmailInboxPage() {
       {/* Tant qu'aucun message n'est ouvert, la liste prend toute la largeur :
           c'est la vue par defaut de Gmail, et c'est elle qui permet de
           balayer. Le volet de lecture n'apparait qu'a l'ouverture. */}
-      <div className={`flex min-h-0 flex-1 ${mobileDetailOpen ? '' : ''}`}>
-        <div className={`${mobileDetailOpen ? 'hidden' : 'hidden sm:flex'} min-h-0`}>
+      <div className="flex min-h-0 flex-1">
+        {/* Le rail ne depend pas de `mobileDetailOpen` : ce drapeau passe a
+            vrai sur tous les ecrans, pas seulement sur telephone, et s'en
+            servir ici faisait disparaitre les vues des qu'on ouvrait un
+            message, sans moyen d'y revenir. Sur grand ecran le rail reste
+            donc en place pendant la lecture ; sous `lg` il n'a jamais tenu,
+            et c'est la bande horizontale ci-dessus qui porte les vues. */}
+        <div className="hidden min-h-0 lg:flex">
           <RailMail
             entrees={entreesRail}
             categories={categoriesRail}
@@ -516,118 +547,122 @@ export function EmailInboxPage() {
           />
         </div>
 
-      <div className={`grid min-h-0 flex-1 ${selectedEmail ? 'lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
-        <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 ${selectedEmail ? 'lg:border-r lg:border-border' : ''}`}>
-          <BarreOutilsMail
-            total={filteredEmails.length}
-            selection={selection.size}
-            toutSelectionne={filteredEmails.length > 0 && filteredEmails.every((email) => selection.has(email.id))}
-            onToutSelectionner={(choisi) => setSelection(
-              choisi ? new Set(filteredEmails.map((email) => email.id)) : new Set(),
-            )}
-            onActualiser={() => void rafraichirListe()}
-            actualisation={emailsQuery.isFetching}
-            onMarquerLus={(lus) => void agirSurSelection(() => marquerEmailsLus([...selection], lus))}
-            onSuivre={() => void agirSurSelection(async () => {
-              await Promise.all([...selection].map((id) => basculerSuiviEmail(id, true)));
-            })}
-            actionEnCours={actionEnCours}
-          />
-
-          {emailsQuery.isLoading && (
-            <div className="space-y-2 p-4">
-              {Array.from({ length: 7 }).map((_, index) => (
-                <Skeleton key={index} className="h-24 rounded-xl" />
-              ))}
-            </div>
-          )}
-
-          {emailsQuery.isError && (
-            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-              <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
-              <p className="font-medium">Impossible de charger la boîte mail</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {(emailsQuery.error as Error)?.message ?? 'Réessayez dans quelques instants.'}
-              </p>
-              <Button variant="outline" className="mt-4 rounded-full" onClick={() => emailsQuery.refetch()}>
-                Réessayer
-              </Button>
-            </div>
-          )}
-
-          {!emailsQuery.isLoading && !emailsQuery.isError && filteredEmails.length === 0 && (
-            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                <Mail className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <p className="font-medium">Aucun email dans cette vue</p>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                {search ? 'Essayez une autre recherche.' : 'Les nouveaux messages apparaîtront automatiquement ici.'}
-              </p>
-              {!search && (
-                <Button size="sm" className="mt-4 rounded-full" onClick={() => setComposeOpen(true)}>
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Écrire un email
-                </Button>
+        <div className={`grid min-h-0 flex-1 ${selectedEmail ? 'lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
+          <section className={`${mobileDetailOpen ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col bg-card/30 ${selectedEmail ? 'lg:border-r lg:border-border' : ''}`}>
+            <BarreOutilsMail
+              total={filteredEmails.length}
+              selection={selection.size}
+              toutSelectionne={filteredEmails.length > 0 && filteredEmails.every((email) => selection.has(email.id))}
+              onToutSelectionner={(choisi) => setSelection(
+                choisi ? new Set(filteredEmails.map((email) => email.id)) : new Set(),
               )}
-            </div>
-          )}
-
-          {!emailsQuery.isLoading && !emailsQuery.isError && filteredEmails.length > 0 && (
-            <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-thin">
-              {filteredEmails.map((email) => {
-                const active = email.id === selectedId;
-                const inbound = email.direction === 'inbound';
-                const person = resolvePerson(email, contactMap, leadMap);
-                const address = inbound ? email.sender_email : email.recipient_email;
-                const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
-                const supplierPdfCount = classification.category === 'supplier'
-                  ? email.email_attachments.filter(isPdfAttachment).length
-                  : 0;
-                return (
-                  <LigneEmail
-                    key={email.id}
-                    email={email}
-                    correspondant={person ?? address ?? 'Adresse inconnue'}
-                    badge={<EmailPartyBadge classification={classification} />}
-                    aRattacher={!email.contact_id && !email.lead_id}
-                    pdfFournisseur={supplierPdfCount}
-                    actif={active}
-                    onOuvrir={() => openEmail(email.id)}
-                    selectionne={selection.has(email.id)}
-                    onSelectionner={(choisi) => basculerSelection(email.id, choisi)}
-                    onSuivre={(suivi) => void agirSurSelection(
-                      () => basculerSuiviEmail(email.id, suivi),
-                    )}
-                  />
-                );
+              onActualiser={() => void rafraichirListe()}
+              actualisation={emailsQuery.isFetching}
+              onMarquerLus={(lus) => void agirSurSelection(() => marquerEmailsLus([...selection], lus))}
+              onSuivre={() => void agirSurSelection(async () => {
+                await Promise.all([...selection].map((id) => basculerSuiviEmail(id, true)));
               })}
-            </div>
-          )}
-        </section>
-
-        <section className={`${mobileDetailOpen ? 'flex' : selectedEmail ? 'hidden lg:flex' : 'hidden'} min-h-0 flex-col bg-background`}>
-          {selectedEmail ? (
-            <EmailDetail
-              key={selectedEmail.id}
-              email={selectedEmail}
-              person={resolvePerson(selectedEmail, contactMap, leadMap)}
-              classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
-              signature={emailSignature}
-              leads={allLeads}
-              onBack={() => setMobileDetailOpen(false)}
+              actionEnCours={actionEnCours}
             />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/40">
-                <Inbox className="h-8 w-8 text-muted-foreground" />
+
+            {emailsQuery.isLoading && (
+              <div className="space-y-2 p-4">
+                {Array.from({ length: 7 }).map((_, index) => (
+                  <Skeleton key={index} className="h-24 rounded-xl" />
+                ))}
               </div>
-              <p className="font-semibold">Sélectionnez un email</p>
-              <p className="mt-1 text-sm text-muted-foreground">Son contenu complet s’affichera ici.</p>
-            </div>
-          )}
-        </section>
-      </div>
+            )}
+
+            {emailsQuery.isError && (
+              <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
+                <p className="font-medium">Impossible de charger la boîte mail</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {(emailsQuery.error as Error)?.message ?? 'Réessayez dans quelques instants.'}
+                </p>
+                <Button variant="outline" className="mt-4 rounded-full" onClick={() => emailsQuery.refetch()}>
+                  Réessayer
+                </Button>
+              </div>
+            )}
+
+            {!emailsQuery.isLoading && !emailsQuery.isError && filteredEmails.length === 0 && (
+              <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+                  <Mail className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <p className="font-medium">Aucun email dans cette vue</p>
+                <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+                  {search ? 'Essayez une autre recherche.' : 'Les nouveaux messages apparaîtront automatiquement ici.'}
+                </p>
+                {!search && (
+                  <Button size="sm" className="mt-4 rounded-full" onClick={() => setComposeOpen(true)}>
+                    <PenLine className="mr-2 h-4 w-4" />
+                    Écrire un email
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {!emailsQuery.isLoading && !emailsQuery.isError && filteredEmails.length > 0 && (
+              <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-thin">
+                {filteredEmails.map((email) => {
+                  const active = email.id === selectedId;
+                  const inbound = email.direction === 'inbound';
+                  const person = resolvePerson(email, contactMap, leadMap);
+                  const address = inbound ? email.sender_email : email.recipient_email;
+                  const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
+                  const supplierPdfCount = classification.category === 'supplier'
+                    ? email.email_attachments.filter(isPdfAttachment).length
+                    : 0;
+                  return (
+                    <LigneEmail
+                      key={email.id}
+                      email={email}
+                      correspondant={person ?? address ?? 'Adresse inconnue'}
+                      badge={<EmailPartyBadge classification={classification} />}
+                      aRattacher={!email.contact_id && !email.lead_id}
+                      pdfFournisseur={supplierPdfCount}
+                      actif={active}
+                      // La liste se retrecit quand un message est ouvert : la
+                      // ligne doit le savoir, les points de rupture CSS ne
+                      // mesurant que la fenetre.
+                      etroite={Boolean(selectedEmail)}
+                      onOuvrir={() => openEmail(email.id)}
+                      selectionne={selection.has(email.id)}
+                      onSelectionner={(choisi) => basculerSelection(email.id, choisi)}
+                      onSuivre={(suivi) => void agirSurSelection(
+                        () => basculerSuiviEmail(email.id, suivi),
+                      )}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className={`${mobileDetailOpen ? 'flex' : selectedEmail ? 'hidden lg:flex' : 'hidden'} min-h-0 flex-col bg-background`}>
+            {selectedEmail ? (
+              <EmailDetail
+                key={selectedEmail.id}
+                email={selectedEmail}
+                person={resolvePerson(selectedEmail, contactMap, leadMap)}
+                classification={classificationMap.get(selectedEmail.id) ?? OTHER_CLASSIFICATION}
+                signature={emailSignature}
+                leads={allLeads}
+                onBack={() => { setMobileDetailOpen(false); setSelectedId(null); }}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/40">
+                  <Inbox className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <p className="font-semibold">Sélectionnez un email</p>
+                <p className="mt-1 text-sm text-muted-foreground">Son contenu complet s’affichera ici.</p>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
 
       <NewEmailDialog
@@ -998,10 +1033,13 @@ function EmailDetail({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border px-4 py-4 sm:px-6">
-        <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
+        {/* Visible sur tous les ecrans : le volet de lecture retrecit la
+            liste a 440 px, et sans ce retour on ne pouvait plus la rendre
+            large. Gmail ferme le sien de la meme facon. */}
+        <div className="mb-3 flex items-center justify-between gap-3">
           <Button variant="ghost" size="sm" className="-ml-2 rounded-full" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Emails
+            Retour à la liste
           </Button>
         </div>
 

@@ -148,13 +148,14 @@ export function ApercuMail() {
           </div>
         </div>
 
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Liste de la boîte mail
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Liste en vue scindée, 440 px — l’objet doit rester lisible
         </h2>
 
-        {/* Largeur de la colonne de gauche, pour juger la ligne telle qu'elle
-            sera vue et non etiree sur l'ecran. */}
-        <div className="max-w-[420px] divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {/* La largeur exacte que prend la liste quand un message est ouvert.
+            C'est le cas qui avait casse : l'expediteur et les pastilles
+            mangeaient tout et il ne restait rien pour l'objet. */}
+        <div className="max-w-[440px] divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {CAS.map((cas) => (
             <LigneEmail
               key={cas.email.id}
@@ -164,6 +165,7 @@ export function ApercuMail() {
               pdfFournisseur={cas.pdf}
               actif={cas.email.id === actif}
               onOuvrir={() => setActif(cas.email.id)}
+              etroite
             />
           ))}
         </div>

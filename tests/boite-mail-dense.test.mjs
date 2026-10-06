@@ -13,7 +13,12 @@ test('un message tient sur une ligne, alignée en colonnes', async () => {
   // C'est l'alignement, pas la densite seule, qui permet de balayer une
   // boite : l'oeil descend une colonne au lieu de relire chaque bloc.
   assert.match(ligne, /h-\[42px\]/);
-  assert.match(ligne, /w-\[104px\] shrink-0 truncate text-sm sm:w-\[140px\] xl:w-\[190px\]/);
+  // L'expediteur garde une largeur constante dans une meme liste -- c'est
+  // elle qui fait la colonne -- mais exprimee en part de la liste. Les
+  // points de rupture qu'elle portait avant mesuraient la fenetre, et
+  // confisquaient 190 px dans une liste de 440.
+  assert.match(ligne, /etroite \? 'w-\[34%\]/);
+  assert.match(ligne, /: 'w-\[30%\]/);
   assert.ok(ligne.includes("{email.subject || '(Sans objet)'}"));
   assert.ok(ligne.includes('— {extrait}'));
 });
@@ -22,9 +27,10 @@ test('un objet long ne passe pas sous la date', async () => {
   const ligne = await read(LIGNE);
 
   // `shrink-0` sans plafond faisait chevaucher l'objet et la colonne de
-  // date. Sur telephone l'extrait n'est pas affiche : le plafond y serait
-  // une perte de place.
-  assert.ok(ligne.includes("'min-w-0 max-w-full shrink truncate text-sm sm:max-w-[52%] sm:shrink-0',"));
+  // date. L'objet s'arrete donc a la moitie quand un extrait l'accompagne ;
+  // sur telephone, et dans une liste etroite, l'extrait n'est pas affiche et
+  // le plafond serait une perte de place.
+  assert.ok(ligne.includes("etroite ? '' : 'sm:max-w-[55%] sm:flex-none sm:shrink-0',"));
 });
 
 test('le non-lu se voit sans rien lire', async () => {
