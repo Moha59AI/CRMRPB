@@ -81,8 +81,8 @@ test('le push externe ne lit jamais le nom, le telephone ou le contenu detaille'
 });
 
 test('une notification de documents est adressee a des utilisateurs reels', async () => {
-  const edge = await read('supabase/functions/client-documents/index.ts');
-  assert.match(edge, /\.in\('role', \['admin', 'manager', 'advisor'\]\)/);
-  assert.match(edge, /user_id: recipient\.id/);
-  assert.match(edge, /if \(notificationError\) throw notificationError/);
+  const migration = await read('supabase/migrations/20261007100000_notifier_depot_documents_client.sql');
+  assert.match(migration, /profil\.role in \('admin', 'manager', 'advisor'\)/);
+  assert.match(migration, /v_request\.workspace_id,\s*profil\.id,/);
+  assert.match(migration, /'documents_received'/);
 });

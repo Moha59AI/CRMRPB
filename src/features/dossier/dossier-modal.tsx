@@ -53,7 +53,20 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
     [location.state]
   );
 
-  const [onglet, setOnglet] = useState<OngletDossier>('apercu');
+  const ongletDemande = useMemo<OngletDossier | null>(() => {
+    const valeur = new URLSearchParams(location.search).get('tab');
+    return ONGLETS.some((candidat) => candidat.cle === valeur)
+      ? valeur as OngletDossier
+      : null;
+  }, [location.search]);
+  const [onglet, setOnglet] = useState<OngletDossier>(() => ongletDemande ?? 'apercu');
+
+  // Une notification de dépôt ouvre directement les pièces reçues. Sans ce
+  // pont, l'utilisateur arrivait sur la vue générale et devait rechercher
+  // manuellement l'onglet Documents.
+  useEffect(() => {
+    if (ongletDemande) setOnglet(ongletDemande);
+  }, [leadId, ongletDemande]);
 
   const { profile } = useAuth();
   // RLS ne laisse lire les factures qu'a l'administration : sans ce filtre,

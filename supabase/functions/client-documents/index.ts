@@ -330,8 +330,6 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
     await admin.storage.from(bucket).remove([item.storage_path]);
   }
 
-  await notifyDocumentDeposit(item.id, request.workspace_id, request.lead_id);
-
   const { data: remaining, error: remainingError } = await admin
     .from('client_document_items')
     .select('id')
@@ -350,54 +348,19 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
     status: complete ? 'documents_received' : 'documents_requested',
   }).eq('id', request.lead_id).eq('workspace_id', request.workspace_id);
 
-  if (complete && request.status !== 'complete') {
-    const { data: recipients, error: recipientsError } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('workspace_id', request.workspace_id)
-      .in('role', ['admin', 'manager', 'advisor']);
-    if (recipientsError) throw recipientsError;
-
-    // « Documents client reçus » ne disait pas de quel client : il fallait
-    // ouvrir la fiche pour le savoir, et avec plusieurs dossiers ouverts on
-    // ne savait pas lequel venait d'avancer.
-    const { data: lead } = await admin
-      .from('leads')
-      .select('first_name, last_name, vehicle_make, vehicle_model, vehicle_registration')
-      .eq('id', request.lead_id)
-      .maybeSingle();
-
-    const nomClient = [lead?.first_name, lead?.last_name]
-      .map((partie) => (typeof partie === 'string' ? partie.trim() : ''))
-      .filter(Boolean)
-      .join(' ') || 'Client sans nom';
-
-    // Le vehicule distingue deux interventions du meme client.
-    const vehicule = [lead?.vehicle_make, lead?.vehicle_model]
-      .map((partie) => (typeof partie === 'string' ? partie.trim() : ''))
-      .filter(Boolean)
-      .join(' ');
-    const plaque = typeof lead?.vehicle_registration === 'string'
-      ? lead.vehicle_registration.trim()
-      : '';
-    const precisions = [vehicule, plaque].filter(Boolean).join(' · ');
-
-    const notificationRows = (recipients ?? []).map((recipient) => ({
-        workspace_id: request.workspace_id,
-        user_id: recipient.id,
-        title: `Documents reçus — ${nomClient}`,
-        body: precisions
-          ? `Toutes les pièces obligatoires ont été déposées. ${precisions}`
-          : 'Toutes les pièces obligatoires ont été déposées.',
-        type: 'documents_received',
-        link: `/interventions/${request.lead_id}`,
-      }));
-    if (notificationRows.length > 0) {
-      const { error: notificationError } = await admin
-        .from('notifications')
-        .insert(notificationRows);
-      if (notificationError) throw notificationError;
-    }
+  // Le document est deja rattache a la fiche et son statut est consolide en
+  // base. L'email est un confort : une panne Resend ne doit jamais faire
+  // croire au client que son fichier a ete perdu ni empecher le CRM de le voir.
+  try {
+    await notifyDocumentDeposit(item.id, request.workspace_id, request.lead_id);
+  } catch (notificationError) {
+    const message = notificationError instanceof Error
+      ? notificationError.message
+      : 'Erreur inconnue';
+    console.error('client-documents notification email', notificationError);
+    await admin.from('client_document_items').update({
+      notification_email_error: `Email indisponible : ${message}`.slice(0, 500),
+    }).eq('id', item.id);
   }
 
   return json({ success: true, complete });
