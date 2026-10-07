@@ -45,6 +45,14 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
 export function cheminAutorise(chemin: string, role: UserRole | null): boolean {
   if (!role) return false;
 
+  // Le compte technicien est un accès planning, pas un accès CRM allégé.
+  // Cette liste blanche doit précéder la règle générale : les chemins absents
+  // de la matrice sont normalement ouverts, ce qui exposerait notamment
+  // Aujourd'hui ou de futurs modules ajoutés plus tard.
+  if (role === 'technician') {
+    return chemin === '/calendar' || chemin.startsWith('/calendar/');
+  }
+
   const correspondances = Object.keys(ROLES_PAR_CHEMIN)
     .filter((p) => chemin === p || chemin.startsWith(p + '/'))
     .sort((a, b) => b.length - a.length);
@@ -57,10 +65,7 @@ export function cheminAutorise(chemin: string, role: UserRole | null): boolean {
 export function accueilDuRole(role: UserRole | null): string {
   switch (role) {
     case 'accountant': return '/billing';
-    // Le technicien ouvre le CRM pour savoir ou il va : la liste des
-    // interventions repond directement, la l'agenda demandait de choisir une
-    // vue puis de lire une grille.
-    case 'technician': return '/interventions';
+    case 'technician': return '/calendar';
     default: return '/today';
   }
 }

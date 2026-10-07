@@ -237,14 +237,15 @@ export async function storeInboundEmail(
   if (recipientsError) throw new Error(recipientsError.message);
 
   const link = leadId ? `/interventions/${leadId}` : contactId ? `/clients/${contactId}` : '/emails';
-  const notificationTitle = correspondant.type === 'assureur'
-    ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-    : correspondant.type === 'expert'
-      ? `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-      : correspondant.type === 'fournisseur'
-        ? `Email fournisseur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-        : 'Nouvel email reçu';
-  if (email.notify && (recipients ?? []).length > 0) {
+  // La boîte continue de synchroniser tous les messages, mais une alerte ne
+  // doit interrompre l'équipe que pour un correspondant métier prioritaire.
+  // Fournisseurs, clients et expéditeurs ordinaires restent consultables dans
+  // le module Mail sans créer de notification CRM ou push mobile.
+  const correspondantPrioritaire = correspondant.type === 'assureur' || correspondant.type === 'expert';
+  if (email.notify && correspondantPrioritaire && (recipients ?? []).length > 0) {
+    const notificationTitle = correspondant.type === 'assureur'
+      ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
+      : `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`;
     const { error: notificationError } = await admin.from('notifications').insert(
       (recipients ?? []).map((profile) => ({
         workspace_id: email.workspaceId,

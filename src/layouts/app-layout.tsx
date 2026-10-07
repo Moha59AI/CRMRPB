@@ -23,6 +23,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const estMobile = useEstMobile();
+  const estTechnicien = profile?.role === 'technician';
   useTitrePage();
 
   // Les entrees inaccessibles disparaissent au lieu d'etre affichees puis
@@ -132,7 +133,9 @@ export function AppLayout() {
 
         <div className="border-t border-border p-2">
           <div className="mb-1">
-            {!estMobile && <ClocheNotifications reduit={!expanded} />}
+            {!estTechnicien && (
+              <>{!estMobile && <ClocheNotifications reduit={!expanded} />}</>
+            )}
           </div>
           <div className="mb-1">
             <SelecteurTheme reduit={!expanded} />
@@ -213,7 +216,9 @@ export function AppLayout() {
           </div>
 
           <div className="w-11 shrink-0">
-            {estMobile && <ClocheNotifications reduit mobile />}
+            {!estTechnicien && (
+              <>{estMobile && <ClocheNotifications reduit mobile />}</>
+            )}
           </div>
 
           <Avatar className="h-8 w-8 shrink-0">
@@ -243,7 +248,7 @@ export function AppLayout() {
           </div>
         </ErrorBoundary>
 
-        <CopilotRadar />
+        {!estTechnicien && <CopilotRadar />}
 
         <BarreOnglets
           role={profile?.role ?? null}
