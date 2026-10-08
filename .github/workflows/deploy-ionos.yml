@@ -66,7 +66,12 @@ jobs:
           # Le compte SFTP est racine deux niveaux au-dessus du dossier Web.
           # Cette cible est celle dont l'index est effectivement servi par le
           # domaine crm.relaisparebrise.fr.
+          # Les ressources empreintees sont toutes transferees avant le nouvel
+          # index. Un navigateur ne peut ainsi jamais recevoir une page qui
+          # pointe vers un CSS/JS encore absent du serveur.
           mirror --reverse --parallel=4 --verbose \
+            --exclude-glob index.html \
             ./dist/ /CRMRPB-main/CRMRPB-main/dist/
+          put -O /CRMRPB-main/CRMRPB-main/dist/ ./dist/index.html
           bye
           LFTP_COMMANDS
