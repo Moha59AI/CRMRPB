@@ -53,7 +53,7 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, leadJourneyStages, leadStageForKey,
+  statusLabels, leadJourneyStages, leadStatusFilterOptions, leadStatusesForFilter,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
   formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
@@ -184,7 +184,7 @@ export function LeadsPage() {
     queryFn: () => fetchLeads({
       search,
       source: sourceFilter,
-      statuses: leadStageForKey(statusFilter)?.statuses,
+      statuses: leadStatusesForFilter(statusFilter),
       assignedUserId: advisorFilter,
       archives: voirArchives,
       plusVieuxQueJours: voirAArchiver ? 2 : undefined,
@@ -435,8 +435,8 @@ export function LeadsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous statuts</SelectItem>
-            {leadJourneyStages.map((stage) => (
-              <SelectItem key={stage.key} value={stage.key}>{stage.label}</SelectItem>
+            {leadStatusFilterOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
