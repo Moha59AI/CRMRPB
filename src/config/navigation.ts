@@ -16,6 +16,7 @@ import {
   BrainCircuit,
   Files,
   WalletCards,
+  PackageOpen,
   Mail,
   FileLock2,
   Wrench,
@@ -152,6 +153,12 @@ export const navSections: NavSection[] = [
         path: '/billing',
         icon: Receipt,
         description: 'Devis, factures et paiements',
+      },
+      {
+        label: 'Fournisseurs',
+        path: '/finance/fournisseurs',
+        icon: PackageOpen,
+        description: 'Achats, factures et avoirs fournisseurs',
       },
       {
         label: 'Masquer les prix',

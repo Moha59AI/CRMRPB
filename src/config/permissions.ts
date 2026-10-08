@@ -24,6 +24,7 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/workflows': ['admin', 'manager', 'advisor'],
   '/billing': ['admin', 'manager', 'accountant'],
   '/finance': ['admin', 'manager', 'accountant'],
+  '/finance/fournisseurs': ['admin', 'manager', 'accountant'],
   '/settings': ['admin', 'manager'],
   '/settings/integrations': ['admin'],
   '/settings/integrations/meta': ['admin'],
