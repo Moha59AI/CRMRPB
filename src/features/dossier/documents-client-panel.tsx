@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { ClientDocumentActivityTimeline } from '@/features/client-documents/client-document-activity-timeline';
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { cn } from '@/lib/utils';
 import {
@@ -21,6 +22,8 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
   const requests = useQuery({
     queryKey: ['client-document-request', lead.id],
     queryFn: () => fetchClientDocumentRequests(lead.id),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const create = useMutation({
@@ -140,6 +143,12 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
               );
             })}
           </div>
+          <ClientDocumentActivityTimeline
+            activity={current.activity}
+            lastOpenedAt={current.last_opened_at}
+            items={current.items}
+            className="mt-4 border-t border-border pt-4"
+          />
         </section>
       ) : (
         <div className="rounded-xl border border-dashed border-border py-14 text-center">

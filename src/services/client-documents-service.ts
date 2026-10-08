@@ -21,9 +21,20 @@ export interface ClientDocumentRequestSummary {
   id: string;
   status: 'open' | 'complete' | 'revoked' | 'expired';
   expires_at: string;
+  last_opened_at: string | null;
   submitted_at: string | null;
   created_at: string;
   items: ClientDocumentItem[];
+  activity: ClientDocumentActivity[];
+}
+
+export interface ClientDocumentActivity {
+  id: string;
+  request_id: string;
+  event_type: 'link_opened' | 'upload_started' | 'document_uploaded' | 'request_completed';
+  document_type: string | null;
+  device_type: 'mobile' | 'tablet' | 'desktop' | 'unknown';
+  created_at: string;
 }
 
 export interface ClientDocumentRequestHistory extends ClientDocumentRequestSummary {
@@ -78,22 +89,34 @@ export async function fetchLatestClientDocumentRequest(leadId: string): Promise<
 export async function fetchClientDocumentRequests(leadId: string): Promise<ClientDocumentRequestSummary[]> {
   const { data: requests, error: requestsError } = await supabase
     .from('client_document_requests')
-    .select('id, status, expires_at, submitted_at, created_at')
+    .select('id, status, expires_at, last_opened_at, submitted_at, created_at')
     .eq('lead_id', leadId)
     .order('created_at', { ascending: false });
   if (requestsError) throw new Error(requestsError.message);
   if (!requests?.length) return [];
 
-  const { data: items, error: itemsError } = await supabase
-    .from('client_document_items')
-    .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
-    .in('request_id', requests.map((request) => request.id))
-    .order('created_at');
+  const requestIds = requests.map((request) => request.id);
+  const [{ data: items, error: itemsError }, { data: activity, error: activityError }] = await Promise.all([
+    supabase
+      .from('client_document_items')
+      .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
+      .in('request_id', requestIds)
+      .order('created_at'),
+    supabase
+      .from('client_document_activity')
+      .select('id, request_id, event_type, document_type, device_type, created_at')
+      .in('request_id', requestIds)
+      .order('created_at', { ascending: false }),
+  ]);
   if (itemsError) throw new Error(itemsError.message);
+  // Les documents restent accessibles pendant que la migration de suivi est
+  // deployee. Une table d'activite absente ne casse donc jamais la fiche.
+  if (activityError) console.warn('Historique du portail documentaire indisponible', activityError.message);
 
   return requests.map((request) => ({
     ...request,
     items: (items ?? []).filter((item) => item.request_id === request.id),
+    activity: (activity ?? []).filter((event) => event.request_id === request.id),
   })) as ClientDocumentRequestSummary[];
 }
 
@@ -102,23 +125,33 @@ export async function fetchClientDocumentHistory(leadIds: string[]): Promise<Cli
 
   const { data: requests, error: requestsError } = await supabase
     .from('client_document_requests')
-    .select('id, lead_id, status, expires_at, submitted_at, created_at')
+    .select('id, lead_id, status, expires_at, last_opened_at, submitted_at, created_at')
     .in('lead_id', leadIds)
     .in('status', ['open', 'complete'])
     .order('created_at', { ascending: false });
   if (requestsError) throw new Error(requestsError.message);
   if (!requests?.length) return [];
 
-  const { data: items, error: itemsError } = await supabase
-    .from('client_document_items')
-    .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
-    .in('request_id', requests.map((request) => request.id))
-    .order('created_at');
+  const requestIds = requests.map((request) => request.id);
+  const [{ data: items, error: itemsError }, { data: activity, error: activityError }] = await Promise.all([
+    supabase
+      .from('client_document_items')
+      .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
+      .in('request_id', requestIds)
+      .order('created_at'),
+    supabase
+      .from('client_document_activity')
+      .select('id, request_id, event_type, document_type, device_type, created_at')
+      .in('request_id', requestIds)
+      .order('created_at', { ascending: false }),
+  ]);
   if (itemsError) throw new Error(itemsError.message);
+  if (activityError) console.warn('Historique du portail documentaire indisponible', activityError.message);
 
   return requests.map((request) => ({
     ...request,
     items: (items ?? []).filter((item) => item.request_id === request.id),
+    activity: (activity ?? []).filter((event) => event.request_id === request.id),
   })) as ClientDocumentRequestHistory[];
 }
 

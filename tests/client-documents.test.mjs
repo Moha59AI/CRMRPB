@@ -182,3 +182,36 @@ test('un nouveau lien ne masque pas les documents deja recus', async () => {
   assert.match(panel, /Documents déjà reçus/);
   assert.match(panel, /restent disponibles même lorsqu’un nouveau lien a été créé/);
 });
+
+test('la fiche client affiche l activite du lien documentaire sans tracer l adresse IP', async () => {
+  const migration = await read('supabase/migrations/20261008140000_activite_portail_documents.sql');
+  const edge = await read('supabase/functions/client-documents/index.ts');
+  const service = await read('src/services/client-documents-service.ts');
+  const history = await read('src/features/client-documents/client-document-history.tsx');
+  const panel = await read('src/features/dossier/documents-client-panel.tsx');
+  const timeline = await read('src/features/client-documents/client-document-activity-timeline.tsx');
+
+  assert.match(migration, /create table if not exists client_document_activity/);
+  assert.match(migration, /client_document_activity enable row level security/);
+  assert.match(migration, /create policy "select_client_document_activity"/);
+  assert.doesNotMatch(migration, /to anon/);
+  assert.doesNotMatch(migration, /ip_address|user_agent/);
+
+  assert.match(edge, /recordActivity\(request, req, 'link_opened'\)/);
+  assert.match(edge, /recordActivity\(request, req, 'upload_started'/);
+  assert.match(edge, /recordActivity\(request, req, 'document_uploaded'/);
+  assert.match(edge, /recordActivity\(request, req, 'request_completed'\)/);
+  assert.match(edge, /fiveMinutesAgo/);
+  assert.doesNotMatch(edge, /ip_address:/);
+  assert.doesNotMatch(edge, /user_agent:/);
+
+  assert.match(service, /client_document_activity/);
+  assert.match(service, /last_opened_at/);
+  assert.match(history, /ClientDocumentActivityTimeline/);
+  assert.match(panel, /ClientDocumentActivityTimeline/);
+  assert.match(history, /refetchInterval: 30_000/);
+  assert.match(panel, /refetchInterval: 30_000/);
+  assert.match(timeline, /Activité du lien/);
+  assert.match(timeline, /Lien ouvert par le client/);
+  assert.match(timeline, /Le client n’a pas encore ouvert ce lien/);
+});

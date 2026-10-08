@@ -179,7 +179,55 @@ async function findRequest(token: string) {
   return data;
 }
 
-async function session(token: string) {
+type PortalRequest = NonNullable<Awaited<ReturnType<typeof findRequest>>>;
+type ActivityType = 'link_opened' | 'upload_started' | 'document_uploaded' | 'request_completed';
+
+function deviceType(req: Request): 'mobile' | 'tablet' | 'desktop' | 'unknown' {
+  const agent = (req.headers.get('user-agent') ?? '').toLowerCase();
+  if (!agent) return 'unknown';
+  if (/ipad|tablet|kindle|silk/.test(agent)) return 'tablet';
+  if (/mobi|iphone|ipod|android/.test(agent)) return 'mobile';
+  return 'desktop';
+}
+
+async function recordActivity(
+  request: PortalRequest,
+  req: Request,
+  eventType: ActivityType,
+  documentType: string | null = null,
+): Promise<void> {
+  try {
+    // Une actualisation ou un double-clic ne doit pas remplir la fiche de
+    // doublons. Les ouvertures identiques sont regroupees sur cinq minutes.
+    if (eventType === 'link_opened') {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: recent } = await admin
+        .from('client_document_activity')
+        .select('id')
+        .eq('request_id', request.id)
+        .eq('event_type', eventType)
+        .gte('created_at', fiveMinutesAgo)
+        .limit(1)
+        .maybeSingle();
+      if (recent) return;
+    }
+
+    const { error } = await admin.from('client_document_activity').insert({
+      workspace_id: request.workspace_id,
+      request_id: request.id,
+      lead_id: request.lead_id,
+      event_type: eventType,
+      document_type: documentType,
+      device_type: deviceType(req),
+    });
+    if (error) console.warn('client_document_activity insert', error.message);
+  } catch (error) {
+    // Le suivi ne doit jamais bloquer l'acces au lien ni le depot du client.
+    console.warn('client_document_activity unavailable', error);
+  }
+}
+
+async function session(token: string, req: Request) {
   const request = await findRequest(token);
   if (!request) return json({ error: 'Ce lien est invalide ou a expiré.' }, 404);
 
@@ -229,6 +277,7 @@ async function session(token: string) {
   await admin.from('client_document_requests')
     .update({ last_opened_at: new Date().toISOString() })
     .eq('id', request.id);
+  await recordActivity(request, req, 'link_opened');
 
   return json({
     client_first_name: lead.first_name,
@@ -245,7 +294,7 @@ async function session(token: string) {
   });
 }
 
-async function prepareUpload(body: Record<string, unknown>, token: string) {
+async function prepareUpload(body: Record<string, unknown>, token: string, req: Request) {
   const request = await findRequest(token);
   if (!request) return json({ error: 'Ce lien est invalide ou a expiré.' }, 404);
 
@@ -263,12 +312,14 @@ async function prepareUpload(body: Record<string, unknown>, token: string) {
 
   const { data: item, error: itemError } = await admin
     .from('client_document_items')
-    .select('id')
+    .select('id, document_type')
     .eq('id', itemId)
     .eq('request_id', request.id)
     .maybeSingle();
   if (itemError) throw itemError;
   if (!item) return json({ error: 'Document introuvable.' }, 404);
+
+  await recordActivity(request, req, 'upload_started', item.document_type);
 
   const path = `${request.workspace_id}/${request.id}/${item.id}/${crypto.randomUUID()}.${extension}`;
   const { data, error } = await admin.storage.from(bucket).createSignedUploadUrl(path);
@@ -277,7 +328,7 @@ async function prepareUpload(body: Record<string, unknown>, token: string) {
   return json({ path, upload_token: data.token });
 }
 
-async function completeUpload(body: Record<string, unknown>, token: string) {
+async function completeUpload(body: Record<string, unknown>, token: string, req: Request) {
   const request = await findRequest(token);
   if (!request) return json({ error: 'Ce lien est invalide ou a expiré.' }, 404);
 
@@ -293,7 +344,7 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
 
   const { data: item, error: itemError } = await admin
     .from('client_document_items')
-    .select('id, storage_path')
+    .select('id, storage_path, document_type')
     .eq('id', itemId)
     .eq('request_id', request.id)
     .maybeSingle();
@@ -326,6 +377,8 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
   }).eq('id', itemId).eq('request_id', request.id);
   if (updateError) throw updateError;
 
+  await recordActivity(request, req, 'document_uploaded', item.document_type);
+
   if (item.storage_path && item.storage_path !== path) {
     await admin.storage.from(bucket).remove([item.storage_path]);
   }
@@ -347,6 +400,10 @@ async function completeUpload(body: Record<string, unknown>, token: string) {
   await admin.from('leads').update({
     status: complete ? 'documents_received' : 'documents_requested',
   }).eq('id', request.lead_id).eq('workspace_id', request.workspace_id);
+
+  if (complete && !request.submitted_at) {
+    await recordActivity(request, req, 'request_completed');
+  }
 
   // Le document est deja rattache a la fiche et son statut est consolide en
   // base. L'email est un confort : une panne Resend ne doit jamais faire
@@ -374,9 +431,9 @@ Deno.serve(async (req) => {
     const body = await req.json() as Record<string, unknown>;
     if (!validToken(body.token)) return json({ error: 'Lien invalide.' }, 400);
     const action = typeof body.action === 'string' ? body.action : 'session';
-    if (action === 'session') return await session(body.token);
-    if (action === 'prepare_upload') return await prepareUpload(body, body.token);
-    if (action === 'complete_upload') return await completeUpload(body, body.token);
+    if (action === 'session') return await session(body.token, req);
+    if (action === 'prepare_upload') return await prepareUpload(body, body.token, req);
+    if (action === 'complete_upload') return await completeUpload(body, body.token, req);
     return json({ error: 'Action inconnue.' }, 400);
   } catch (error) {
     console.error('client-documents', error);
