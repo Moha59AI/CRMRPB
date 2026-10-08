@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Shield, UserPlus, Mail, Trash2, Clock } from 'lucide-react';
+import {
+  Users, Shield, UserPlus, Mail, Trash2, Clock, RefreshCw, Loader2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,7 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { fetchProfiles } from '@/services/profiles-service';
-import { fetchInvitations, annulerInvitation } from '@/services/invitations-service';
+import {
+  fetchInvitations, creerInvitation, annulerInvitation, type Invitation,
+} from '@/services/invitations-service';
 import { changerRoleMembre, retirerMembre } from '@/services/admin-service';
 import { roleLabels, roleDescriptions } from '@/config/roles';
 import { useAuth } from '@/features/auth/auth-context';
@@ -92,6 +96,17 @@ export function UsersPage() {
     onError: (e: Error) => toast.error("L'annulation a échoué", { description: e.message }),
   });
 
+  const renvoyer = useMutation({
+    mutationFn: (invitation: Invitation) => creerInvitation(invitation.email, invitation.role),
+    onSuccess: (_resultat, invitation) => {
+      rafraichir();
+      toast.success(`Invitation renvoyée à ${invitation.email}`, {
+        description: 'IONOS a accepté le message avec un nouveau lien sécurisé.',
+      });
+    },
+    onError: (e: Error) => toast.error('Le renvoi a échoué', { description: e.message }),
+  });
+
   const enAttente = (invitations ?? []).filter((i) => !i.accepted_at);
   const nbAdmins = (profiles ?? []).filter((p) => p.role === 'admin').length;
 
@@ -136,7 +151,7 @@ export function UsersPage() {
                   return (
                     <div
                       key={inv.id}
-                      className="flex items-center justify-between gap-4 px-6 py-3"
+                      className="flex flex-col items-stretch gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
@@ -150,7 +165,7 @@ export function UsersPage() {
                         </p>
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-3">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                         <Badge className={`rounded-full text-[10px] ${roleBadgeClass[inv.role]}`}>
                           {roleLabels[inv.role]}
                         </Badge>
@@ -163,10 +178,25 @@ export function UsersPage() {
                           </Badge>
                         )}
                         <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-full px-3"
+                          onClick={() => renvoyer.mutate(inv)}
+                          disabled={renvoyer.isPending || annuler.isPending}
+                          aria-label={`Renvoyer l'invitation à ${inv.email}`}
+                        >
+                          {renvoyer.isPending && renvoyer.variables?.id === inv.id ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Renvoyer
+                        </Button>
+                        <Button
                           variant="ghost" size="sm"
                           className="rounded-full text-muted-foreground hover:text-destructive"
                           onClick={() => annuler.mutate(inv.id)}
-                          disabled={annuler.isPending}
+                          disabled={annuler.isPending || renvoyer.isPending}
                         >
                           Annuler
                         </Button>

@@ -22,11 +22,17 @@ test('une invitation utilisateur passe par une fonction serveur authentifiee', a
 });
 
 test('une invitation locale renvoie vers la production et peut etre reemise avant la premiere connexion', async () => {
-  const edge = await read('supabase/functions/user-invite/index.ts');
+  const [edge, usersPage] = await Promise.all([
+    read('supabase/functions/user-invite/index.ts'),
+    read('src/features/settings/users-page.tsx'),
+  ]);
 
   assert.match(edge, /existingProfile\?\.workspace_id === caller\.workspaceId && existingUser\.last_sign_in_at/);
   assert.match(edge, /if \(!existingProfile\)/);
   assert.match(edge, /type: 'recovery'/);
+  assert.match(usersPage, /mutationFn: \(invitation: Invitation\) => creerInvitation\(invitation\.email, invitation\.role\)/);
+  assert.match(usersPage, /Renvoyer l'invitation à \$\{inv\.email\}/);
+  assert.match(usersPage, /Invitation renvoyée à \$\{invitation\.email\}/);
 });
 
 test('le mail d invitation est envoye par IONOS et confirme seulement apres acceptation SMTP', async () => {
