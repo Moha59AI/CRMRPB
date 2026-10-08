@@ -39,6 +39,7 @@ const erreursInvitation: Record<string, string> = {
   FORBIDDEN: 'Seul un administrateur peut inviter un utilisateur.',
   EMAIL_INVALIDE: "L'adresse email est invalide.",
   ROLE_INVALIDE: "Le rôle sélectionné n'est pas reconnu.",
+  UTILISATEUR_INTROUVABLE: "Ce compte utilisateur est introuvable.",
   BOITE_IONOS_NON_CONFIGUREE: "Configurez d'abord la boîte mail IONOS dans les réglages.",
   MOT_DE_PASSE_IONOS_ABSENT: 'Le mot de passe IONOS doit être enregistré dans les réglages.',
   UTILISATEUR_DEJA_MEMBRE: 'Cette personne fait déjà partie de votre espace.',
@@ -56,12 +57,14 @@ function erreurInvitation(message: string): string {
  * La fonction Edge controle elle-meme le role administrateur et annule le
  * compte cree si le serveur SMTP refuse le message.
  */
-export async function creerInvitation(email: string, role: UserRole): Promise<InvitationEnvoyee> {
+type CorpsInvitation = { email: string; role: UserRole } | { user_id: string };
+
+async function envoyerInvitation(body: CorpsInvitation): Promise<InvitationEnvoyee> {
   const { data, error } = await supabase.functions.invoke<InvitationEnvoyee & {
     success?: boolean;
     error?: string;
   }>('user-invite', {
-    body: { email: email.trim().toLowerCase(), role },
+    body,
   });
 
   if (error) {
@@ -77,6 +80,15 @@ export async function creerInvitation(email: string, role: UserRole): Promise<In
     throw new Error(erreurInvitation(data?.error || "Le serveur n'a pas confirmé l'envoi de l'invitation"));
   }
   return data;
+}
+
+export async function creerInvitation(email: string, role: UserRole): Promise<InvitationEnvoyee> {
+  return envoyerInvitation({ email: email.trim().toLowerCase(), role });
+}
+
+/** Renvoie l'acces d'un membre cree qui n'a pas encore finalise sa connexion. */
+export async function renvoyerInvitationMembre(userId: string): Promise<InvitationEnvoyee> {
+  return envoyerInvitation({ user_id: userId });
 }
 
 export async function annulerInvitation(id: string): Promise<void> {

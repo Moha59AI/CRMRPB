@@ -185,15 +185,40 @@ Deno.serve(async (req) => {
   try {
     const caller = await administrateur(req);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    const role = typeof body.role === 'string' ? body.role : '';
+    const requestedUserId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+    let email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    let role = typeof body.role === 'string' ? body.role : '';
+    let existingUser: User | null = null;
+    let existingProfile: { id: string; workspace_id: string; role: string } | null = null;
+
+    if (requestedUserId) {
+      const { data, error } = await admin.auth.admin.getUserById(requestedUserId);
+      if (error || !data.user?.email) throw new Error('UTILISATEUR_INTROUVABLE');
+      existingUser = data.user;
+      email = data.user.email.trim().toLowerCase();
+
+      const { data: memberProfile, error: profileError } = await admin
+        .from('profiles')
+        .select('id, workspace_id, role')
+        .eq('id', requestedUserId)
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+      if (!memberProfile || memberProfile.workspace_id !== caller.workspaceId) {
+        throw new Error('FORBIDDEN');
+      }
+      existingProfile = memberProfile;
+      role = memberProfile.role;
+    } else {
+      if (!emailValide(email)) throw new Error('EMAIL_INVALIDE');
+      if (!roles.has(role)) throw new Error('ROLE_INVALIDE');
+      existingUser = await utilisateurParEmail(email);
+    }
+
     if (!emailValide(email)) throw new Error('EMAIL_INVALIDE');
     if (!roles.has(role)) throw new Error('ROLE_INVALIDE');
 
     const mailbox = await boiteIonos(caller.workspaceId);
-    const existingUser = await utilisateurParEmail(email);
-    let existingProfile: { id: string; workspace_id: string; role: string } | null = null;
-    if (existingUser) {
+    if (existingUser && !existingProfile) {
       const { data, error: profileError } = await admin
         .from('profiles')
         .select('id, workspace_id, role')
@@ -328,6 +353,7 @@ Deno.serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     const exposedErrors = new Set([
       'UNAUTHORIZED', 'FORBIDDEN', 'EMAIL_INVALIDE', 'ROLE_INVALIDE',
+      'UTILISATEUR_INTROUVABLE',
       'BOITE_IONOS_NON_CONFIGUREE', 'MOT_DE_PASSE_IONOS_ABSENT',
       'UTILISATEUR_DEJA_MEMBRE', 'UTILISATEUR_DEJA_RATTACHE',
       'IONOS_A_REFUSE_LE_DESTINATAIRE',
@@ -336,6 +362,7 @@ Deno.serve(async (req) => {
     const publicMessage = exposedErrors.has(message) ? message : 'ENVOI_INVITATION_IMPOSSIBLE';
     const status = message === 'UNAUTHORIZED' ? 401
       : message === 'FORBIDDEN' ? 403
+        : message === 'UTILISATEUR_INTROUVABLE' ? 404
         : message === 'UTILISATEUR_DEJA_MEMBRE' || message === 'UTILISATEUR_DEJA_RATTACHE' ? 409
           : 400;
     return json({ success: false, error: publicMessage }, status);

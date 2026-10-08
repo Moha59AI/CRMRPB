@@ -18,7 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { fetchProfiles } from '@/services/profiles-service';
 import {
-  fetchInvitations, creerInvitation, annulerInvitation, type Invitation,
+  fetchInvitations, creerInvitation, renvoyerInvitationMembre,
+  annulerInvitation, type Invitation,
 } from '@/services/invitations-service';
 import { changerRoleMembre, retirerMembre } from '@/services/admin-service';
 import { roleLabels, roleDescriptions } from '@/config/roles';
@@ -101,6 +102,17 @@ export function UsersPage() {
     onSuccess: (_resultat, invitation) => {
       rafraichir();
       toast.success(`Invitation renvoyée à ${invitation.email}`, {
+        description: 'IONOS a accepté le message avec un nouveau lien sécurisé.',
+      });
+    },
+    onError: (e: Error) => toast.error('Le renvoi a échoué', { description: e.message }),
+  });
+
+  const renvoyerMembre = useMutation({
+    mutationFn: (membre: Profile) => renvoyerInvitationMembre(membre.id),
+    onSuccess: (resultat) => {
+      rafraichir();
+      toast.success(`Invitation renvoyée à ${resultat.email}`, {
         description: 'IONOS a accepté le message avec un nouveau lien sécurisé.',
       });
     },
@@ -330,15 +342,35 @@ export function UsersPage() {
 
                         {estAdmin && (
                           <TableCell className="px-4 text-right">
-                            {!estMoi && !dernierAdmin && (
-                              <Button
-                                variant="ghost" size="sm"
-                                className="rounded-full text-muted-foreground hover:text-destructive"
-                                onClick={() => setARetirer(p)}
-                                aria-label={`Retirer l'accès de ${nom}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                            {!estMoi && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-full px-3"
+                                  onClick={() => renvoyerMembre.mutate(p)}
+                                  disabled={renvoyerMembre.isPending}
+                                  aria-label={`Renvoyer l'invitation à ${nom}`}
+                                >
+                                  {renvoyerMembre.isPending
+                                    && renvoyerMembre.variables?.id === p.id ? (
+                                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                    )}
+                                  Renvoyer
+                                </Button>
+                                {!dernierAdmin && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="rounded-full text-muted-foreground hover:text-destructive"
+                                    onClick={() => setARetirer(p)}
+                                    aria-label={`Retirer l'accès de ${nom}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                         )}
