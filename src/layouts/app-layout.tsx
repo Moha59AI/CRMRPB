@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { useLeadColorTheme } from '@/features/leads/use-lead-color-theme';
 
 export function AppLayout() {
   const location = useLocation();
@@ -25,6 +26,7 @@ export function AppLayout() {
   const estMobile = useEstMobile();
   const estTechnicien = profile?.role === 'technician';
   useTitrePage();
+  useLeadColorTheme();
 
   // Les entrees inaccessibles disparaissent au lieu d'etre affichees puis
   // refusees : proposer une porte fermee est une mauvaise facon de securiser.

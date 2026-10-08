@@ -19,6 +19,7 @@ import {
   Mail,
   FileLock2,
   Wrench,
+  Palette,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -223,6 +224,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/relances',
         icon: BellRing,
         description: 'Quand un lead revient dans la file, et quand il en sort',
+      },
+      {
+        label: 'Couleurs des leads',
+        path: '/settings/couleurs-leads',
+        icon: Palette,
+        description: 'Personnaliser la couleur de chaque étape du pipeline',
       },
       {
         label: 'Documents clients',

@@ -4,17 +4,19 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('chaque etape porte une couleur marquee et les documents recus sont verts', async () => {
+test('chaque etape utilise la couleur personnalisable de son statut', async () => {
   const page = await read('src/features/leads/leads-page.tsx');
+  const colors = await read('src/features/leads/lead-color-settings.ts');
   const debut = page.indexOf('function couleurLigneLead');
   const fin = page.indexOf('// ============ VIEW TOGGLE BUTTON', debut);
   const couleur = page.slice(debut, fin);
 
-  assert.match(couleur, /status === 'documents_received'[\s\S]*border-emerald-500[\s\S]*bg-emerald-100\/70/);
-  assert.match(couleur, /status === 'nrp'[\s\S]*border-red-500[\s\S]*bg-red-100\/70/);
-  assert.match(couleur, /status === 'lost'[\s\S]*border-slate-500[\s\S]*bg-slate-200\/65/);
-  assert.match(couleur, /status === 'documents_requested'[\s\S]*border-orange-400/);
-  assert.match(couleur, /status === 'appointment_scheduled'[\s\S]*border-blue-500/);
+  assert.match(couleur, /return 'lead-status-row'/);
+  assert.match(colors, /documents_received: '#10b981'/);
+  assert.match(colors, /nrp: '#ef4444'/);
+  assert.match(colors, /perdu: '#64748b'/);
+  assert.match(colors, /status === 'documents_requested'[\s\S]*return 'documents_requested'/);
+  assert.match(colors, /status === 'appointment_scheduled'[\s\S]*return 'rdv'/);
 });
 
 test('la couleur couvre le tableau et la liste mobile sans masquer la selection', async () => {
@@ -25,6 +27,7 @@ test('la couleur couvre le tableau et la liste mobile sans masquer la selection'
     3,
   );
   assert.match(page, /if \(selectionnee\) return 'border-l-4 border-primary/);
+  assert.equal((page.match(/leadStatusColorStyle\(lead\.status\)/g) ?? []).length, 4);
 });
 
 test('le pipeline reprend toutes les couleurs et distingue les documents recus', async () => {
@@ -33,20 +36,35 @@ test('le pipeline reprend toutes les couleurs et distingue les documents recus',
   const fin = page.indexOf('// ============ VIEW TOGGLE BUTTON', debut);
   const couleursPipeline = page.slice(debut, fin);
 
-  assert.match(couleursPipeline, /stage === 'nouveau'[\s\S]*bg-sky-100\/70/);
-  assert.match(couleursPipeline, /stage === 'nrp'[\s\S]*bg-red-100\/75/);
-  assert.match(couleursPipeline, /stage === 'documents'[\s\S]*bg-orange-100\/70/);
-  assert.match(couleursPipeline, /stage === 'perdu'[\s\S]*bg-slate-200\/70/);
-  assert.match(couleursPipeline, /status === 'documents_received'[\s\S]*bg-emerald-100\/80/);
-  assert.match(couleursPipeline, /status === 'nrp'[\s\S]*bg-red-100\/75/);
-  assert.match(couleursPipeline, /status === 'lost'[\s\S]*bg-slate-200\/70/);
+  assert.match(couleursPipeline, /return 'lead-stage-header'/);
+  assert.match(couleursPipeline, /return 'lead-status-card'/);
   assert.match(page, /couleurEntetePipeline\(stage\.key, dragOverColumn === stage\.key\)/);
   assert.match(page, /couleurCartePipeline\(lead\.status, selectionne === true\)/);
+  assert.match(page, /leadStageColorStyle\(stage\.key\)/);
 });
 
 test('les badges ne confondent plus attente et reception complete des documents', async () => {
-  const shared = await read('src/features/leads/lead-shared.ts');
-  assert.match(shared, /documents_requested: 'bg-orange-100 text-orange-800 border-orange-300'/);
-  assert.match(shared, /documents_received: 'bg-emerald-100 text-emerald-800 border-emerald-300'/);
-  assert.match(shared, /lost: 'bg-slate-200 text-slate-800 border-slate-400'/);
+  const badge = await read('src/features/leads/status-badge.tsx');
+  const colors = await read('src/features/leads/lead-color-settings.ts');
+  assert.match(badge, /lead-status-badge/);
+  assert.match(badge, /leadStatusColorStyle\(status\)/);
+  assert.match(colors, /documents_requested: '#fb923c'/);
+  assert.match(colors, /documents_received: '#10b981'/);
+  assert.match(colors, /perdu: '#64748b'/);
+});
+
+test('les couleurs sont reglables dans Parametres et partagees par espace', async () => {
+  const page = await read('src/features/settings/lead-colors-page.tsx');
+  const service = await read('src/features/leads/lead-color-settings.ts');
+  const migration = await read('supabase/migrations/20261008134000_lead_pipeline_colors.sql');
+  const routes = await read('src/app/app-routes.tsx');
+  const navigation = await read('src/config/navigation.ts');
+
+  assert.match(page, /type="color"/);
+  assert.match(page, /Valeurs par défaut/);
+  assert.match(service, /save_lead_pipeline_colors/);
+  assert.match(migration, /create table if not exists public\.lead_pipeline_settings/);
+  assert.match(migration, /create policy "select_lead_pipeline_settings"/);
+  assert.match(routes, /path="couleurs-leads"/);
+  assert.match(navigation, /path: '\/settings\/couleurs-leads'/);
 });

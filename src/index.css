@@ -505,6 +505,36 @@
   }
 }
 
+/* Couleurs métier personnalisables du parcours Leads. La même variable pilote
+   les lignes, les cartes, les en-têtes et les pastilles. */
+.lead-status-row {
+  border-left: 4px solid var(--lead-status-color);
+  background-color: color-mix(in srgb, var(--lead-status-color) 14%, transparent);
+}
+.lead-status-row:hover {
+  background-color: color-mix(in srgb, var(--lead-status-color) 21%, transparent);
+}
+.lead-status-card {
+  border-color: color-mix(in srgb, var(--lead-status-color) 62%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 14%, hsl(var(--card)));
+}
+.lead-status-card:hover {
+  border-color: var(--lead-status-color);
+  background-color: color-mix(in srgb, var(--lead-status-color) 20%, hsl(var(--card)));
+}
+.lead-stage-header {
+  border-color: color-mix(in srgb, var(--lead-status-color) 48%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 18%, transparent);
+}
+.lead-status-badge {
+  border-color: color-mix(in srgb, var(--lead-status-color) 62%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 16%, hsl(var(--background)));
+  color: color-mix(in srgb, var(--lead-status-color) 78%, hsl(var(--foreground)));
+}
+.lead-status-dot {
+  background-color: var(--lead-status-color);
+}
+
 /* Respecter le réglage système : certaines personnes sont gênées par le
    mouvement, et l'animation ne doit jamais empêcher de travailler. */
 @media (prefers-reduced-motion: reduce) {

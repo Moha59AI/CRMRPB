@@ -46,6 +46,7 @@ const WebhooksPage = lazy(() => import('@/features/webhooks/webhooks-page').then
 const UsersPage = lazy(() => import('@/features/settings/users-page').then((m) => ({ default: m.UsersPage })));
 const InsurersPage = lazy(() => import('@/features/settings/insurers-page').then((m) => ({ default: m.InsurersPage })));
 const CadencesPage = lazy(() => import('@/features/settings/cadences-page').then((m) => ({ default: m.CadencesPage })));
+const LeadColorsPage = lazy(() => import('@/features/settings/lead-colors-page').then((m) => ({ default: m.LeadColorsPage })));
 const ClientDocumentsPage = lazy(() => import('@/features/client-documents/client-documents-page').then((m) => ({ default: m.ClientDocumentsPage })));
 const ClientDocumentSettingsPage = lazy(() => import('@/features/client-documents/client-document-settings-page').then((m) => ({ default: m.ClientDocumentSettingsPage })));
 const BancListe = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancListe })));
@@ -151,6 +152,7 @@ export function AppRoutes() {
             <Route path="users" element={charger(<UsersPage />)} />
             <Route path="insurers" element={charger(<InsurersPage />)} />
             <Route path="relances" element={charger(<CadencesPage />)} />
+            <Route path="couleurs-leads" element={charger(<LeadColorsPage />)} />
             <Route path="documents" element={charger(<ClientDocumentSettingsPage />)} />
           </Route>
         </Route>

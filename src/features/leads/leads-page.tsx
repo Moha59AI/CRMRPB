@@ -53,10 +53,11 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, statusStyles, leadJourneyStages, leadStageForKey,
+  statusLabels, leadJourneyStages, leadStageForKey,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
   formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
+import { leadStageColorStyle, leadStatusColorStyle } from './lead-color-settings';
 import { StatusBadge } from './status-badge';
 import { SourceBadge } from './source-badge';
 import { BulkLeadActions } from './bulk-lead-actions';
@@ -754,57 +755,21 @@ function libelleAge(date: string): string {
  */
 function couleurLigneLead(status: LeadStatus, selectionnee: boolean): string {
   if (selectionnee) return 'border-l-4 border-primary bg-primary/[0.10] hover:bg-primary/[0.14]';
-  if (status === 'documents_received') {
-    return 'border-l-4 border-emerald-500 bg-emerald-100/70 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:hover:bg-emerald-950/50';
-  }
-  if (status === 'nrp') {
-    return 'border-l-4 border-red-500 bg-red-100/70 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/45';
-  }
-  if (status === 'lost') {
-    return 'border-l-4 border-slate-500 bg-slate-200/65 hover:bg-slate-200/90 dark:bg-slate-800/35 dark:hover:bg-slate-800/50';
-  }
-  if (status === 'documents_requested') return 'border-l-4 border-orange-400 bg-orange-50/80 hover:bg-orange-100/75';
-  if (status === 'appointment_scheduled') return 'border-l-4 border-blue-500 bg-blue-50/80 hover:bg-blue-100/75';
-  if (status === 'interested') return 'border-l-4 border-amber-400 bg-amber-50/80 hover:bg-amber-100/75';
-  if (status === 'converted') return 'border-l-4 border-teal-500 bg-teal-50/80 hover:bg-teal-100/75';
-  if (status === 'new' || status === 'to_call' || status === 'calling') {
-    return 'border-l-4 border-sky-400 bg-sky-50/80 hover:bg-sky-100/75';
-  }
-  return 'hover:bg-muted/40';
+  void status;
+  return 'lead-status-row';
 }
 
 /** Meme lecture visuelle dans le pipeline que dans les listes de leads. */
 function couleurEntetePipeline(stage: string, survole: boolean): string {
   if (survole) return 'border-primary/40 bg-primary/10';
-  if (stage === 'nouveau') return 'border-sky-300 bg-sky-100/70';
-  if (stage === 'nrp') return 'border-red-300 bg-red-100/75';
-  if (stage === 'qualifie') return 'border-amber-300 bg-amber-100/70';
-  if (stage === 'documents') return 'border-orange-300 bg-orange-100/70';
-  if (stage === 'rdv') return 'border-blue-300 bg-blue-100/70';
-  if (stage === 'perdu') return 'border-slate-400 bg-slate-200/70';
-  if (stage === 'cloture') return 'border-teal-300 bg-teal-100/70';
-  return 'border-transparent bg-surface';
+  void stage;
+  return 'lead-stage-header';
 }
 
 function couleurCartePipeline(status: LeadStatus, selectionnee: boolean): string {
   if (selectionnee) return 'border-primary bg-primary/[0.10] ring-2 ring-primary/25';
-  if (status === 'documents_received') {
-    return 'border-emerald-400 bg-emerald-100/80 ring-1 ring-emerald-300/60 hover:border-emerald-500 hover:bg-emerald-100';
-  }
-  if (status === 'nrp') {
-    return 'border-red-300 bg-red-100/75 hover:border-red-400 hover:bg-red-100';
-  }
-  if (status === 'lost') {
-    return 'border-slate-400 bg-slate-200/70 hover:border-slate-500 hover:bg-slate-200';
-  }
-  if (status === 'documents_requested') return 'border-orange-300 bg-orange-50/90 hover:border-orange-400 hover:bg-orange-100/80';
-  if (status === 'appointment_scheduled') return 'border-blue-300 bg-blue-50/90 hover:border-blue-400 hover:bg-blue-100/80';
-  if (status === 'interested') return 'border-amber-300 bg-amber-50/90 hover:border-amber-400 hover:bg-amber-100/80';
-  if (status === 'converted') return 'border-teal-300 bg-teal-50/90 hover:border-teal-400 hover:bg-teal-100/80';
-  if (status === 'new' || status === 'to_call' || status === 'calling') {
-    return 'border-sky-300 bg-sky-50/90 hover:border-sky-400 hover:bg-sky-100/80';
-  }
-  return 'border-border bg-card hover:border-border-strong';
+  void status;
+  return 'lead-status-card';
 }
 
 // ============ VIEW TOGGLE BUTTON ============
@@ -861,6 +826,7 @@ function ListeMobile({
         {leads.map((lead) => (
           <li
             key={lead.id}
+            style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
               'flex items-stretch transition-colors',
               couleurLigneLead(lead.status, selection.has(lead.id)),
@@ -972,6 +938,7 @@ function LeadsTable({
         return (
           <TableRow
             key={lead.id}
+            style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
               'cursor-pointer',
               couleurLigneLead(lead.status, selection.has(lead.id)),
@@ -1038,7 +1005,10 @@ function LeadsTable({
                         leadStageForStatus(lead.status).targetStatus === opt.value && 'font-semibold',
                       )}
                     >
-                      <span className={cn('mr-2 h-2 w-2 rounded-full', statusStyles[opt.value]?.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-muted')} />
+                      <span
+                        className="lead-status-dot mr-2 h-2 w-2 rounded-full"
+                        style={leadStatusColorStyle(opt.value)}
+                      />
                       {opt.label}
                     </DropdownMenuItem>
                   ))}
@@ -1123,6 +1093,7 @@ function KanbanBoard({
                   forment un seul bloc : on lit l'etape, puis ce qu'elle
                   attend, sans chercher le lien. */}
               <div
+                style={dragOverColumn === stage.key ? undefined : leadStageColorStyle(stage.key)}
                 className={cn(
                   'mb-2 rounded-xl border px-3 py-2.5 transition-colors',
                   couleurEntetePipeline(stage.key, dragOverColumn === stage.key),
@@ -1192,6 +1163,7 @@ export function KanbanCard({
   return (
     <div
       draggable
+      style={selectionne ? undefined : leadStatusColorStyle(lead.status)}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', lead.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -1289,6 +1261,7 @@ export function CompactList({
         {leads.map((lead) => (
           <div
             key={lead.id}
+            style={selectionActive.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
               'flex items-stretch transition-colors',
               couleurLigneLead(lead.status, selectionActive.has(lead.id)),
