@@ -33,16 +33,16 @@ export const sourceLabels: Record<string, string> = {
 };
 
 export const statusStyles: Record<string, string> = {
-  new: 'bg-sky-50 text-sky-700 border-sky-200',
-  to_call: 'bg-sky-50 text-sky-700 border-sky-200',
-  calling: 'bg-sky-50 text-sky-700 border-sky-200',
-  nrp: 'bg-red-50 text-red-700 border-red-200',
-  interested: 'bg-amber-50 text-amber-700 border-amber-200',
-  documents_requested: 'bg-slate-100 text-slate-600 border-slate-200',
-  documents_received: 'bg-slate-100 text-slate-600 border-slate-200',
-  appointment_scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
-  lost: 'bg-red-50 text-red-700 border-red-200',
-  converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  new: 'bg-sky-100 text-sky-800 border-sky-300',
+  to_call: 'bg-sky-100 text-sky-800 border-sky-300',
+  calling: 'bg-sky-100 text-sky-800 border-sky-300',
+  nrp: 'bg-red-100 text-red-800 border-red-300',
+  interested: 'bg-amber-100 text-amber-800 border-amber-300',
+  documents_requested: 'bg-orange-100 text-orange-800 border-orange-300',
+  documents_received: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  appointment_scheduled: 'bg-blue-100 text-blue-800 border-blue-300',
+  lost: 'bg-slate-200 text-slate-800 border-slate-400',
+  converted: 'bg-teal-100 text-teal-800 border-teal-300',
 };
 
 export type LeadJourneyStageKey =

@@ -747,32 +747,62 @@ function libelleAge(date: string): string {
 }
 
 /**
- * Donne une lecture immediate des deux etats qui demandent le plus de
- * contraste dans une liste dense. La selection reste prioritaire : une fiche
- * cochee ne doit jamais se confondre avec sa couleur de statut.
+ * Chaque etape porte la meme couleur dans le tableau, la liste mobile et le
+ * pipeline. Le liseré reste visible meme sur un ecran peu contraste. La
+ * selection garde la priorite pour ne jamais confondre une fiche cochee avec
+ * sa couleur metier.
  */
 function couleurLigneLead(status: LeadStatus, selectionnee: boolean): string {
-  if (selectionnee) return 'bg-primary/[0.08] hover:bg-primary/[0.12]';
-  if (status === 'nrp') return 'bg-destructive/[0.08] hover:bg-destructive/[0.12]';
-  if (status === 'lost') return 'bg-foreground/[0.045] hover:bg-foreground/[0.075]';
+  if (selectionnee) return 'border-l-4 border-primary bg-primary/[0.10] hover:bg-primary/[0.14]';
+  if (status === 'documents_received') {
+    return 'border-l-4 border-emerald-500 bg-emerald-100/70 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:hover:bg-emerald-950/50';
+  }
+  if (status === 'nrp') {
+    return 'border-l-4 border-red-500 bg-red-100/70 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/45';
+  }
+  if (status === 'lost') {
+    return 'border-l-4 border-slate-500 bg-slate-200/65 hover:bg-slate-200/90 dark:bg-slate-800/35 dark:hover:bg-slate-800/50';
+  }
+  if (status === 'documents_requested') return 'border-l-4 border-orange-400 bg-orange-50/80 hover:bg-orange-100/75';
+  if (status === 'appointment_scheduled') return 'border-l-4 border-blue-500 bg-blue-50/80 hover:bg-blue-100/75';
+  if (status === 'interested') return 'border-l-4 border-amber-400 bg-amber-50/80 hover:bg-amber-100/75';
+  if (status === 'converted') return 'border-l-4 border-teal-500 bg-teal-50/80 hover:bg-teal-100/75';
+  if (status === 'new' || status === 'to_call' || status === 'calling') {
+    return 'border-l-4 border-sky-400 bg-sky-50/80 hover:bg-sky-100/75';
+  }
   return 'hover:bg-muted/40';
 }
 
 /** Meme lecture visuelle dans le pipeline que dans les listes de leads. */
 function couleurEntetePipeline(stage: string, survole: boolean): string {
   if (survole) return 'border-primary/40 bg-primary/10';
-  if (stage === 'nrp') return 'border-destructive/20 bg-destructive/[0.08]';
-  if (stage === 'perdu') return 'border-foreground/15 bg-foreground/[0.055]';
+  if (stage === 'nouveau') return 'border-sky-300 bg-sky-100/70';
+  if (stage === 'nrp') return 'border-red-300 bg-red-100/75';
+  if (stage === 'qualifie') return 'border-amber-300 bg-amber-100/70';
+  if (stage === 'documents') return 'border-orange-300 bg-orange-100/70';
+  if (stage === 'rdv') return 'border-blue-300 bg-blue-100/70';
+  if (stage === 'perdu') return 'border-slate-400 bg-slate-200/70';
+  if (stage === 'cloture') return 'border-teal-300 bg-teal-100/70';
   return 'border-transparent bg-surface';
 }
 
 function couleurCartePipeline(status: LeadStatus, selectionnee: boolean): string {
-  if (selectionnee) return 'border-primary/30 bg-primary/[0.045] ring-1 ring-primary/15';
+  if (selectionnee) return 'border-primary bg-primary/[0.10] ring-2 ring-primary/25';
+  if (status === 'documents_received') {
+    return 'border-emerald-400 bg-emerald-100/80 ring-1 ring-emerald-300/60 hover:border-emerald-500 hover:bg-emerald-100';
+  }
   if (status === 'nrp') {
-    return 'border-destructive/25 bg-destructive/[0.08] hover:border-destructive/35 hover:bg-destructive/[0.12]';
+    return 'border-red-300 bg-red-100/75 hover:border-red-400 hover:bg-red-100';
   }
   if (status === 'lost') {
-    return 'border-foreground/15 bg-foreground/[0.045] hover:border-foreground/25 hover:bg-foreground/[0.075]';
+    return 'border-slate-400 bg-slate-200/70 hover:border-slate-500 hover:bg-slate-200';
+  }
+  if (status === 'documents_requested') return 'border-orange-300 bg-orange-50/90 hover:border-orange-400 hover:bg-orange-100/80';
+  if (status === 'appointment_scheduled') return 'border-blue-300 bg-blue-50/90 hover:border-blue-400 hover:bg-blue-100/80';
+  if (status === 'interested') return 'border-amber-300 bg-amber-50/90 hover:border-amber-400 hover:bg-amber-100/80';
+  if (status === 'converted') return 'border-teal-300 bg-teal-50/90 hover:border-teal-400 hover:bg-teal-100/80';
+  if (status === 'new' || status === 'to_call' || status === 'calling') {
+    return 'border-sky-300 bg-sky-50/90 hover:border-sky-400 hover:bg-sky-100/80';
   }
   return 'border-border bg-card hover:border-border-strong';
 }
@@ -1259,7 +1289,10 @@ export function CompactList({
         {leads.map((lead) => (
           <div
             key={lead.id}
-            className={cn('flex items-stretch', selectionActive.has(lead.id) && 'bg-primary/[0.045]')}
+            className={cn(
+              'flex items-stretch transition-colors',
+              couleurLigneLead(lead.status, selectionActive.has(lead.id)),
+            )}
           >
             {onSelectionChange && (
               <div className="flex w-12 shrink-0 items-center justify-center">
@@ -1273,7 +1306,7 @@ export function CompactList({
             <button
               type="button"
               onClick={() => onRowClick(lead)}
-              className="group flex min-w-0 flex-1 items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-surface"
+              className="group flex min-w-0 flex-1 items-center gap-3 px-6 py-2.5 text-left"
             >
               <span
                 aria-hidden
