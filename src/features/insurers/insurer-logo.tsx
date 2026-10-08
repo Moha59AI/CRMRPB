@@ -1,14 +1,22 @@
+import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const LOGOS_ASSUREURS = [
-  { termes: ['axa'], src: '/insurers/axa.svg' },
-  { termes: ['maif'], src: '/insurers/maif.svg' },
-  { termes: ['direct assurance', 'avanssur'], src: '/insurers/direct-assurance.jpg' },
-  { termes: ['generali'], src: '/insurers/generali.jpg' },
-  { termes: ['gmf'], src: '/insurers/gmf.png' },
-  { termes: ['maaf'], src: '/insurers/maaf.png' },
-  { termes: ['macif'], src: '/insurers/macif.png' },
+/**
+ * Les noms du referentiel metier sont parfois plus longs que la marque
+ * affichee sur le logo. Les alias sont testes avant le nom direct afin que
+ * « Avanssur / Direct Assurance / BNP » retrouve bien Direct Assurance.
+ */
+const ALIASES_LOGOS = [
+  { termes: ['avanssur', 'direct assurance', 'directassurance'], id: 'direct-assurance' },
+  { termes: ['constatel', 'acm', 'credit mutuel'], id: 'assurances-du-credit-mutuel' },
+  { termes: ['bpce'], id: 'bpce-assurances' },
+  { termes: ['pacifica'], id: 'credit-agricole-assurances' },
+  { termes: ['gan'], id: 'gan-assurances' },
+  { termes: ['sma btp'], id: 'smabtp' },
+  { termes: ['swisslife'], id: 'swiss-life' },
+  { termes: ['l olivier'], id: 'l-olivier-assurance' },
+  { termes: ['aviva'], id: 'abeille-assurances' },
 ] as const;
 
 function normaliserNom(value: string): string {
@@ -20,14 +28,22 @@ function normaliserNom(value: string): string {
     .trim();
 }
 
-function trouverLogoAssureur(nom: string | null | undefined): string | null {
+/**
+ * Les 235 fichiers suivent la meme convention que cette fonction. Un nom de
+ * marque exact trouve donc son image sans devoir embarquer un index volumineux
+ * dans le JavaScript du CRM.
+ */
+export function trouverLogoAssureur(nom: string | null | undefined): string | null {
   const normalise = normaliserNom(nom ?? '');
   if (!normalise) return null;
   const recherche = ` ${normalise} `;
 
-  return LOGOS_ASSUREURS.find(({ termes }) => (
+  const alias = ALIASES_LOGOS.find(({ termes }) => (
     termes.some((terme) => recherche.includes(` ${terme} `))
-  ))?.src ?? null;
+  ));
+  const id = alias?.id ?? normalise.replace(/\s+/g, '-');
+
+  return `/insurers/${id}.png`;
 }
 
 export function LogoAssureur({
@@ -40,6 +56,8 @@ export function LogoAssureur({
   className?: string;
 }) {
   const src = trouverLogoAssureur(nom);
+  const [srcInvalide, setSrcInvalide] = useState<string | null>(null);
+  const afficherLogo = src !== null && src !== srcInvalide;
 
   return (
     <span
@@ -50,13 +68,14 @@ export function LogoAssureur({
       )}
       aria-hidden="true"
     >
-      {src ? (
+      {afficherLogo ? (
         <img
           src={src}
           alt=""
           loading="lazy"
           decoding="async"
           className="h-full w-full object-contain p-1"
+          onError={() => setSrcInvalide(src)}
         />
       ) : (
         <ShieldCheck className="h-4 w-4 text-muted-foreground" />
