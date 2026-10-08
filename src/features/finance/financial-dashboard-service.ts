@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   Contact, Gift, Insurer, Invoice, OnifyCreditNote, Payment, Quote, WindscreenCase,
 } from '@/types';
+import type { SupplierExpense } from './supplier-expenses-service';
 
 export interface FinancialDashboardData {
   invoices: Invoice[];
@@ -12,10 +13,11 @@ export interface FinancialDashboardData {
   contacts: Pick<Contact, 'id' | 'first_name' | 'last_name'>[];
   cases: Pick<WindscreenCase, 'id' | 'insurer_id'>[];
   insurers: Pick<Insurer, 'id' | 'name'>[];
+  supplierExpenses: SupplierExpense[];
 }
 
 export async function fetchFinancialDashboardData(): Promise<FinancialDashboardData> {
-  const [invoices, payments, quotes, credits, gifts, contacts, cases, insurers] = await Promise.all([
+  const [invoices, payments, quotes, credits, gifts, contacts, cases, insurers, supplierExpenses] = await Promise.all([
     supabase.from('invoices').select('*').order('issue_date', { ascending: false }).limit(5000),
     supabase.from('payments').select('*').order('payment_date', { ascending: false }).limit(5000),
     supabase.from('quotes').select('*').order('created_at', { ascending: false }).limit(5000),
@@ -24,9 +26,10 @@ export async function fetchFinancialDashboardData(): Promise<FinancialDashboardD
     supabase.from('contacts').select('id, first_name, last_name').limit(10000),
     supabase.from('windscreen_cases').select('id, insurer_id').limit(10000),
     supabase.from('insurers').select('id, name').limit(1000),
+    supabase.from('supplier_expenses').select('*').order('invoice_date', { ascending: false }).limit(5000),
   ]);
 
-  const failed = [invoices, payments, quotes, credits, gifts, contacts, cases, insurers]
+  const failed = [invoices, payments, quotes, credits, gifts, contacts, cases, insurers, supplierExpenses]
     .find((result) => result.error);
   if (failed?.error) throw new Error(failed.error.message);
 
@@ -39,5 +42,6 @@ export async function fetchFinancialDashboardData(): Promise<FinancialDashboardD
     contacts: (contacts.data as Pick<Contact, 'id' | 'first_name' | 'last_name'>[]) ?? [],
     cases: (cases.data as Pick<WindscreenCase, 'id' | 'insurer_id'>[]) ?? [],
     insurers: (insurers.data as Pick<Insurer, 'id' | 'name'>[]) ?? [],
+    supplierExpenses: (supplierExpenses.data as SupplierExpense[]) ?? [],
   };
 }

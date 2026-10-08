@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownRight, ArrowUpRight, Banknote, CalendarClock,
   CheckCircle2, CircleDollarSign, Download, FileCheck2, Gift, Landmark,
   ListChecks, Loader2, Receipt, RefreshCw, Scale, ShieldCheck, TrendingUp,
-  TriangleAlert, UsersRound, WalletCards,
+  ShoppingCart, TriangleAlert, UsersRound, WalletCards,
 } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '@/components/PageHeader';
@@ -35,11 +35,16 @@ interface FinancialTotals {
   vat: number;
   billed: number;
   credits: number;
+  creditsHt: number;
   draftCredits: number;
   netRevenue: number;
+  netRevenueHt: number;
   collected: number;
   outstanding: number;
   margin: number;
+  supplierPurchasesHt: number;
+  supplierPurchasesTtc: number;
+  supplierPurchaseDocuments: number;
   gifts: number;
   invoiceCount: number;
   overdueCount: number;
@@ -147,9 +152,10 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
         <MetricCard icon={Receipt} label="CA net" value={euro.format(totals.netRevenue)} detail={`${euro.format(totals.billed)} facturé · ${euro.format(totals.credits)} d'avoirs`} trend={variation(totals.netRevenue, previous?.netRevenue)} />
         <MetricCard icon={Banknote} label="Encaissé" value={euro.format(totals.collected)} detail={`${formatPercent(collectionRate)} du montant facturé`} trend={variation(totals.collected, previous?.collected)} tone="success" />
         <MetricCard icon={CalendarClock} label="À encaisser" value={euro.format(totals.outstanding)} detail={`${integer.format(totals.overdueCount)} facture${totals.overdueCount > 1 ? 's' : ''} en retard`} tone={totals.overdueAmount > 0 ? 'danger' : 'neutral'} />
-        <MetricCard icon={TrendingUp} label="Marge estimée" value={euro.format(totals.margin)} detail={`${formatPercent(ratio(totals.margin, totals.netRevenue))} du CA net`} trend={variation(totals.margin, previous?.margin)} />
+        <MetricCard icon={TrendingUp} label="Marge brute HT" value={euro.format(totals.margin)} detail={`${formatPercent(ratio(totals.margin, totals.netRevenueHt))} du CA net HT`} trend={variation(totals.margin, previous?.margin)} tone={totals.margin >= 0 ? 'success' : 'danger'} />
         <MetricCard icon={Scale} label="Panier moyen" value={euro.format(safeDivide(totals.netRevenue, totals.invoiceCount))} detail={`${integer.format(totals.invoiceCount)} facture${totals.invoiceCount > 1 ? 's' : ''}`} trend={variation(safeDivide(totals.netRevenue, totals.invoiceCount), previous ? safeDivide(previous.netRevenue, previous.invoiceCount) : undefined)} />
         <MetricCard icon={CircleDollarSign} label="TVA collectée" value={euro.format(totals.vat)} detail={`${euro.format(totals.amountHt)} de chiffre d'affaires HT`} />
+        <MetricCard icon={ShoppingCart} label="Achats fournisseurs" value={euro.format(totals.supplierPurchasesHt)} detail={`${integer.format(totals.supplierPurchaseDocuments)} document${totals.supplierPurchaseDocuments > 1 ? 's' : ''} · montant HT`} />
         <MetricCard icon={WalletCards} label="Délai d'encaissement estimé" value={`${integer.format(Math.round(estimatedDso))} jours`} detail="Estimation basée sur le CA et le reste dû de la période" tone={estimatedDso > 45 ? 'danger' : 'neutral'} />
         <MetricCard icon={Gift} label="Coût cadeaux" value={euro.format(totals.gifts)} detail={`${totals.draftCredits ? `${integer.format(totals.draftCredits)} avoir(s) en brouillon exclus` : 'Avoirs brouillons exclus'}`} />
       </div>
@@ -163,6 +169,14 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
           </AlertDescription>
         </Alert>
       )}
+
+      <Alert className="border-primary/20 bg-primary/5">
+        <Scale className="h-4 w-4 text-primary" />
+        <AlertTitle>Marge brute calculée à partir des données réelles</AlertTitle>
+        <AlertDescription>
+          CA net HT moins achats fournisseurs HT. Ce montant n’est pas le bénéfice net : salaires, loyer, publicité, frais bancaires, impôts et autres charges restent à déduire.
+        </AlertDescription>
+      </Alert>
 
       <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
         <Card className="rounded-xl border border-border p-5">
@@ -264,16 +278,16 @@ function FinancialStatementCard({ totals }: { totals: FinancialTotals }) {
   return (
     <Card className="rounded-xl border border-border p-5">
       <div className="flex items-start justify-between gap-3">
-        <div><h2 className="text-sm font-semibold">Lecture du chiffre d'affaires</h2><p className="mt-1 text-xs text-muted-foreground">Passage du HT au net pilotable</p></div>
+        <div><h2 className="text-sm font-semibold">Calcul de la marge brute</h2><p className="mt-1 text-xs text-muted-foreground">Revenus HT moins achats fournisseurs HT</p></div>
         <CircleDollarSign className="h-4 w-4 text-primary" />
       </div>
       <div className="mt-5 space-y-3">
         <StatementRow label="Chiffre d'affaires HT" value={totals.amountHt} />
-        <StatementRow label="TVA" value={totals.vat} />
-        <StatementRow label="Facturation TTC" value={totals.billed} />
-        <StatementRow label="Avoirs émis" value={-totals.credits} tone="danger" />
-        <div className="border-t border-border pt-3"><StatementRow label="CA net TTC" value={totals.netRevenue} strong /></div>
-        <StatementRow label="Marge estimée" value={totals.margin} tone="success" />
+        <StatementRow label="Avoirs clients HT" value={-totals.creditsHt} tone="danger" />
+        <div className="border-t border-border pt-3"><StatementRow label="CA net HT" value={totals.netRevenueHt} strong /></div>
+        <StatementRow label="Achats fournisseurs HT" value={-totals.supplierPurchasesHt} tone="danger" />
+        <div className="border-t border-border pt-3"><StatementRow label="Marge brute HT" value={totals.margin} strong tone={totals.margin >= 0 ? 'success' : 'danger'} /></div>
+        <div className="flex items-center justify-between gap-4 text-xs"><span className="text-muted-foreground">Taux de marge brute</span><span className="font-semibold tabular-nums text-done">{formatPercent(ratio(totals.margin, totals.netRevenueHt))}</span></div>
       </div>
     </Card>
   );
@@ -344,7 +358,7 @@ function DataQualityCard({ quality }: { quality: ReturnType<typeof buildQuality>
           </div>
         ))}
       </div>
-      <p className="mt-4 text-[11px] leading-4 text-muted-foreground">La marge reste une estimation tant que les achats de vitrage et charges réelles ne sont pas saisis dans le CRM.</p>
+      <p className="mt-4 text-[11px] leading-4 text-muted-foreground">La marge brute repose sur les factures et achats présents dans le CRM. Elle ne remplace pas le résultat comptable net.</p>
     </Card>
   );
 }
@@ -499,7 +513,8 @@ function buildView(data: FinancialDashboardData, period: FinancialPeriod) {
   const quotes = data.quotes.filter((item) => inRange(item.created_at, range.start, range.end));
   const gifts = data.gifts.filter((item) => inRange(item.given_at ?? item.created_at, range.start, range.end));
   const payments = data.payments.filter((item) => inRange(item.payment_date, range.start, range.end));
-  const totals = calculateTotals(invoices, credits, quotes, gifts);
+  const supplierExpenses = data.supplierExpenses.filter((item) => inRange(item.invoice_date, range.start, range.end));
+  const totals = calculateTotals(invoices, credits, quotes, gifts, supplierExpenses);
 
   const previous = range.previousStart && range.previousEnd
     ? calculateTotals(
@@ -507,6 +522,7 @@ function buildView(data: FinancialDashboardData, period: FinancialPeriod) {
       data.credits.filter((item) => inRange(item.issue_date ?? item.created_at, range.previousStart, range.previousEnd)),
       data.quotes.filter((item) => inRange(item.created_at, range.previousStart, range.previousEnd)),
       data.gifts.filter((item) => inRange(item.given_at ?? item.created_at, range.previousStart, range.previousEnd)),
+      data.supplierExpenses.filter((item) => inRange(item.invoice_date, range.previousStart, range.previousEnd)),
     )
     : null;
 
@@ -553,17 +569,27 @@ function buildView(data: FinancialDashboardData, period: FinancialPeriod) {
     topCustomers: buildTopCustomers(invoices, credits, contacts),
     paymentMethods: buildPaymentMethods(invoices, payments),
     insurerExposure: buildInsurerExposure(invoices, data),
-    quality: buildQuality(invoices),
+    quality: buildQuality(invoices, supplierExpenses),
     invoiceRows,
   };
 }
 
-function calculateTotals(invoices: Invoice[], credits: OnifyCreditNote[], quotes: FinancialDashboardData['quotes'], gifts: FinancialDashboardData['gifts']): FinancialTotals {
+function calculateTotals(
+  invoices: Invoice[],
+  credits: OnifyCreditNote[],
+  quotes: FinancialDashboardData['quotes'],
+  gifts: FinancialDashboardData['gifts'],
+  supplierExpenses: FinancialDashboardData['supplierExpenses'],
+): FinancialTotals {
   const activeInvoices = invoices.filter((invoice) => invoice.status !== 'cancelled');
   const activeCredits = credits.filter((credit) => !String(credit.status ?? '').toLocaleLowerCase('fr-FR').includes('brouillon'));
   const billed = sum(activeInvoices.map((invoice) => numeric(invoice.amount_ttc)));
   const amountHt = sum(activeInvoices.map((invoice) => numeric(invoice.amount_ht)));
   const creditAmount = sum(activeCredits.map((credit) => numeric(credit.amount_ttc)));
+  const creditAmountHt = sum(activeCredits.map(creditAmountExcludingTax));
+  const supplierPurchasesHt = sum(supplierExpenses.map((expense) => numeric(expense.amount_ht)));
+  const supplierPurchasesTtc = sum(supplierExpenses.map((expense) => numeric(expense.amount_ttc)));
+  const netRevenueHt = amountHt - creditAmountHt;
   const acceptedQuotes = quotes.filter((quote) => quote.status === 'accepted');
   const now = new Date();
   const overdueInvoices = activeInvoices.filter((invoice) => isOverdue(invoice, now));
@@ -572,11 +598,16 @@ function calculateTotals(invoices: Invoice[], credits: OnifyCreditNote[], quotes
     vat: Math.max(0, billed - amountHt),
     billed,
     credits: creditAmount,
+    creditsHt: creditAmountHt,
     draftCredits: credits.length - activeCredits.length,
     netRevenue: billed - creditAmount,
+    netRevenueHt,
     collected: sum(activeInvoices.map((invoice) => numeric(invoice.amount_paid))),
     outstanding: sum(activeInvoices.map(outstandingAmount)),
-    margin: sum(activeInvoices.map((invoice) => numeric(invoice.estimated_margin))),
+    margin: netRevenueHt - supplierPurchasesHt,
+    supplierPurchasesHt,
+    supplierPurchasesTtc,
+    supplierPurchaseDocuments: supplierExpenses.length,
     gifts: sum(gifts.filter((gift) => gift.status !== 'cancelled').map((gift) => numeric(gift.amount))),
     invoiceCount: activeInvoices.length,
     overdueCount: overdueInvoices.length,
@@ -774,12 +805,12 @@ function buildInsurerExposure(invoices: Invoice[], data: FinancialDashboardData)
     .map((row) => ({ ...row, detail: `· ${row.count} facture${row.count > 1 ? 's' : ''}` }));
 }
 
-function buildQuality(invoices: Invoice[]) {
+function buildQuality(invoices: Invoice[], supplierExpenses: FinancialDashboardData['supplierExpenses']) {
   const active = invoices.filter((invoice) => invoice.status !== 'cancelled');
   return [
     { label: 'Factures sans client', count: active.filter((invoice) => !invoice.contact_id).length },
     { label: 'Restes dus sans échéance', count: active.filter((invoice) => outstandingAmount(invoice) > 0 && !invoice.due_date).length },
-    { label: 'Factures sans marge estimée', count: active.filter((invoice) => numeric(invoice.amount_ttc) > 0 && numeric(invoice.estimated_margin) === 0).length },
+    { label: 'Achats fournisseurs sans détail', count: supplierExpenses.filter((expense) => expense.items.length === 0).length },
     { label: 'Factures encore en brouillon', count: active.filter((invoice) => invoice.status === 'draft').length },
   ];
 }
@@ -862,6 +893,16 @@ function safeDivide(value: number, total: number): number {
 function numeric(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function creditAmountExcludingTax(credit: OnifyCreditNote): number {
+  const totals = credit.onify_payload?.totals;
+  if (totals && typeof totals === 'object' && !Array.isArray(totals)) {
+    const values = totals as Record<string, unknown>;
+    const exact = numeric(values.final_total_ht ?? values.total_ht ?? values.subtotal_ht);
+    if (exact > 0) return exact;
+  }
+  return numeric(credit.amount_ttc) / 1.2;
 }
 
 function sum(values: number[]): number {

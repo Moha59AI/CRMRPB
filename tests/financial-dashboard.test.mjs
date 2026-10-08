@@ -8,7 +8,7 @@ const routes = readFileSync('src/app/app-routes.tsx', 'utf8');
 const navigation = readFileSync('src/config/navigation.ts', 'utf8');
 
 test('le dashboard financier consolide toutes les sources deja disponibles', () => {
-  for (const table of ['invoices', 'payments', 'quotes', 'onify_credit_notes', 'gifts', 'contacts', 'windscreen_cases', 'insurers']) {
+  for (const table of ['invoices', 'payments', 'quotes', 'onify_credit_notes', 'gifts', 'contacts', 'windscreen_cases', 'insurers', 'supplier_expenses']) {
     assert.ok(service.includes(`from('${table}')`), `${table} doit alimenter le dashboard`);
   }
   assert.match(service, /if \(failed\?\.error\) throw new Error/);
@@ -26,11 +26,18 @@ test('une facture payee ne redevient pas un impaye a cause d un reliquat Onify',
 });
 
 test('le dashboard distingue encaissements marge et anciennete des impayes', () => {
-  for (const marker of ['Encaissé', 'Marge estimée', 'Retard 1 à 30 jours', 'Retard 31 à 60 jours', 'plus de 60 jours']) {
+  for (const marker of ['Encaissé', 'Marge brute HT', 'Achats fournisseurs', 'Retard 1 à 30 jours', 'Retard 31 à 60 jours', 'plus de 60 jours']) {
     assert.ok(page.includes(marker), `${marker} doit etre visible`);
   }
   assert.match(page, /Factures à relancer en priorité/);
   assert.match(page, /invoicesWithDetailedPayments/);
+});
+
+test('la marge brute retranche les avoirs HT et les achats fournisseurs HT', () => {
+  assert.match(page, /const netRevenueHt = amountHt - creditAmountHt/);
+  assert.match(page, /margin: netRevenueHt - supplierPurchasesHt/);
+  assert.match(page, /creditAmountExcludingTax/);
+  assert.match(page, /Ce montant n’est pas le bénéfice net/);
 });
 
 test('la page Finance est routee et visible dans la navigation', () => {
