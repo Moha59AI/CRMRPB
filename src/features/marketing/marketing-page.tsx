@@ -57,6 +57,16 @@ function multiple(value: number, reference: number): string {
   return reference > 0 ? `${decimal.format(value / reference)}×` : '—';
 }
 
+function marginAfterAdvertising(value: {
+  estimatedMargin: number;
+  creditedRevenue: number;
+  creditsAlreadyDeductedFromMargin: number;
+  spend: number;
+}): number {
+  const creditsNotYetDeducted = Math.max(0, value.creditedRevenue - value.creditsAlreadyDeductedFromMargin);
+  return value.estimatedMargin - creditsNotYetDeducted - value.spend;
+}
+
 function variation(current: number, previous: number): string {
   if (previous === 0) return current === 0 ? 'stable' : 'nouveau';
   const value = (current - previous) / Math.abs(previous);
@@ -100,7 +110,7 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
     campaign.spend > 0 ? (campaign.netRevenue / campaign.spend).toFixed(2).replace('.', ',') : '',
     campaign.estimatedMargin.toFixed(2).replace('.', ','),
     campaign.marginKnownInvoices > 0
-      ? (campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend).toFixed(2).replace('.', ',')
+      ? marginAfterAdvertising(campaign).toFixed(2).replace('.', ',')
       : '',
   ]);
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\n');
@@ -492,11 +502,11 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
                 <TableCell className="text-right tabular-nums font-medium">{multiple(campaign.netRevenue, campaign.spend)}</TableCell>
                 <TableCell className={`text-right tabular-nums font-medium ${
                   campaign.marginKnownInvoices > 0
-                    && campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend < 0
+                    && marginAfterAdvertising(campaign) < 0
                     ? 'text-destructive' : 'text-success'
                 }`}>
                   {campaign.marginKnownInvoices > 0
-                    ? euro.format(campaign.estimatedMargin - campaign.creditedRevenue - campaign.spend)
+                    ? euro.format(marginAfterAdvertising(campaign))
                     : '—'}
                 </TableCell>
               </TableRow>
@@ -510,7 +520,7 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
 
 function ProfitabilitySection({ data }: { data: MarketingDashboardData }) {
   const { totals, channels, financialAttribution } = data;
-  const marginAfterAds = totals.estimatedMargin - totals.creditedRevenue - totals.spend;
+  const marginAfterAds = marginAfterAdvertising(totals);
   const hasKnownMargin = totals.marginKnownInvoices > 0;
   const invoiceCoverage = ratio(financialAttribution.leadsWithInvoice, totals.transformedLeads);
   const marginCoverage = ratio(totals.marginKnownInvoices, totals.invoices);
@@ -827,7 +837,7 @@ function MediaBuyingSignals({ data }: { data: MarketingDashboardData }) {
   const signals: Array<{ title: string; detail: string; tone: 'warning' | 'info' | 'success' }> = [];
 
   if (totals.marginKnownInvoices > 0) {
-    const resultAfterAds = totals.estimatedMargin - totals.creditedRevenue - totals.spend;
+    const resultAfterAds = marginAfterAdvertising(totals);
     signals.push({
       title: resultAfterAds >= 0 ? 'L’acquisition couvre la marge connue' : 'La marge connue ne couvre pas la publicité',
       detail: `${euro.format(resultAfterAds)} après déduction des avoirs et de ${euro.format(totals.spend)} de Google Ads.`,

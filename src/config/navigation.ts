@@ -19,6 +19,7 @@ import {
   PackageOpen,
   Mail,
   FileLock2,
+  Link2,
   Wrench,
   Palette,
   type LucideIcon,
@@ -159,6 +160,12 @@ export const navSections: NavSection[] = [
         path: '/finance/fournisseurs',
         icon: PackageOpen,
         description: 'Achats, factures et avoirs fournisseurs',
+      },
+      {
+        label: 'Rapprochement',
+        path: '/finance/rapprochement',
+        icon: Link2,
+        description: 'Relier achats, factures, clients et marges',
       },
       {
         label: 'Masquer les prix',

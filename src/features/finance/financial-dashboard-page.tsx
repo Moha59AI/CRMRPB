@@ -569,7 +569,7 @@ function buildView(data: FinancialDashboardData, period: FinancialPeriod) {
     topCustomers: buildTopCustomers(invoices, credits, contacts),
     paymentMethods: buildPaymentMethods(invoices, payments),
     insurerExposure: buildInsurerExposure(invoices, data),
-    quality: buildQuality(invoices, supplierExpenses),
+    quality: buildQuality(invoices, supplierExpenses, data.profitability),
     invoiceRows,
   };
 }
@@ -805,14 +805,26 @@ function buildInsurerExposure(invoices: Invoice[], data: FinancialDashboardData)
     .map((row) => ({ ...row, detail: `· ${row.count} facture${row.count > 1 ? 's' : ''}` }));
 }
 
-function buildQuality(invoices: Invoice[], supplierExpenses: FinancialDashboardData['supplierExpenses']) {
+function buildQuality(
+  invoices: Invoice[],
+  supplierExpenses: FinancialDashboardData['supplierExpenses'],
+  profitability: FinancialDashboardData['profitability'],
+) {
   const active = invoices.filter((invoice) => invoice.status !== 'cancelled');
-  return [
+  const quality = [
     { label: 'Factures sans client', count: active.filter((invoice) => !invoice.contact_id).length },
     { label: 'Restes dus sans échéance', count: active.filter((invoice) => outstandingAmount(invoice) > 0 && !invoice.due_date).length },
     { label: 'Achats fournisseurs sans détail', count: supplierExpenses.filter((expense) => expense.items.length === 0).length },
     { label: 'Factures encore en brouillon', count: active.filter((invoice) => invoice.status === 'draft').length },
   ];
+  if (profitability.length > 0) {
+    const knownCosts = new Set(profitability.filter((item) => item.supplier_cost_known).map((item) => item.invoice_id));
+    quality.splice(1, 0, {
+      label: 'Factures sans coût fournisseur rapproché',
+      count: active.filter((invoice) => !knownCosts.has(invoice.id)).length,
+    });
+  }
+  return quality;
 }
 
 function exportFinancialCsv(view: ReturnType<typeof buildView>) {

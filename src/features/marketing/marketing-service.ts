@@ -15,6 +15,7 @@ export interface MarketingTotals {
   invoices: number;
   invoicedRevenue: number;
   creditedRevenue: number;
+  creditsAlreadyDeductedFromMargin: number;
   netRevenue: number;
   collectedRevenue: number;
   estimatedMargin: number;
@@ -204,7 +205,15 @@ type InvoiceRow = {
   amount_ttc: number | string | null;
   amount_paid: number | string | null;
   estimated_margin: number | string | null;
+  margin_known?: boolean;
+  margin_includes_credits?: boolean;
   issue_date: string;
+};
+
+type ProfitabilityMarginRow = {
+  invoice_id: string;
+  actual_gross_margin_ht: number | string | null;
+  supplier_cost_known: boolean;
 };
 
 type CreditRow = {
@@ -220,6 +229,7 @@ type LeadFinance = {
   invoices: number;
   invoicedRevenue: number;
   creditedRevenue: number;
+  creditsAlreadyDeductedFromMargin: number;
   collectedRevenue: number;
   estimatedMargin: number;
   marginKnownInvoices: number;
@@ -253,6 +263,7 @@ const emptyTotals = (): MarketingTotals => ({
   invoices: 0,
   invoicedRevenue: 0,
   creditedRevenue: 0,
+  creditsAlreadyDeductedFromMargin: 0,
   netRevenue: 0,
   collectedRevenue: 0,
   estimatedMargin: 0,
@@ -271,6 +282,7 @@ const emptyFinance = (): LeadFinance => ({
   invoices: 0,
   invoicedRevenue: 0,
   creditedRevenue: 0,
+  creditsAlreadyDeductedFromMargin: 0,
   collectedRevenue: 0,
   estimatedMargin: 0,
   marginKnownInvoices: 0,
@@ -354,6 +366,7 @@ function reconcileFinance(
 
   const financeByLead = new Map<string, LeadFinance>();
   const invoiceToLead = new Map<string, string>();
+  const marginsIncludingCredits = new Set<string>();
   const ensureFinance = (leadId: string) => {
     if (!financeByLead.has(leadId)) financeByLead.set(leadId, emptyFinance());
     return financeByLead.get(leadId)!;
@@ -382,7 +395,8 @@ function reconcileFinance(
     finance.collectedRevenue += numeric(invoice.amount_paid);
     const margin = numeric(invoice.estimated_margin);
     finance.estimatedMargin += margin;
-    if (margin > 0) finance.marginKnownInvoices++;
+    if (invoice.margin_known ?? margin > 0) finance.marginKnownInvoices++;
+    if (invoice.margin_includes_credits) marginsIncludingCredits.add(invoice.id);
     if (exactLeadId) finance.invoicesByCase++;
     else finance.invoicesByContact++;
     finance.invoiceDetails.push({
@@ -404,6 +418,9 @@ function reconcileFinance(
     const finance = ensureFinance(leadId);
     const amount = numeric(credit.amount_ttc);
     finance.creditedRevenue += amount;
+    if (credit.invoice_id && marginsIncludingCredits.has(credit.invoice_id)) {
+      finance.creditsAlreadyDeductedFromMargin += amount;
+    }
     if (credit.invoice_id) {
       const invoice = finance.invoiceDetails.find((item) => item.id === credit.invoice_id);
       if (invoice) {
@@ -533,6 +550,7 @@ function aggregatePeriod(
       campaign.invoices += finance.invoices;
       campaign.invoicedRevenue += finance.invoicedRevenue;
       campaign.creditedRevenue += finance.creditedRevenue;
+      campaign.creditsAlreadyDeductedFromMargin += finance.creditsAlreadyDeductedFromMargin;
       campaign.netRevenue += finance.invoicedRevenue - finance.creditedRevenue;
       campaign.collectedRevenue += finance.collectedRevenue;
       campaign.estimatedMargin += finance.estimatedMargin;
@@ -576,6 +594,7 @@ function aggregatePeriod(
     invoices: sum.invoices + campaign.invoices,
     invoicedRevenue: sum.invoicedRevenue + campaign.invoicedRevenue,
     creditedRevenue: sum.creditedRevenue + campaign.creditedRevenue,
+    creditsAlreadyDeductedFromMargin: sum.creditsAlreadyDeductedFromMargin + campaign.creditsAlreadyDeductedFromMargin,
     netRevenue: sum.netRevenue + campaign.netRevenue,
     collectedRevenue: sum.collectedRevenue + campaign.collectedRevenue,
     estimatedMargin: sum.estimatedMargin + campaign.estimatedMargin,
@@ -734,7 +753,29 @@ export async function fetchMarketingDashboard(days: number): Promise<MarketingDa
       .limit(5000)
     : { data: [] as InvoiceRow[], error: null };
   if (invoiceResult.error) throw new Error(invoiceResult.error.message);
-  const invoices = (invoiceResult.data ?? []) as InvoiceRow[];
+  const rawInvoices = (invoiceResult.data ?? []) as InvoiceRow[];
+  const rawInvoiceIds = rawInvoices.map((invoice) => invoice.id);
+  const profitabilityResult = rawInvoiceIds.length
+    ? await supabase
+      .from('v_financial_invoice_profitability')
+      .select('invoice_id,actual_gross_margin_ht,supplier_cost_known')
+      .in('invoice_id', rawInvoiceIds)
+      .limit(5000)
+    : { data: [] as ProfitabilityMarginRow[], error: null };
+  if (profitabilityResult.error && !['42P01', 'PGRST200', 'PGRST205'].includes(profitabilityResult.error.code ?? '')) {
+    throw new Error(profitabilityResult.error.message);
+  }
+  const actualMargins = new Map(
+    ((profitabilityResult.data ?? []) as ProfitabilityMarginRow[])
+      .filter((row) => row.supplier_cost_known && row.actual_gross_margin_ht != null)
+      .map((row) => [row.invoice_id, row.actual_gross_margin_ht]),
+  );
+  const invoices = rawInvoices.map((invoice) => actualMargins.has(invoice.id) ? {
+    ...invoice,
+    estimated_margin: actualMargins.get(invoice.id) ?? invoice.estimated_margin,
+    margin_known: true,
+    margin_includes_credits: true,
+  } : invoice);
   const invoiceIds = invoices.map((invoice) => invoice.id);
   const creditFilter = [
     invoiceIds.length ? `invoice_id.in.(${invoiceIds.join(',')})` : '',
