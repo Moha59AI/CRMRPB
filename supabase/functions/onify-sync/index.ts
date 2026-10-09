@@ -111,6 +111,8 @@ type SyncCounts = {
   invoices: number;
   quotes: number;
   credits: number;
+  /** Leads et rendez-vous enrichis avec le véhicule fourni par Onify. */
+  vehicles: number;
   notesRemaining: boolean;
   /** PDF de factures archives pendant ce tour. */
   pdfs: number;
@@ -707,6 +709,9 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   }
   const invoiceIds = await syncInvoices(workspaceId, invoices, contactIds);
   await syncQuotes(workspaceId, quotes, contactIds);
+  const { data: vehicles, error: vehicleError } = await adminClient
+    .rpc('propager_vehicules_onify', { p_workspace_id: workspaceId });
+  if (vehicleError) throw new Error(`propagation véhicules: ${vehicleError.message}`);
   await syncCredits(workspaceId, credits, contactIds, invoiceIds);
   await syncCalls(workspaceId, calls, contactIds);
   const notes = await syncNotesPage(
@@ -727,6 +732,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     invoices: invoices.length,
     quotes: quotes.length,
     credits: credits.length,
+    vehicles: Number(vehicles ?? 0),
     notesRemaining: notes.remaining,
   };
   const { data: fresh, error: freshError } = await adminClient

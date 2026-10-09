@@ -21,6 +21,9 @@ export interface LeadRendezVous extends ClientRendezVous {
   intervention_city: string | null;
   /** Offre ou cadeau annonce au client. Vit sur le lead : une offre par intervention. */
   offer: string | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_registration: string | null;
 }
 
 /**
@@ -44,7 +47,7 @@ export async function fetchAppointments(params: {
 }): Promise<AppointmentAvecClient[]> {
   let query = supabase
     .from('appointments')
-    .select(`*, leads(id, ${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city, offer), contacts(${CHAMPS_CLIENT})`)
+    .select(`*, leads(id, ${CHAMPS_CLIENT}, intervention_address, intervention_postal_code, intervention_city, offer, vehicle_make, vehicle_model, vehicle_registration), contacts(${CHAMPS_CLIENT})`)
     .order('start_time', { ascending: true });
   if (params.startDate) query = query.gte('start_time', params.startDate);
   if (params.endDate) query = query.lte('start_time', params.endDate);
@@ -72,6 +75,9 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   offre: string | null;
   /** Lead rattache, pour ecrire l'offre depuis l'agenda. */
   leadId: string | null;
+  /** Marque et modèle opérationnels, avec priorité à la copie du rendez-vous. */
+  vehicule: string | null;
+  immatriculation: string | null;
 } {
   const lead = appt.leads ?? null;
   const contact = appt.contacts ?? null;
@@ -104,11 +110,19 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   // Le lead fait foi quand il existe ; le champ du rendez-vous ne sert que
   // sans lead -- typiquement un rendez-vous repris de Google.
   const offre = (lead ? lead.offer?.trim() : null) || appt.offer?.trim() || null;
+  const marque = appt.vehicle_make?.trim() || lead?.vehicle_make?.trim() || null;
+  const modele = appt.vehicle_model?.trim() || lead?.vehicle_model?.trim() || null;
+  const vehicule = [marque, modele].filter(Boolean).join(' ') || null;
+  const immatriculation = appt.vehicle_registration?.trim()
+    || lead?.vehicle_registration?.trim()
+    || null;
 
   return {
     nom, adresse, telephone, ville, codePostal,
     offre,
     leadId: lead?.id ?? appt.lead_id ?? null,
+    vehicule,
+    immatriculation,
   };
 }
 

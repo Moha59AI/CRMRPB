@@ -301,7 +301,9 @@ function AppointmentBlock({
   const { appt, top, height, colIndex, colCount } = placed;
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
   const isCancelled = appt.status === 'cancelled';
-  const { adresse: adresseBloc, offre: offreBloc } = clientDuRendezVous(appt as AppointmentAvecClient);
+  const {
+    adresse: adresseBloc, offre: offreBloc, vehicule: vehiculeBloc,
+  } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -333,7 +335,13 @@ function AppointmentBlock({
           <span className="truncate">{adresseBloc}</span>
         </div>
       )}
-      {height > 80 && offreBloc && (
+      {height > 80 && vehiculeBloc && (
+        <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium opacity-90">
+          <Car className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{vehiculeBloc}</span>
+        </div>
+      )}
+      {height > 104 && offreBloc && (
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium opacity-90">
           <Gift className="h-2.5 w-2.5 shrink-0" />
           <span className="truncate">{offreBloc}</span>
@@ -511,7 +519,7 @@ function RendezVousEnLigne({
   onApptClick: (appt: Appointment) => void;
 }) {
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
-  const { adresse } = clientDuRendezVous(appt as AppointmentAvecClient);
+  const { adresse, vehicule, immatriculation } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -541,6 +549,14 @@ function RendezVousEnLigne({
             </>
           )}
         </span>
+        {(vehicule || immatriculation) && (
+          <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold">
+            <Car className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {vehicule || 'Véhicule'}{immatriculation ? ` · ${immatriculation}` : ''}
+            </span>
+          </span>
+        )}
       </span>
     </button>
   );
@@ -952,6 +968,29 @@ function AppointmentDetailSheet({
               </Badge>
             )}
           </div>
+
+          {(client.vehicule || client.immatriculation) && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-background text-primary shadow-sm">
+                  <Car className="h-[18px] w-[18px]" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Véhicule à prendre en charge
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
+                    {client.vehicule || 'Modèle non renseigné'}
+                  </p>
+                  {client.immatriculation && (
+                    <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {client.immatriculation}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {appointment.type === 'intervention'
             && appointment.status !== 'completed'

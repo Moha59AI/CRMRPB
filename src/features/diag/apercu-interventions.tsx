@@ -36,6 +36,7 @@ function intervention(p: Partial<Intervention> & { id: string }): Intervention {
     client: null,
     telephone: null,
     immatriculation: null,
+    vehicule: null,
     ...p,
   };
 }
@@ -61,6 +62,8 @@ const CAS: { note: string; i: Intervention; aMoi?: boolean }[] = [
       adresse: '5 Avenue de la Marne 59290 Wasquehal',
       latitude: 50.6742, longitude: 3.1312, geo_precision: 'exact',
       telephone: '0698765432',
+      vehicule: 'Renault Clio V',
+      immatriculation: 'EF-456-GH',
       assigned_user_id: 'moi', statut: 'confirmed',
     }),
     aMoi: true,

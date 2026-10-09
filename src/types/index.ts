@@ -367,6 +367,11 @@ export interface Appointment {
   latitude: number | null;
   longitude: number | null;
   geo_precision: 'exact' | 'approximatif' | null;
+  /** Copie opérationnelle du véhicule, notamment alimentée depuis Onify. */
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_registration: string | null;
+  vehicle_source: 'onify' | 'manual' | 'mixed' | null;
   /** Evénement miroir créé dans Google Agenda. */
   google_calendar_event_id: string | null;
   google_calendar_html_link: string | null;

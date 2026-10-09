@@ -8,7 +8,7 @@
 // cherche en descendant la liste ; un oeil qui doit la retrouver a chaque
 // bloc ne lit plus, il dechiffre.
 
-import { ChevronRight, MapPin, Navigation, Phone, TriangleAlert } from 'lucide-react';
+import { Car, ChevronRight, MapPin, Navigation, Phone, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { lienItineraire } from '@/services/adresse-service';
@@ -92,6 +92,16 @@ export function InterventionCarteListe({
 
           {i.client && i.titre !== i.client && (
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{i.titre}</span>
+          )}
+
+          {(i.vehicule || i.immatriculation) && (
+            <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Car className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+              <span className="truncate">
+                {i.vehicule || 'Véhicule'}
+                {i.immatriculation ? ` · ${i.immatriculation}` : ''}
+              </span>
+            </span>
           )}
 
 

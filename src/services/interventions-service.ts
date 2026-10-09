@@ -39,6 +39,8 @@ export interface Intervention {
   client: string | null;
   telephone: string | null;
   immatriculation: string | null;
+  /** Marque et modèle, recopiés sur le rendez-vous depuis Onify. */
+  vehicule: string | null;
 }
 
 interface LigneJointe {
@@ -55,11 +57,16 @@ interface LigneJointe {
   latitude: number | null;
   longitude: number | null;
   geo_precision: 'exact' | 'approximatif' | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_registration: string | null;
   leads: {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
     vehicle_registration: string | null;
+    vehicle_make: string | null;
+    vehicle_model: string | null;
     city: string | null;
     postal_code: string | null;
     intervention_city: string | null;
@@ -99,7 +106,8 @@ export async function fetchInterventions(params: {
     .select(
       `id, lead_id, contact_id, assigned_user_id, title, start_time, end_time, status,
        address, citycode, latitude, longitude, geo_precision,
-       leads(first_name, last_name, phone, vehicle_registration, city, postal_code,
+       vehicle_make, vehicle_model, vehicle_registration,
+       leads(first_name, last_name, phone, vehicle_registration, vehicle_make, vehicle_model, city, postal_code,
              intervention_city, intervention_postal_code),
        contacts(first_name, last_name, phone, city, postal_code)`,
     )
@@ -117,6 +125,8 @@ export async function fetchInterventions(params: {
 
   const interventions = lignes.slice(0, PLAFOND_INTERVENTIONS).map((r): Intervention => {
     const depuisAdresse = localisationDepuisAdresse(r.address);
+    const marque = r.vehicle_make?.trim() || r.leads?.vehicle_make?.trim() || null;
+    const modele = r.vehicle_model?.trim() || r.leads?.vehicle_model?.trim() || null;
     return {
       id: r.id,
       lead_id: r.lead_id,
@@ -143,7 +153,10 @@ export async function fetchInterventions(params: {
 
       client: nomComplet(r.leads) ?? nomComplet(r.contacts),
       telephone: r.leads?.phone?.trim() || r.contacts?.phone?.trim() || null,
-      immatriculation: r.leads?.vehicle_registration?.trim() || null,
+      immatriculation: r.vehicle_registration?.trim()
+        || r.leads?.vehicle_registration?.trim()
+        || null,
+      vehicule: [marque, modele].filter(Boolean).join(' ') || null,
     };
   });
 
