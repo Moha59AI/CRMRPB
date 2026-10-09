@@ -96,6 +96,7 @@ import {
 import { lienItineraire } from '@/services/adresse-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
+import { InterventionWeather } from '@/features/interventions/intervention-weather';
 import type {
   Appointment,
   AppointmentStatus,
@@ -951,6 +952,19 @@ function AppointmentDetailSheet({
               </Badge>
             )}
           </div>
+
+          {appointment.type === 'intervention'
+            && appointment.status !== 'completed'
+            && appointment.status !== 'cancelled' && (
+              <InterventionWeather
+                startTime={appointment.start_time}
+                ville={client.ville}
+                codePostal={client.codePostal}
+                citycode={appointment.citycode}
+                latitude={appointment.latitude}
+                longitude={appointment.longitude}
+              />
+            )}
 
           {/* Client : ou aller, qui appeler. C'est ce que le technicien
               regarde avant de partir ; ca ne doit dependre ni du champ

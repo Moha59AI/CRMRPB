@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { lienItineraire } from '@/services/adresse-service';
 import { LIBELLE_STATUT_RDV, PASTILLE_STATUT_RDV } from '@/features/calendar/statut-rendez-vous';
 import type { Intervention } from '@/services/interventions-service';
+import { InterventionWeather } from './intervention-weather';
 
 export interface InterventionCarteListeProps {
   intervention: Intervention;
@@ -110,6 +111,18 @@ export function InterventionCarteListe({
             <span className="mt-1 block text-[11px] text-due">
               Point au centre de la commune : vérifiez l’adresse avant de partir.
             </span>
+          )}
+
+          {!terminee && !annulee && (
+            <InterventionWeather
+              compact
+              startTime={i.debut}
+              ville={i.ville}
+              codePostal={i.codePostal}
+              citycode={i.citycode}
+              latitude={i.latitude}
+              longitude={i.longitude}
+            />
           )}
         </span>
 

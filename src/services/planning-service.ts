@@ -66,6 +66,8 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   nom: string | null;
   adresse: string | null;
   telephone: string | null;
+  ville: string | null;
+  codePostal: string | null;
   /** Offre commerciale, connue seulement quand un lead est rattache. */
   offre: string | null;
   /** Lead rattache, pour ecrire l'offre depuis l'agenda. */
@@ -83,6 +85,18 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
     || joindre(lead?.address, lead?.postal_code, lead?.city)
     || joindre(contact?.address, contact?.postal_code, contact?.city);
 
+  const localisationRendezVous = appt.address?.match(/\b(\d{5})\s+([^,;]+)/u);
+  const codePostal = localisationRendezVous?.[1]
+    || lead?.intervention_postal_code?.trim()
+    || lead?.postal_code?.trim()
+    || contact?.postal_code?.trim()
+    || null;
+  const ville = localisationRendezVous?.[2]?.trim()
+    || lead?.intervention_city?.trim()
+    || lead?.city?.trim()
+    || contact?.city?.trim()
+    || null;
+
   const personne = lead ?? contact;
   const nom = personne ? joindre(personne.first_name, personne.last_name) : null;
   const telephone = lead?.phone?.trim() || contact?.phone?.trim() || null;
@@ -92,7 +106,7 @@ export function clientDuRendezVous(appt: AppointmentAvecClient): {
   const offre = (lead ? lead.offer?.trim() : null) || appt.offer?.trim() || null;
 
   return {
-    nom, adresse, telephone,
+    nom, adresse, telephone, ville, codePostal,
     offre,
     leadId: lead?.id ?? appt.lead_id ?? null,
   };

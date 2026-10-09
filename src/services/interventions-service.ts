@@ -26,6 +26,10 @@ export interface Intervention {
   statut: AppointmentStatus;
 
   adresse: string | null;
+  ville: string | null;
+  codePostal: string | null;
+  /** Code INSEE de la commune du rendez-vous, quand il a été géocodé. */
+  citycode: string | null;
   latitude: number | null;
   longitude: number | null;
   /** `approximatif` = centre de commune : on n'y envoie pas quelqu'un. */
@@ -47,6 +51,7 @@ interface LigneJointe {
   end_time: string;
   status: AppointmentStatus;
   address: string | null;
+  citycode: string | null;
   latitude: number | null;
   longitude: number | null;
   geo_precision: 'exact' | 'approximatif' | null;
@@ -55,17 +60,34 @@ interface LigneJointe {
     last_name: string | null;
     phone: string | null;
     vehicle_registration: string | null;
+    city: string | null;
+    postal_code: string | null;
+    intervention_city: string | null;
+    intervention_postal_code: string | null;
   } | null;
   contacts: {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
+    city: string | null;
+    postal_code: string | null;
   } | null;
 }
 
 function nomComplet(p: { first_name: string | null; last_name: string | null } | null): string | null {
   if (!p) return null;
   return [p.first_name, p.last_name].map((v) => v?.trim()).filter(Boolean).join(' ') || null;
+}
+
+function localisationDepuisAdresse(adresse: string | null): {
+  ville: string | null;
+  codePostal: string | null;
+} {
+  const correspondance = adresse?.match(/\b(\d{5})\s+([^,;]+)/u);
+  return {
+    codePostal: correspondance?.[1] ?? null,
+    ville: correspondance?.[2]?.trim() || null,
+  };
 }
 
 export async function fetchInterventions(params: {
@@ -76,9 +98,10 @@ export async function fetchInterventions(params: {
     .from('appointments')
     .select(
       `id, lead_id, contact_id, assigned_user_id, title, start_time, end_time, status,
-       address, latitude, longitude, geo_precision,
-       leads(first_name, last_name, phone, vehicle_registration),
-       contacts(first_name, last_name, phone)`,
+       address, citycode, latitude, longitude, geo_precision,
+       leads(first_name, last_name, phone, vehicle_registration, city, postal_code,
+             intervention_city, intervention_postal_code),
+       contacts(first_name, last_name, phone, city, postal_code)`,
     )
     .eq('type', 'intervention')
     .gte('start_time', params.debut)
@@ -92,25 +115,37 @@ export async function fetchInterventions(params: {
   const lignes = (data ?? []) as unknown as LigneJointe[];
   const tronque = lignes.length > PLAFOND_INTERVENTIONS;
 
-  const interventions = lignes.slice(0, PLAFOND_INTERVENTIONS).map((r): Intervention => ({
-    id: r.id,
-    lead_id: r.lead_id,
-    contact_id: r.contact_id,
-    assigned_user_id: r.assigned_user_id,
-    titre: r.title,
-    debut: r.start_time,
-    fin: r.end_time,
-    statut: r.status,
+  const interventions = lignes.slice(0, PLAFOND_INTERVENTIONS).map((r): Intervention => {
+    const depuisAdresse = localisationDepuisAdresse(r.address);
+    return {
+      id: r.id,
+      lead_id: r.lead_id,
+      contact_id: r.contact_id,
+      assigned_user_id: r.assigned_user_id,
+      titre: r.title,
+      debut: r.start_time,
+      fin: r.end_time,
+      statut: r.status,
 
-    adresse: r.address,
-    latitude: r.latitude,
-    longitude: r.longitude,
-    geo_precision: r.geo_precision,
+      adresse: r.address,
+      ville: r.leads?.intervention_city?.trim()
+        || r.leads?.city?.trim()
+        || r.contacts?.city?.trim()
+        || depuisAdresse.ville,
+      codePostal: r.leads?.intervention_postal_code?.trim()
+        || r.leads?.postal_code?.trim()
+        || r.contacts?.postal_code?.trim()
+        || depuisAdresse.codePostal,
+      citycode: r.citycode,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      geo_precision: r.geo_precision,
 
-    client: nomComplet(r.leads) ?? nomComplet(r.contacts),
-    telephone: r.leads?.phone?.trim() || r.contacts?.phone?.trim() || null,
-    immatriculation: r.leads?.vehicle_registration?.trim() || null,
-  }));
+      client: nomComplet(r.leads) ?? nomComplet(r.contacts),
+      telephone: r.leads?.phone?.trim() || r.contacts?.phone?.trim() || null,
+      immatriculation: r.leads?.vehicle_registration?.trim() || null,
+    };
+  });
 
   return { interventions, tronque };
 }

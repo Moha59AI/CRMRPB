@@ -75,3 +75,6 @@ verify_jwt = false
 
 [functions.user-invite]
 verify_jwt = true
+
+[functions.intervention-weather]
+verify_jwt = true
