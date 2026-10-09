@@ -50,6 +50,19 @@ test('la météo apparaît sur les interventions terrain et dans le détail agen
   assert.match(agenda, /Données météo|intervention-weather/);
 });
 
+test('la météo met en avant les conditions à l’heure du rendez-vous', async () => {
+  const source = await read(FUNCTION);
+  const component = await read('src/features/interventions/intervention-weather.tsx');
+
+  assert.match(source, /plusProche\([^)]*cible/);
+  assert.match(source, /wind_speed_of_gust/);
+  assert.match(source, /probability_of_precipitation/);
+  assert.match(component, /Au RDV/);
+  assert.match(component, /Rafales/);
+  assert.match(component, /Pluie/);
+  assert.match(component, /Conditions difficiles|Vigilance météo|Conditions favorables/);
+});
+
 test('la fonction météo reste réservée aux utilisateurs connectés', async () => {
   const config = await read('supabase/config.toml');
   assert.match(config, /\[functions\.intervention-weather\]\s*verify_jwt = true/);

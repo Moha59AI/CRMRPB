@@ -21,9 +21,27 @@ type Commune = {
 type MetSeries = {
   time?: string;
   data?: {
-    instant?: { details?: { air_temperature?: number; wind_speed?: number } };
-    next_1_hours?: { summary?: { symbol_code?: string }; details?: { precipitation_amount?: number } };
-    next_6_hours?: { summary?: { symbol_code?: string }; details?: { precipitation_amount?: number } };
+    instant?: {
+      details?: {
+        air_temperature?: number;
+        wind_speed?: number;
+        wind_speed_of_gust?: number;
+      };
+    };
+    next_1_hours?: {
+      summary?: { symbol_code?: string };
+      details?: {
+        precipitation_amount?: number;
+        probability_of_precipitation?: number;
+      };
+    };
+    next_6_hours?: {
+      summary?: { symbol_code?: string };
+      details?: {
+        precipitation_amount?: number;
+        probability_of_precipitation?: number;
+      };
+    };
   };
 };
 
@@ -171,7 +189,11 @@ Deno.serve(async (req: Request) => {
       forecast: {
         temperature: Math.round(details.air_temperature * 10) / 10,
         ventKmh: Math.round((details.wind_speed ?? 0) * 3.6),
+        rafaleKmh: Math.round((details.wind_speed_of_gust ?? details.wind_speed ?? 0) * 3.6),
         precipitationMm: Math.round((periode?.details?.precipitation_amount ?? 0) * 10) / 10,
+        probabilitePluie: typeof periode?.details?.probability_of_precipitation === 'number'
+          ? Math.round(periode.details.probability_of_precipitation)
+          : null,
         symbole: periode?.summary?.symbol_code ?? 'clearsky_day',
         lieu: lieu.lieu,
         heurePrevision: point.time,

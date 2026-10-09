@@ -11,7 +11,9 @@ export interface DemandeMeteoIntervention {
 export interface MeteoIntervention {
   temperature: number;
   ventKmh: number;
+  rafaleKmh: number;
   precipitationMm: number;
+  probabilitePluie: number | null;
   symbole: string;
   lieu: string;
   heurePrevision: string;
