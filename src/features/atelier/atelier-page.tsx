@@ -6,9 +6,9 @@
 //
 // La vue liste n'est pas un repli dégradé : c'est la même information, dans
 // un ordre lisible au clavier et par un lecteur d'écran, qui reste
-// disponible quoi qu'il arrive à la 3D. Un navigateur sans WebGL, une
-// tablette fatiguée, ou simplement l'envie de lire plutôt que de viser —
-// tous les trois méritent la même réponse.
+// disponible quoi qu'il arrive à l'illustration. Un petit écran, une
+// connexion lente, ou simplement l'envie de lire plutôt que de viser — tous
+// les trois méritent la même réponse.
 
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -31,13 +31,10 @@ import type { AppointmentStatus } from '@/types';
 import { PanneauDossier } from './panneau-dossier';
 import { ZONES, compterParZone, placerVehicules, type CleZone } from './zones-atelier';
 
-/*
-  Three.js, React Three Fiber et Drei pèsent plus que tout le reste du CRM
-  réuni. Ils ne sont chargés qu'en entrant ici, et seulement si la vue 3D est
-  demandée : ouvrir l'atelier en vue liste ne télécharge pas le moteur 3D.
-*/
+/* Le decor realiste reste charge a la demande : ouvrir l'atelier directement
+   en vue liste ne telecharge pas l'image haute definition. */
 const SceneAtelier = lazy(() =>
-  import('./scene-atelier').then((m) => ({ default: m.SceneAtelier })));
+  import('./scene-atelier-realiste').then((m) => ({ default: m.SceneAtelierRealiste })));
 
 type Vue = 'atelier' | 'liste';
 

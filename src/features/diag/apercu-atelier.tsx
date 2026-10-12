@@ -1,4 +1,4 @@
-// Aperçu de l'atelier 3D, en développement seulement
+// Aperçu de l'atelier réaliste, en développement seulement
 //
 // L'atelier ne s'atteint qu'une fois connecté, et il faut des interventions
 // du jour pour qu'il contienne quelque chose. Cette page monte la scène sur
@@ -7,7 +7,7 @@
 // La route n'existe pas en production.
 
 import { useState } from 'react';
-import { SceneAtelier } from '@/features/atelier/scene-atelier';
+import { SceneAtelierRealiste } from '@/features/atelier/scene-atelier-realiste';
 import { ListeAtelier } from '@/features/atelier/atelier-page';
 import { PanneauDossier } from '@/features/atelier/panneau-dossier';
 import { placerVehicules, compterParZone, ZONES } from '@/features/atelier/zones-atelier';
@@ -144,7 +144,7 @@ export function ApercuAtelier() {
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="h-[520px] overflow-hidden rounded-xl border border-border bg-surface">
             {vue === 'atelier' ? (
-              <SceneAtelier
+              <SceneAtelierRealiste
                 interventions={journee}
                 selection={selection}
                 onSelectionner={setSelection}

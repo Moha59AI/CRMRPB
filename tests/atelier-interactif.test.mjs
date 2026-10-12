@@ -9,8 +9,7 @@ const {
 } = await import('../src/features/atelier/zones-atelier.ts');
 
 const PAGE = 'src/features/atelier/atelier-page.tsx';
-const SCENE = 'src/features/atelier/scene-atelier.tsx';
-const VEHICULE = 'src/features/atelier/vehicule-3d.tsx';
+const SCENE = 'src/features/atelier/scene-atelier-realiste.tsx';
 const PANNEAU = 'src/features/atelier/panneau-dossier.tsx';
 
 const MIDI = new Date('2026-10-12T12:00:00');
@@ -99,15 +98,15 @@ test('l’emprise se déduit des zones, elle n’est pas recopiée', () => {
   assert.equal(EMPRISE.largeur, Math.max(...xs) - Math.min(...xs));
 });
 
-// ------------------------------------------------------- le coût du moteur 3D
+// ---------------------------------------------------- le coût du décor réaliste
 
-test('ouvrir l’atelier en vue liste ne télécharge pas Three.js', async () => {
+test('ouvrir l’atelier en vue liste ne télécharge pas le décor réaliste', async () => {
   const page = await read(PAGE);
 
-  // Three, React Three Fiber et Drei pèsent plus que tout le reste du CRM.
+  // Le décor haute définition ne sert que dans la vue Atelier.
   assert.match(page, /const SceneAtelier = lazy\(\(\) =>/);
-  assert.match(page, /import\('\.\/scene-atelier'\)/);
-  // La page elle-même ne doit rien importer du moteur.
+  assert.match(page, /import\('\.\/scene-atelier-realiste'\)/);
+  // La page elle-même ne doit rien importer de l'ancien moteur.
   assert.doesNotMatch(page, /from '@react-three\//);
   assert.doesNotMatch(page, /from 'three'/);
 });
@@ -153,63 +152,62 @@ test('on ne propose pas une action qui échouerait', async () => {
   assert.match(page, /if \(!gestionnaire && !sien\) return \[\];/);
 });
 
-test('le déplacement se voit, et part de la bonne place', async () => {
-  const vehicule = await read(VEHICULE);
+test('la sélection remplace le véhicule représentatif du poste', async () => {
+  const scene = await read(SCENE);
 
-  // Sans transition, la voiture disparaîtrait d'un poste pour réapparaître
-  // dans un autre.
-  assert.match(vehicule, /useFrame\(\(_, delta\) =>/);
-  assert.match(vehicule, /1 - Math\.exp\(-SOUPLESSE \* delta\)/);
-  // Mais au premier rendu elle se pose, elle ne glisse pas depuis l'origine.
-  assert.match(vehicule, /if \(!pose\.current\.prete\)/);
+  // Chaque poste montre un dossier, mais une sélection faite depuis la liste
+  // doit immédiatement prendre sa place dans le décor.
+  assert.match(scene, /const candidates = places\.filter\(\(place\) => place\.zone === poste\.zone\)/);
+  assert.match(scene, /candidate\.intervention\.id === selection/);
+  assert.match(scene, /\?\? candidates\[0\]/);
 });
 
-test('la cible tactile est plus large que la carrosserie', async () => {
-  const vehicule = await read(VEHICULE);
+test('la cible tactile couvre tout le poste, pas seulement la voiture', async () => {
+  const scene = await read(SCENE);
 
-  // Viser un pare-brise au doigt sur un écran de téléphone est illusoire.
-  assert.match(vehicule, /visible=\{false\}/);
-  assert.match(vehicule, /boxGeometry args=\{\[2\.4, 1\.8, 4\.9\]\}/);
+  // Viser un pare-brise au doigt sur un écran de téléphone est illusoire :
+  // chaque rectangle interactif couvre une part importante de la scène.
+  assert.match(scene, /function PosteInteractif/);
+  assert.match(scene, /h-\[39%\] w-\[25%\]/);
+  assert.match(scene, /aria-label=\{intervention/);
 });
 
 // ------------------------------------------------------------- le tactile
 
-test('le doigt pilote la caméra, pas le défilement', async () => {
-  const scene = await read(SCENE);
-  const css = await read('src/index.css');
-
-  // OrbitControls repose `touch-action` en style en ligne à chaque
-  // démontage : seul `!important` dans la feuille tient.
-  assert.match(scene, /className="atelier-3d"/);
-  assert.match(css, /\.atelier-3d canvas \{\s*\n\s*touch-action: none !important;/);
-});
-
-test('une perte de contexte WebGL se dit et se rattrape', async () => {
+test('le poste actif se centre automatiquement sur téléphone', async () => {
   const scene = await read(SCENE);
 
-  // Onglet mis en veille, mémoire graphique reprise : sans cela la scène se
-  // figeait sur une image grise et l'atelier paraissait vide.
-  assert.match(scene, /addEventListener\('webglcontextlost'/);
-  assert.match(scene, /evenement\.preventDefault\(\)/);
-  assert.match(scene, /Relancer la vue 3D/);
-  assert.match(scene, /restent consultables en vue liste/);
+  assert.match(scene, /overflow-x-auto/);
+  assert.match(scene, /scrollIntoView\(\{ behavior: 'smooth', block: 'nearest', inline: 'center' \}\)/);
+  assert.match(scene, /min-w-\[720px\]/);
 });
 
-// ------------------------------------------------------- lisible et sans 3D
+test('le décor garde un fond de secours pendant son chargement', async () => {
+  const scene = await read(SCENE);
+
+  assert.match(scene, /atelier-realiste-v1\.webp/);
+  assert.match(scene, /bg-gradient-to-br from-slate-100 via-slate-200 to-emerald-100/);
+  assert.match(scene, /loading="eager"/);
+  assert.match(scene, /decoding="async"/);
+});
+
+// ------------------------------------------------ lisible et sans texte peint
 
 test('rien de ce qui se lit n’est dessiné dans la scène', async () => {
   const scene = await read(SCENE);
   const panneau = await read(PANNEAU);
 
-  // Un libellé en 3D se lit mal de biais, ne se sélectionne pas, et n'existe
-  // pas pour un lecteur d'écran.
-  assert.doesNotMatch(scene, /<Text|<Html|troika/);
+  // Le décor ne porte aucune donnée métier : les libellés restent des boutons
+  // HTML lisibles et utilisables au clavier.
+  assert.doesNotMatch(scene, /<Canvas|<Text|<Html|troika/);
+  assert.match(scene, /<button/);
+  assert.match(scene, /aria-pressed=\{selectionne\}/);
   // Le panneau, lui, est du HTML avec une liste de définitions.
   assert.match(panneau, /<dl/);
   assert.match(panneau, /aria-live="polite"/);
 });
 
-test('la même information existe sans la 3D', async () => {
+test('la même information existe sans le décor', async () => {
   const page = await read(PAGE);
 
   // Pas un repli dégradé : les mêmes cartes que l'écran des interventions,
