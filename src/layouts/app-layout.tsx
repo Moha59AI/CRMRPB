@@ -15,6 +15,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { BandeauZoneTest, BoutonZoneTest } from '@/features/zone-test/bandeau-zone-test';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -134,6 +135,12 @@ export function AppLayout() {
           <div className="mb-1">
             {!estMobile && <ClocheNotifications reduit={!expanded} />}
           </div>
+          {/* N'apparait que pour les comptes de `acces_zone_test`. Le
+              masquage ne protege rien : les fonctions SQL verifient
+              l'autorisation chacune de leur cote. */}
+          <div className="mb-1">
+            <BoutonZoneTest reduit={!expanded} />
+          </div>
           <div className="mb-1">
             <SelecteurTheme reduit={!expanded} />
           </div>
@@ -173,6 +180,9 @@ export function AppLayout() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Avant l'en-tete et avant tout contenu : on doit savoir ou l'on
+            travaille sans avoir a le chercher. */}
+        <BandeauZoneTest />
         {/* En-tete telephone : le menu complet vit dans un tiroir plutot que
             dans une barre du bas. Onze entrees reparties en cinq sections n'y
             tiendraient pas, et les tronquer ferait perdre le classement. */}

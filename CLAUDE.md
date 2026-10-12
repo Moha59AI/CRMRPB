@@ -134,6 +134,14 @@ workflow_runs, workflows, workspaces, google_ads_daily_metrics,
 google_ads_search_terms_daily.
 Le référentiel `postal_code_cities` complète cette liste.
 
+**Zone de test.** `acces_zone_test` liste les comptes autorisés à basculer
+dans l'espace de données fictives, et `workspaces.est_zone_test` marque cet
+espace. Les données de test ne se mélangent jamais aux données réelles : le
+cloisonnement est celui de `workspace_id`, que toutes les politiques RLS
+appliquent déjà. `seed_zone_test()`, `basculer_zone_test()` et
+`vider_zone_test()` vérifient l'autorisation chacune de leur côté — le rôle
+`admin` ne suffit pas. Toute suppression ne peut viser qu'un espace marqué.
+
 **Toutes les tables ont RLS activé.** Ne jamais créer de table sans RLS.
 
 **Attention aux contraintes CHECK redéfinies.** La migration
