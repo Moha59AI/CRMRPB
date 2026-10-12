@@ -229,6 +229,33 @@ export async function storeInboundEmail(
   if (insertError?.code === '23505') return 'duplicate';
   if (insertError) throw new Error(insertError.message);
 
+  if (correspondant.type === 'fournisseur') {
+    const supplierPdfs = email.attachments.filter((attachment) => (
+      attachment.content_type?.toLowerCase() === 'application/pdf'
+      || attachment.filename.toLowerCase().endsWith('.pdf')
+    ));
+    if (supplierPdfs.length > 0) {
+      const { error: queueError } = await admin.from('supplier_document_jobs').upsert(
+        supplierPdfs.map((attachment) => ({
+          workspace_id: email.workspaceId,
+          communication_id: email.id,
+          attachment_id: attachment.id,
+          storage_path: attachment.storage_path,
+          filename: attachment.filename,
+          content_type: attachment.content_type,
+          supplier_hint: correspondant.nom,
+        })),
+        {
+          onConflict: 'workspace_id,communication_id,attachment_id',
+          ignoreDuplicates: true,
+        },
+      );
+      // Une migration non encore appliquée ne doit jamais empêcher la réception
+      // de l'email. Le rattrapage SQL remettra ces PDF dans la file ensuite.
+      if (queueError) console.warn('Mise en file du PDF fournisseur impossible', queueError.message);
+    }
+  }
+
   const { data: recipients, error: recipientsError } = await admin
     .from('profiles')
     .select('id')
@@ -237,14 +264,15 @@ export async function storeInboundEmail(
   if (recipientsError) throw new Error(recipientsError.message);
 
   const link = leadId ? `/interventions/${leadId}` : contactId ? `/clients/${contactId}` : '/emails';
-  const notificationTitle = correspondant.type === 'assureur'
-    ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-    : correspondant.type === 'expert'
-      ? `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-      : correspondant.type === 'fournisseur'
-        ? `Email fournisseur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
-        : 'Nouvel email reçu';
-  if (email.notify && (recipients ?? []).length > 0) {
+  // La boîte continue de synchroniser tous les messages, mais une alerte ne
+  // doit interrompre l'équipe que pour un correspondant métier prioritaire.
+  // Fournisseurs, clients et expéditeurs ordinaires restent consultables dans
+  // le module Mail sans créer de notification CRM ou push mobile.
+  const correspondantPrioritaire = correspondant.type === 'assureur' || correspondant.type === 'expert';
+  if (email.notify && correspondantPrioritaire && (recipients ?? []).length > 0) {
+    const notificationTitle = correspondant.type === 'assureur'
+      ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`
+      : `Email expert${correspondant.nom ? ` · ${correspondant.nom}` : ''}`;
     const { error: notificationError } = await admin.from('notifications').insert(
       (recipients ?? []).map((profile) => ({
         workspace_id: email.workspaceId,

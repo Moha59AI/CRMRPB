@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Clock3, FileText, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { ClientDocumentActivityTimeline } from '@/features/client-documents/client-document-activity-timeline';
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { LIBELLE_VITRAGE, formatDateTime } from '@/features/leads/lead-shared';
 import {
@@ -14,6 +15,8 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
     queryKey: ['client-document-history', leadIds],
     queryFn: () => fetchClientDocumentHistory(leadIds),
     enabled: leadIds.length > 0,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   if (history.isLoading) {
@@ -85,6 +88,13 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
                 );
               })}
             </div>
+
+            <ClientDocumentActivityTimeline
+              activity={request.activity}
+              lastOpenedAt={request.last_opened_at}
+              items={request.items}
+              className="border-t border-border px-4 py-4"
+            />
           </section>
         );
       })}

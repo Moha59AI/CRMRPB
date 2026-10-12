@@ -32,10 +32,34 @@ test('un nom de client ne peut pas casser le mail', async () => {
 });
 
 test('la notification dans le CRM nomme aussi le client', async () => {
-  const fonction = await read(FONCTION);
+  const migration = await read('supabase/migrations/20261007100000_notifier_depot_documents_client.sql');
 
-  assert.ok(fonction.includes('title: `Documents reçus — ${nomClient}`'));
-  assert.ok(fonction.includes("|| 'Client sans nom'"));
+  assert.match(migration, /concat\('Document reçu — ', v_nom_client\)/);
+  assert.match(migration, /coalesce\(v_nom_client, 'Client sans nom'\)/);
+  assert.match(migration, /new\.label/);
+  assert.match(migration, /\?tab=documents/);
+  assert.match(migration, /profil\.role in \('admin', 'manager', 'advisor'\)/);
+});
+
+test('chaque dépôt déclenche l’alerte sans dépendre de l’email', async () => {
+  const fonction = await read(FONCTION);
+  const migration = await read('supabase/migrations/20261007100000_notifier_depot_documents_client.sql');
+
+  assert.match(migration, /after update of status, uploaded_at on public\.client_document_items/);
+  assert.match(migration, /new\.status = 'uploaded'/);
+  assert.match(migration, /old\.uploaded_at is distinct from new\.uploaded_at/);
+
+  const majLead = fonction.indexOf("await admin.from('leads').update");
+  const email = fonction.indexOf('await notifyDocumentDeposit', majLead);
+  assert.ok(majLead >= 0 && email > majLead, 'l’email ne doit plus bloquer le rattachement en base');
+  assert.match(fonction, /catch \(notificationError\)/);
+});
+
+test('la notification ouvre directement les documents de la fiche', async () => {
+  const fiche = await read('src/features/dossier/dossier-modal.tsx');
+
+  assert.match(fiche, /new URLSearchParams\(location\.search\)\.get\('tab'\)/);
+  assert.match(fiche, /if \(ongletDemande\) setOnglet\(ongletDemande\)/);
 });
 
 test('le push sur écran verrouillé ne nomme toujours personne', async () => {

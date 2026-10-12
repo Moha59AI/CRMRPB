@@ -15,7 +15,9 @@
  * reseau manque au chargement.
  */
 
-const VERSION = 'v3';
+// v4 invalide notamment les caches qui auraient memorise index.html sous le
+// nom d'un fichier CSS/JS pendant un ancien deploiement non atomique.
+const VERSION = 'v4';
 const COQUILLE = `coquille-${VERSION}`;
 
 /*
@@ -50,6 +52,16 @@ function donneesVivantes(url) {
     || url.hostname.endsWith('.supabase.co')
     || url.hostname.endsWith('.supabase.in')
   );
+}
+
+/**
+ * Apache renvoyait autrefois index.html avec un statut 200 quand un asset
+ * empreinte n'etait pas encore arrive sur le serveur. Ne jamais conserver
+ * cette reponse HTML sous l'URL d'un CSS, d'un JS ou d'une image.
+ */
+function reponseRessourceValide(reponse) {
+  const type = (reponse.headers.get('Content-Type') || '').toLowerCase();
+  return !type.includes('text/html');
 }
 
 self.addEventListener('fetch', (e) => {
@@ -98,10 +110,17 @@ self.addEventListener('fetch', (e) => {
   e.respondWith((async () => {
     const cache = await caches.open(COQUILLE);
     const enCache = await cache.match(req);
-    if (enCache) return enCache;
+    if (enCache && reponseRessourceValide(enCache)) return enCache;
+    if (enCache) await cache.delete(req);
 
     const reponse = await fetch(req);
-    if (reponse.ok && reponse.type === 'basic') cache.put(req, reponse.clone());
+    if (
+      reponse.ok
+      && reponse.type === 'basic'
+      && reponseRessourceValide(reponse)
+    ) {
+      cache.put(req, reponse.clone());
+    }
     return reponse;
   })());
 });

@@ -8,12 +8,13 @@
 // cherche en descendant la liste ; un oeil qui doit la retrouver a chaque
 // bloc ne lit plus, il dechiffre.
 
-import { ChevronRight, MapPin, Navigation, Phone, TriangleAlert } from 'lucide-react';
+import { Car, ChevronRight, MapPin, Navigation, Phone, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { lienItineraire } from '@/services/adresse-service';
 import { LIBELLE_STATUT_RDV, PASTILLE_STATUT_RDV } from '@/features/calendar/statut-rendez-vous';
 import type { Intervention } from '@/services/interventions-service';
+import { InterventionWeather } from './intervention-weather';
 
 export interface InterventionCarteListeProps {
   intervention: Intervention;
@@ -93,6 +94,16 @@ export function InterventionCarteListe({
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{i.titre}</span>
           )}
 
+          {(i.vehicule || i.immatriculation) && (
+            <span className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Car className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+              <span className="truncate">
+                {i.vehicule || 'Véhicule'}
+                {i.immatriculation ? ` · ${i.immatriculation}` : ''}
+              </span>
+            </span>
+          )}
+
 
           {i.adresse ? (
             <span className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -110,6 +121,18 @@ export function InterventionCarteListe({
             <span className="mt-1 block text-[11px] text-due">
               Point au centre de la commune : vérifiez l’adresse avant de partir.
             </span>
+          )}
+
+          {!terminee && !annulee && (
+            <InterventionWeather
+              compact
+              startTime={i.debut}
+              ville={i.ville}
+              codePostal={i.codePostal}
+              citycode={i.citycode}
+              latitude={i.latitude}
+              longitude={i.longitude}
+            />
           )}
         </span>
 

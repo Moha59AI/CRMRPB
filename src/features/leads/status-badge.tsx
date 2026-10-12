@@ -5,13 +5,15 @@
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { statusLabels, statusStyles } from './lead-shared';
+import { statusLabels } from './lead-shared';
+import { leadStatusColorStyle } from './lead-color-settings';
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   return (
     <Badge
       variant="outline"
-      className={cn('rounded-full text-[10px] font-medium', statusStyles[status] ?? 'bg-muted text-muted-foreground border-border', className)}
+      className={cn('lead-status-badge rounded-full text-[10px] font-semibold', className)}
+      style={leadStatusColorStyle(status)}
     >
       {statusLabels[status] ?? status}
     </Badge>

@@ -12,7 +12,7 @@ export const roleDescriptions: Record<UserRole, string> = {
   admin: 'Accès complet à toutes les fonctionnalités et paramètres',
   manager: 'Gestion des leads, dossiers et équipe',
   advisor: 'Gestion des leads et contacts',
-  technician: 'Accès aux dossiers et agenda',
+  technician: 'Accès au planning partagé uniquement',
   accountant: 'Accès à la facturation',
 };
 

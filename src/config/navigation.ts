@@ -16,9 +16,12 @@ import {
   BrainCircuit,
   Files,
   WalletCards,
+  PackageOpen,
   Mail,
   FileLock2,
+  Link2,
   Wrench,
+  Palette,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -153,6 +156,18 @@ export const navSections: NavSection[] = [
         description: 'Devis, factures et paiements',
       },
       {
+        label: 'Fournisseurs',
+        path: '/finance/fournisseurs',
+        icon: PackageOpen,
+        description: 'Achats, factures et avoirs fournisseurs',
+      },
+      {
+        label: 'Rapprochement',
+        path: '/finance/rapprochement',
+        icon: Link2,
+        description: 'Relier achats, factures, clients et marges',
+      },
+      {
         label: 'Masquer les prix',
         path: '/outils/masquer-prix',
         icon: FileLock2,
@@ -223,6 +238,12 @@ export const settingsNavSections: NavSection[] = [
         path: '/settings/relances',
         icon: BellRing,
         description: 'Quand un lead revient dans la file, et quand il en sort',
+      },
+      {
+        label: 'Couleurs des leads',
+        path: '/settings/couleurs-leads',
+        icon: Palette,
+        description: 'Personnaliser la couleur de chaque étape du pipeline',
       },
       {
         label: 'Documents clients',

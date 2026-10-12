@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Shield, UserPlus, Mail, Trash2, Clock } from 'lucide-react';
+import {
+  Users, Shield, UserPlus, Mail, Trash2, Clock, RefreshCw, Loader2,
+  Pencil, Check, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,11 +15,15 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
 import { fetchProfiles } from '@/services/profiles-service';
-import { fetchInvitations, annulerInvitation } from '@/services/invitations-service';
-import { changerRoleMembre, retirerMembre } from '@/services/admin-service';
+import {
+  fetchInvitations, creerInvitation, renvoyerInvitationMembre,
+  annulerInvitation, type Invitation,
+} from '@/services/invitations-service';
+import { changerRoleMembre, renommerMembre, retirerMembre } from '@/services/admin-service';
 import { roleLabels, roleDescriptions } from '@/config/roles';
 import { useAuth } from '@/features/auth/auth-context';
 import { DialogueInvitation } from './components/dialogue-invitation';
@@ -39,6 +46,11 @@ export function UsersPage() {
 
   const [inviterOuvert, setInviterOuvert] = useState(false);
   const [aRetirer, setARetirer] = useState<Profile | null>(null);
+  const [editionNom, setEditionNom] = useState<{
+    id: string;
+    prenom: string;
+    nom: string;
+  } | null>(null);
 
   const { data: profiles, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['profiles'],
@@ -92,6 +104,39 @@ export function UsersPage() {
     onError: (e: Error) => toast.error("L'annulation a échoué", { description: e.message }),
   });
 
+  const enregistrerNom = useMutation({
+    mutationFn: (valeur: { id: string; prenom: string; nom: string }) =>
+      renommerMembre(valeur.id, valeur.prenom, valeur.nom),
+    onSuccess: () => {
+      rafraichir();
+      setEditionNom(null);
+      toast.success('Nom de l’utilisateur enregistré');
+    },
+    onError: (e: Error) => toast.error('Le nom n’a pas été enregistré', { description: e.message }),
+  });
+
+  const renvoyer = useMutation({
+    mutationFn: (invitation: Invitation) => creerInvitation(invitation.email, invitation.role),
+    onSuccess: (_resultat, invitation) => {
+      rafraichir();
+      toast.success(`Invitation renvoyée à ${invitation.email}`, {
+        description: 'IONOS a accepté le message avec un nouveau lien sécurisé.',
+      });
+    },
+    onError: (e: Error) => toast.error('Le renvoi a échoué', { description: e.message }),
+  });
+
+  const renvoyerMembre = useMutation({
+    mutationFn: (membre: Profile) => renvoyerInvitationMembre(membre.id),
+    onSuccess: (resultat) => {
+      rafraichir();
+      toast.success(`Invitation renvoyée à ${resultat.email}`, {
+        description: 'IONOS a accepté le message avec un nouveau lien sécurisé.',
+      });
+    },
+    onError: (e: Error) => toast.error('Le renvoi a échoué', { description: e.message }),
+  });
+
   const enAttente = (invitations ?? []).filter((i) => !i.accepted_at);
   const nbAdmins = (profiles ?? []).filter((p) => p.role === 'admin').length;
 
@@ -136,7 +181,7 @@ export function UsersPage() {
                   return (
                     <div
                       key={inv.id}
-                      className="flex items-center justify-between gap-4 px-6 py-3"
+                      className="flex flex-col items-stretch gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
@@ -150,7 +195,7 @@ export function UsersPage() {
                         </p>
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-3">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                         <Badge className={`rounded-full text-[10px] ${roleBadgeClass[inv.role]}`}>
                           {roleLabels[inv.role]}
                         </Badge>
@@ -163,10 +208,25 @@ export function UsersPage() {
                           </Badge>
                         )}
                         <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-full px-3"
+                          onClick={() => renvoyer.mutate(inv)}
+                          disabled={renvoyer.isPending || annuler.isPending}
+                          aria-label={`Renvoyer l'invitation à ${inv.email}`}
+                        >
+                          {renvoyer.isPending && renvoyer.variables?.id === inv.id ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Renvoyer
+                        </Button>
+                        <Button
                           variant="ghost" size="sm"
                           className="rounded-full text-muted-foreground hover:text-destructive"
                           onClick={() => annuler.mutate(inv.id)}
-                          disabled={annuler.isPending}
+                          disabled={annuler.isPending || renvoyer.isPending}
                         >
                           Annuler
                         </Button>
@@ -232,6 +292,7 @@ export function UsersPage() {
                     const estMoi = profile?.id === p.id;
                     const nom =
                       [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Sans nom';
+                    const estEnEdition = editionNom?.id === p.id;
                     // Retirer le dernier administrateur verrouillerait l'espace.
                     // La base refuse de toute facon ; on evite juste de le proposer.
                     const dernierAdmin = p.role === 'admin' && nbAdmins <= 1;
@@ -242,17 +303,93 @@ export function UsersPage() {
                         className={estMoi ? 'bg-primary/5 hover:bg-primary/5' : 'hover:bg-muted/40'}
                       >
                         <TableCell className="px-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground">{nom}</span>
-                            {estMoi && (
-                              <Badge
-                                variant="outline"
-                                className="rounded-full text-[10px] font-normal text-muted-foreground"
+                          {estEnEdition && editionNom ? (
+                            <form
+                              className="flex min-w-[310px] items-center gap-2"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                if (!editionNom.prenom.trim() && !editionNom.nom.trim()) {
+                                  toast.error('Renseignez au moins un prénom ou un nom');
+                                  return;
+                                }
+                                enregistrerNom.mutate(editionNom);
+                              }}
+                            >
+                              <Input
+                                value={editionNom.prenom}
+                                onChange={(event) => setEditionNom({
+                                  ...editionNom,
+                                  prenom: event.target.value,
+                                })}
+                                className="h-8 w-32 rounded-lg text-xs"
+                                placeholder="Prénom"
+                                aria-label={`Prénom de ${nom}`}
+                                maxLength={80}
+                                autoFocus
+                              />
+                              <Input
+                                value={editionNom.nom}
+                                onChange={(event) => setEditionNom({
+                                  ...editionNom,
+                                  nom: event.target.value,
+                                })}
+                                className="h-8 w-32 rounded-lg text-xs"
+                                placeholder="Nom"
+                                aria-label={`Nom de ${nom}`}
+                                maxLength={80}
+                              />
+                              <Button
+                                type="submit"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 rounded-full"
+                                disabled={enregistrerNom.isPending}
+                                aria-label="Enregistrer le nom"
                               >
-                                Vous
-                              </Badge>
-                            )}
-                          </div>
+                                {enregistrerNom.isPending
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Check className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 rounded-full"
+                                onClick={() => setEditionNom(null)}
+                                disabled={enregistrerNom.isPending}
+                                aria-label="Annuler la modification du nom"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">{nom}</span>
+                              {estMoi && (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full text-[10px] font-normal text-muted-foreground"
+                                >
+                                  Vous
+                                </Badge>
+                              )}
+                              {estAdmin && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 rounded-full text-muted-foreground"
+                                  onClick={() => setEditionNom({
+                                    id: p.id,
+                                    prenom: p.first_name ?? '',
+                                    nom: p.last_name ?? '',
+                                  })}
+                                  aria-label={`Modifier le nom de ${nom}`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
 
                         <TableCell className="px-4">
@@ -300,15 +437,35 @@ export function UsersPage() {
 
                         {estAdmin && (
                           <TableCell className="px-4 text-right">
-                            {!estMoi && !dernierAdmin && (
-                              <Button
-                                variant="ghost" size="sm"
-                                className="rounded-full text-muted-foreground hover:text-destructive"
-                                onClick={() => setARetirer(p)}
-                                aria-label={`Retirer l'accès de ${nom}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                            {!estMoi && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-full px-3"
+                                  onClick={() => renvoyerMembre.mutate(p)}
+                                  disabled={renvoyerMembre.isPending}
+                                  aria-label={`Renvoyer l'invitation à ${nom}`}
+                                >
+                                  {renvoyerMembre.isPending
+                                    && renvoyerMembre.variables?.id === p.id ? (
+                                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                    )}
+                                  Renvoyer
+                                </Button>
+                                {!dernierAdmin && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="rounded-full text-muted-foreground hover:text-destructive"
+                                    onClick={() => setARetirer(p)}
+                                    aria-label={`Retirer l'accès de ${nom}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                         )}

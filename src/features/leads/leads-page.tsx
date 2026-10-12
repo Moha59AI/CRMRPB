@@ -53,10 +53,11 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, statusStyles, leadJourneyStages, leadStageForKey,
+  statusLabels, leadJourneyStages, leadStatusFilterOptions, leadStatusesForFilter,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
   formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
+import { leadStageColorStyle, leadStatusColorStyle } from './lead-color-settings';
 import { StatusBadge } from './status-badge';
 import { SourceBadge } from './source-badge';
 import { BulkLeadActions } from './bulk-lead-actions';
@@ -183,7 +184,7 @@ export function LeadsPage() {
     queryFn: () => fetchLeads({
       search,
       source: sourceFilter,
-      statuses: leadStageForKey(statusFilter)?.statuses,
+      statuses: leadStatusesForFilter(statusFilter),
       assignedUserId: advisorFilter,
       archives: voirArchives,
       plusVieuxQueJours: voirAArchiver ? 2 : undefined,
@@ -434,8 +435,8 @@ export function LeadsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous statuts</SelectItem>
-            {leadJourneyStages.map((stage) => (
-              <SelectItem key={stage.key} value={stage.key}>{stage.label}</SelectItem>
+            {leadStatusFilterOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -747,34 +748,28 @@ function libelleAge(date: string): string {
 }
 
 /**
- * Donne une lecture immediate des deux etats qui demandent le plus de
- * contraste dans une liste dense. La selection reste prioritaire : une fiche
- * cochee ne doit jamais se confondre avec sa couleur de statut.
+ * Chaque etape porte la meme couleur dans le tableau, la liste mobile et le
+ * pipeline. Le liseré reste visible meme sur un ecran peu contraste. La
+ * selection garde la priorite pour ne jamais confondre une fiche cochee avec
+ * sa couleur metier.
  */
 function couleurLigneLead(status: LeadStatus, selectionnee: boolean): string {
-  if (selectionnee) return 'bg-primary/[0.08] hover:bg-primary/[0.12]';
-  if (status === 'nrp') return 'bg-destructive/[0.08] hover:bg-destructive/[0.12]';
-  if (status === 'lost') return 'bg-foreground/[0.045] hover:bg-foreground/[0.075]';
-  return 'hover:bg-muted/40';
+  if (selectionnee) return 'border-l-4 border-primary bg-primary/[0.10] hover:bg-primary/[0.14]';
+  void status;
+  return 'lead-status-row';
 }
 
 /** Meme lecture visuelle dans le pipeline que dans les listes de leads. */
 function couleurEntetePipeline(stage: string, survole: boolean): string {
   if (survole) return 'border-primary/40 bg-primary/10';
-  if (stage === 'nrp') return 'border-destructive/20 bg-destructive/[0.08]';
-  if (stage === 'perdu') return 'border-foreground/15 bg-foreground/[0.055]';
-  return 'border-transparent bg-surface';
+  void stage;
+  return 'lead-stage-header';
 }
 
 function couleurCartePipeline(status: LeadStatus, selectionnee: boolean): string {
-  if (selectionnee) return 'border-primary/30 bg-primary/[0.045] ring-1 ring-primary/15';
-  if (status === 'nrp') {
-    return 'border-destructive/25 bg-destructive/[0.08] hover:border-destructive/35 hover:bg-destructive/[0.12]';
-  }
-  if (status === 'lost') {
-    return 'border-foreground/15 bg-foreground/[0.045] hover:border-foreground/25 hover:bg-foreground/[0.075]';
-  }
-  return 'border-border bg-card hover:border-border-strong';
+  if (selectionnee) return 'border-primary bg-primary/[0.10] ring-2 ring-primary/25';
+  void status;
+  return 'lead-status-card';
 }
 
 // ============ VIEW TOGGLE BUTTON ============
@@ -831,6 +826,7 @@ function ListeMobile({
         {leads.map((lead) => (
           <li
             key={lead.id}
+            style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
               'flex items-stretch transition-colors',
               couleurLigneLead(lead.status, selection.has(lead.id)),
@@ -942,6 +938,7 @@ function LeadsTable({
         return (
           <TableRow
             key={lead.id}
+            style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
               'cursor-pointer',
               couleurLigneLead(lead.status, selection.has(lead.id)),
@@ -1008,7 +1005,10 @@ function LeadsTable({
                         leadStageForStatus(lead.status).targetStatus === opt.value && 'font-semibold',
                       )}
                     >
-                      <span className={cn('mr-2 h-2 w-2 rounded-full', statusStyles[opt.value]?.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-muted')} />
+                      <span
+                        className="lead-status-dot mr-2 h-2 w-2 rounded-full"
+                        style={leadStatusColorStyle(opt.value)}
+                      />
                       {opt.label}
                     </DropdownMenuItem>
                   ))}
@@ -1093,6 +1093,7 @@ function KanbanBoard({
                   forment un seul bloc : on lit l'etape, puis ce qu'elle
                   attend, sans chercher le lien. */}
               <div
+                style={dragOverColumn === stage.key ? undefined : leadStageColorStyle(stage.key)}
                 className={cn(
                   'mb-2 rounded-xl border px-3 py-2.5 transition-colors',
                   couleurEntetePipeline(stage.key, dragOverColumn === stage.key),
@@ -1162,6 +1163,7 @@ export function KanbanCard({
   return (
     <div
       draggable
+      style={selectionne ? undefined : leadStatusColorStyle(lead.status)}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', lead.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -1259,7 +1261,11 @@ export function CompactList({
         {leads.map((lead) => (
           <div
             key={lead.id}
-            className={cn('flex items-stretch', selectionActive.has(lead.id) && 'bg-primary/[0.045]')}
+            style={selectionActive.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
+            className={cn(
+              'flex items-stretch transition-colors',
+              couleurLigneLead(lead.status, selectionActive.has(lead.id)),
+            )}
           >
             {onSelectionChange && (
               <div className="flex w-12 shrink-0 items-center justify-center">
@@ -1273,7 +1279,7 @@ export function CompactList({
             <button
               type="button"
               onClick={() => onRowClick(lead)}
-              className="group flex min-w-0 flex-1 items-center gap-3 px-6 py-2.5 text-left transition-colors hover:bg-surface"
+              className="group flex min-w-0 flex-1 items-center gap-3 px-6 py-2.5 text-left"
             >
               <span
                 aria-hidden

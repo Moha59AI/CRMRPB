@@ -32,19 +32,6 @@ export const sourceLabels: Record<string, string> = {
   import: 'Import',
 };
 
-export const statusStyles: Record<string, string> = {
-  new: 'bg-sky-50 text-sky-700 border-sky-200',
-  to_call: 'bg-sky-50 text-sky-700 border-sky-200',
-  calling: 'bg-sky-50 text-sky-700 border-sky-200',
-  nrp: 'bg-red-50 text-red-700 border-red-200',
-  interested: 'bg-amber-50 text-amber-700 border-amber-200',
-  documents_requested: 'bg-slate-100 text-slate-600 border-slate-200',
-  documents_received: 'bg-slate-100 text-slate-600 border-slate-200',
-  appointment_scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
-  lost: 'bg-red-50 text-red-700 border-red-200',
-  converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-};
-
 export type LeadJourneyStageKey =
   | 'nouveau'
   | 'nrp'
@@ -129,6 +116,43 @@ export function leadStageForStatus(status: LeadStatus): LeadJourneyStage {
 
 export function leadStageForKey(key: string): LeadJourneyStage | undefined {
   return leadJourneyStages.find((stage) => stage.key === key);
+}
+
+/**
+ * Les colonnes du pipeline regroupent encore « pièces attendues » et
+ * « pièces reçues » dans la même étape métier. Le filtre du tableau doit en
+ * revanche rester exact : demander les dossiers en attente ne doit jamais
+ * faire remonter ceux dont les documents sont déjà arrivés.
+ */
+export interface LeadStatusFilterOption {
+  value: string;
+  label: string;
+  statuses: readonly LeadStatus[];
+}
+
+export const leadStatusFilterOptions: readonly LeadStatusFilterOption[] =
+  leadJourneyStages.reduce<LeadStatusFilterOption[]>((options, stage) => {
+    if (stage.key === 'documents') {
+      options.push(
+        {
+          value: 'documents',
+          label: 'Attente documents',
+          statuses: ['documents_requested'],
+        },
+        {
+          value: 'documents_received',
+          label: 'Documents reçus',
+          statuses: ['documents_received'],
+        },
+      );
+    } else {
+      options.push({ value: stage.key, label: stage.label, statuses: stage.statuses });
+    }
+    return options;
+  }, []);
+
+export function leadStatusesForFilter(key: string): readonly LeadStatus[] | undefined {
+  return leadStatusFilterOptions.find((option) => option.value === key)?.statuses;
 }
 
 export function leadStageDescription(status: LeadStatus): string {

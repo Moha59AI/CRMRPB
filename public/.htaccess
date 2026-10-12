@@ -9,6 +9,12 @@ Options -Indexes
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
+
+  # Un asset empreinte absent est une vraie erreur 404. Le renvoyer vers
+  # index.html ferait refuser le CSS/JS par le navigateur et pourrait polluer
+  # le cache du service worker avec du HTML.
+  RewriteRule ^assets/ - [R=404,L]
+
   RewriteRule ^ index.html [L]
 </IfModule>
 

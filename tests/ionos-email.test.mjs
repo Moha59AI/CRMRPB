@@ -56,7 +56,7 @@ test('un email accepte par SMTP est copie dans les Envoyes IONOS sans risque de 
   assert.match(types, /email_sent_copy_saved_at: string \| null/);
 });
 
-test('la synchronisation IMAP rattache les messages et notifie les utilisateurs', async () => {
+test('la synchronisation IMAP rattache les messages et alerte seulement pour experts et assureurs', async () => {
   const edge = await read('supabase/functions/ionos-mail-sync/index.ts');
   const ingest = await read('supabase/functions/_shared/inbound-email.ts');
   const config = await read('supabase/config.toml');
@@ -79,7 +79,9 @@ test('la synchronisation IMAP rattache les messages et notifie les utilisateurs'
   assert.match(ingest, /vehicle_registration/);
   assert.match(ingest, /Email assureur/);
   assert.match(ingest, /Email expert/);
-  assert.match(ingest, /Email fournisseur/);
+  assert.match(ingest, /correspondantPrioritaire/);
+  assert.match(ingest, /correspondant\.type === 'assureur' \|\| correspondant\.type === 'expert'/);
+  assert.doesNotMatch(ingest, /Email fournisseur/);
   assert.match(config, /\[functions\.email-send\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-email-secret\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.ionos-mail-sync\][\s\S]*verify_jwt = false/);

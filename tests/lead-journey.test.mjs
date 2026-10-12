@@ -29,6 +29,22 @@ test('les statuts techniques restent regroupes sans casser les cadences', async 
   assert.match(service, /query\.in\('status', \[\.\.\.params\.statuses\]\)/);
 });
 
+test('le filtre attente documents exclut les dossiers dont les pieces sont recues', async () => {
+  const shared = await read('src/features/leads/lead-shared.ts');
+  const page = await read('src/features/leads/leads-page.tsx');
+
+  assert.match(
+    shared,
+    /value: 'documents',[\s\S]*?statuses: \['documents_requested'\]/,
+  );
+  assert.match(
+    shared,
+    /value: 'documents_received',[\s\S]*?statuses: \['documents_received'\]/,
+  );
+  assert.match(page, /statuses: leadStatusesForFilter\(statusFilter\)/);
+  assert.match(page, /leadStatusFilterOptions\.map\(\(option\) =>/);
+});
+
 test('perdu et cloture demandent confirmation et le succes attend la base', async () => {
   const pipeline = await read('src/features/leads/lead-pipeline.tsx');
   const page = await read('src/features/leads/leads-page.tsx');

@@ -40,6 +40,8 @@ import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/features/auth/auth-context';
+import { supabase } from '@/lib/supabase';
 import { PageHeader } from '@/components/PageHeader';
 import { CarteInterventions } from './carte-interventions';
 import { GoogleCalendarControl } from './google-calendar-control';
@@ -94,6 +96,7 @@ import {
 import { lienItineraire } from '@/services/adresse-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
+import { InterventionWeather } from '@/features/interventions/intervention-weather';
 import type {
   Appointment,
   AppointmentStatus,
@@ -298,7 +301,9 @@ function AppointmentBlock({
   const { appt, top, height, colIndex, colCount } = placed;
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
   const isCancelled = appt.status === 'cancelled';
-  const { adresse: adresseBloc, offre: offreBloc } = clientDuRendezVous(appt as AppointmentAvecClient);
+  const {
+    adresse: adresseBloc, offre: offreBloc, vehicule: vehiculeBloc,
+  } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -330,7 +335,13 @@ function AppointmentBlock({
           <span className="truncate">{adresseBloc}</span>
         </div>
       )}
-      {height > 80 && offreBloc && (
+      {height > 80 && vehiculeBloc && (
+        <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium opacity-90">
+          <Car className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{vehiculeBloc}</span>
+        </div>
+      )}
+      {height > 104 && offreBloc && (
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium opacity-90">
           <Gift className="h-2.5 w-2.5 shrink-0" />
           <span className="truncate">{offreBloc}</span>
@@ -508,7 +519,7 @@ function RendezVousEnLigne({
   onApptClick: (appt: Appointment) => void;
 }) {
   const Icon = TYPE_ICONS[appt.type] ?? CalendarIcon;
-  const { adresse } = clientDuRendezVous(appt as AppointmentAvecClient);
+  const { adresse, vehicule, immatriculation } = clientDuRendezVous(appt as AppointmentAvecClient);
 
   return (
     <button
@@ -538,6 +549,14 @@ function RendezVousEnLigne({
             </>
           )}
         </span>
+        {(vehicule || immatriculation) && (
+          <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold">
+            <Car className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {vehicule || 'Véhicule'}{immatriculation ? ` · ${immatriculation}` : ''}
+            </span>
+          </span>
+        )}
       </span>
     </button>
   );
@@ -768,8 +787,14 @@ export function MonthView({
 // ---------------------------------------------------------------------------
 
 function OffreCommerciale({
-  leadId, appointmentId, offre, onEnregistree,
-}: { leadId: string | null; appointmentId: string; offre: string | null; onEnregistree: () => void }) {
+  leadId, appointmentId, offre, onEnregistree, modifiable,
+}: {
+  leadId: string | null;
+  appointmentId: string;
+  offre: string | null;
+  onEnregistree: () => void;
+  modifiable: boolean;
+}) {
   const [edition, setEdition] = useState(false);
   const [saisie, setSaisie] = useState(offre ?? '');
 
@@ -809,9 +834,11 @@ function OffreCommerciale({
             )}
           </div>
         </div>
-        <Button variant="ghost" size="sm" className="h-7 shrink-0 rounded-full text-xs" onClick={() => setEdition(true)}>
-          {offre ? 'Modifier' : 'Renseigner'}
-        </Button>
+        {modifiable && (
+          <Button variant="ghost" size="sm" className="h-7 shrink-0 rounded-full text-xs" onClick={() => setEdition(true)}>
+            {offre ? 'Modifier' : 'Renseigner'}
+          </Button>
+        )}
       </div>
     );
   }
@@ -855,6 +882,9 @@ function AppointmentDetailSheet({
   updating,
   deleting,
   onOffreEnregistree,
+  peutModifier,
+  peutSupprimer,
+  peutNaviguerHorsPlanning,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -866,6 +896,9 @@ function AppointmentDetailSheet({
   onDelete: () => void;
   updating: boolean;
   deleting: boolean;
+  peutModifier: boolean;
+  peutSupprimer: boolean;
+  peutNaviguerHorsPlanning: boolean;
   /** L'offre est ecrite sur le lead : les rendez-vous doivent etre relus. */
   onOffreEnregistree: () => void;
 }) {
@@ -936,6 +969,42 @@ function AppointmentDetailSheet({
             )}
           </div>
 
+          {(client.vehicule || client.immatriculation) && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-background text-primary shadow-sm">
+                  <Car className="h-[18px] w-[18px]" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Véhicule à prendre en charge
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
+                    {client.vehicule || 'Modèle non renseigné'}
+                  </p>
+                  {client.immatriculation && (
+                    <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {client.immatriculation}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {appointment.type === 'intervention'
+            && appointment.status !== 'completed'
+            && appointment.status !== 'cancelled' && (
+              <InterventionWeather
+                startTime={appointment.start_time}
+                ville={client.ville}
+                codePostal={client.codePostal}
+                citycode={appointment.citycode}
+                latitude={appointment.latitude}
+                longitude={appointment.longitude}
+              />
+            )}
+
           {/* Client : ou aller, qui appeler. C'est ce que le technicien
               regarde avant de partir ; ca ne doit dependre ni du champ
               adresse du rendez-vous, ni de ce que Google en savait. */}
@@ -990,6 +1059,7 @@ function AppointmentDetailSheet({
             appointmentId={appointment.id}
             offre={client.offre}
             onEnregistree={onOffreEnregistree}
+            modifiable={peutNaviguerHorsPlanning}
           />
 
           {/* Description */}
@@ -1009,12 +1079,14 @@ function AppointmentDetailSheet({
                 <div className="flex items-center justify-between text-sm">
                   <dt className="text-muted-foreground">Dossier</dt>
                   <dd>
-                    <a
-                      href={`/cases?id=${appointment.case_id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Ouvrir le dossier
-                    </a>
+                    {peutNaviguerHorsPlanning ? (
+                      <a
+                        href={`/cases?id=${appointment.case_id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Ouvrir le dossier
+                      </a>
+                    ) : <span className="text-muted-foreground">Rattaché</span>}
                   </dd>
                 </div>
               )}
@@ -1022,12 +1094,14 @@ function AppointmentDetailSheet({
                 <div className="flex items-center justify-between text-sm">
                   <dt className="text-muted-foreground">Lead</dt>
                   <dd>
-                    <a
-                      href={`/leads?id=${appointment.lead_id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Ouvrir le lead
-                    </a>
+                    {peutNaviguerHorsPlanning ? (
+                      <a
+                        href={`/leads?id=${appointment.lead_id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Ouvrir le lead
+                      </a>
+                    ) : <span className="text-muted-foreground">Rattaché</span>}
                   </dd>
                 </div>
               )}
@@ -1049,6 +1123,7 @@ function AppointmentDetailSheet({
           </div>
         </div>
 
+        {peutModifier ? (
         <SheetFooter className="flex-row flex-wrap gap-2 border-t border-border pt-4">
           {appointment.status !== 'confirmed' && appointment.status !== 'completed' && (
             <Button
@@ -1086,17 +1161,24 @@ function AppointmentDetailSheet({
               Annuler
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onDelete}
-            disabled={deleting}
-            className="ml-auto gap-1.5 text-destructive hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4" />
-            Supprimer
-          </Button>
+          {peutSupprimer && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDelete}
+              disabled={deleting}
+              className="ml-auto gap-1.5 text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer
+            </Button>
+          )}
         </SheetFooter>
+        ) : (
+          <div className="border-t border-border px-4 pt-4 text-xs text-muted-foreground">
+            Planning partagé en lecture seule pour ce rendez-vous.
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -1598,6 +1680,8 @@ function CreateAppointmentDialog({
 
 export function CalendarPage() {
   const queryClient = useQueryClient();
+  const { profile, user } = useAuth();
+  const estTechnicien = profile?.role === 'technician';
   const navigate = useNavigate();
   const location = useLocation();
   const today = useMemo(() => new Date(), []);
@@ -1666,7 +1750,34 @@ export function CalendarPage() {
         endDate: rangeEnd.toISOString(),
         assignedUserId: effectiveAssignedUserId,
       }),
+    // Le temps réel est la voie normale. Ce rafraîchissement discret couvre
+    // aussi une publication momentanément indisponible : chacun finit par
+    // revoir le même planning sans avoir à recharger la page.
+    refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (!profile?.workspace_id) return;
+
+    const canal = supabase
+      .channel(`planning-partage:${profile.workspace_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments',
+          filter: `workspace_id=eq.${profile.workspace_id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['appointments'] });
+          queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
+        },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(canal); };
+  }, [profile?.workspace_id, queryClient]);
 
   const profilesQuery = useQuery<Profile[], Error>({
     queryKey: ['profiles'],
@@ -1936,7 +2047,7 @@ export function CalendarPage() {
       <PageHeader
         title="Agenda"
         description="Planning et rendez-vous"
-        action={
+        action={!estTechnicien ? (
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             <GoogleCalendarControl onSynced={() => {
               queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -1947,7 +2058,7 @@ export function CalendarPage() {
               Nouveau rendez-vous
             </Button>
           </div>
-        }
+        ) : undefined}
       />
 
       {/* Toolbar */}
@@ -2103,13 +2214,15 @@ export function CalendarPage() {
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">Aucun rendez-vous</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Aucun rendez-vous sur cette période. Cliquez sur « Nouveau rendez-vous » pour en créer un.
+                Aucun rendez-vous sur cette période.
               </p>
             </div>
-            <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau rendez-vous
-            </Button>
+            {!estTechnicien && (
+              <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Nouveau rendez-vous
+              </Button>
+            )}
           </div>
         ) : view === 'carte' ? (
           /* `dvh` et non `vh` : sur telephone la barre d'adresse se retracte,
@@ -2165,6 +2278,9 @@ export function CalendarPage() {
         onDelete={handleDelete}
         updating={updateMutation.isPending}
         deleting={deleteMutation.isPending}
+        peutModifier={!estTechnicien || selectedAppt?.assigned_user_id === user?.id}
+        peutSupprimer={!estTechnicien}
+        peutNaviguerHorsPlanning={!estTechnicien}
         onOffreEnregistree={() => {
           queryClient.invalidateQueries({ queryKey: ['appointments'] });
           queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -2173,7 +2289,7 @@ export function CalendarPage() {
         }}
       />
 
-      <ConfirmerSuppression
+      {!estTechnicien && <ConfirmerSuppression
         ouvert={confirmerSuppression}
         onOuvertChange={setConfirmerSuppression}
         nom={selectedAppt?.title ?? 'ce rendez-vous'}
@@ -2187,10 +2303,10 @@ export function CalendarPage() {
             reste consultable et le créneau se libère.
           </>
         }
-      />
+      />}
 
       {/* Create dialog */}
-      <CreateAppointmentDialog
+      {!estTechnicien && <CreateAppointmentDialog
         open={createOpen}
         onOpenChange={(ouvert) => {
           setCreateOpen(ouvert);
@@ -2200,7 +2316,7 @@ export function CalendarPage() {
         onCreate={(data) => createMutation.mutate(data)}
         creating={createMutation.isPending}
         initialLeadId={initialLeadId}
-      />
+      />}
     </div>
   );
 }

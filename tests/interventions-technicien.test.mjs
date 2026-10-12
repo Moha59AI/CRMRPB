@@ -8,15 +8,16 @@ const PAGE = 'src/features/interventions/interventions-page.tsx';
 const CARTE = 'src/features/interventions/intervention-carte-liste.tsx';
 const SERVICE = 'src/services/interventions-service.ts';
 
-test('le technicien arrive sur ses interventions, pas sur l’agenda', async () => {
+test('le technicien reste limite au planning partage', async () => {
   const permissions = await read('src/config/permissions.ts');
   const routes = await read('src/app/app-routes.tsx');
   const navigation = await read('src/config/navigation.ts');
 
-  // Il ouvre le CRM pour savoir ou il va. L'agenda demandait de choisir une
-  // vue puis de lire une grille.
-  assert.match(permissions, /case 'technician': return '\/interventions';/);
-  assert.match(permissions, /'\/interventions': \['admin', 'manager', 'advisor', 'technician'\]/);
+  // Les ecrans d'intervention restent disponibles aux autres roles, mais un
+  // technicien est redirige vers le planning commun et ne peut pas en sortir.
+  assert.match(permissions, /case 'technician': return '\/calendar';/);
+  assert.match(permissions, /role === 'technician'/);
+  assert.match(permissions, /return chemin === '\/calendar' \|\| chemin\.startsWith\('\/calendar\/'\)/);
   assert.match(routes, /<Route path="\/interventions" element=\{charger\(<InterventionsPage \/>\)\} \/>/);
   assert.match(navigation, /path: '\/interventions'/);
 });

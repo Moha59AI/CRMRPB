@@ -219,6 +219,19 @@ export async function changerRoleMembre(membre: string, role: UserRole): Promise
   if (error) throw new Error(error.message);
 }
 
+export async function renommerMembre(
+  membre: string,
+  prenom: string,
+  nom: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('renommer_membre', {
+    p_membre: membre,
+    p_prenom: prenom.trim(),
+    p_nom: nom.trim(),
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function retirerMembre(membre: string): Promise<void> {
   const { error } = await supabase.rpc('retirer_membre', { p_membre: membre });
   if (error) throw new Error(error.message);
