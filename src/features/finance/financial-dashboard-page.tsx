@@ -41,6 +41,11 @@ interface FinancialTotals {
   netRevenueHt: number;
   collected: number;
   outstanding: number;
+  paymentTrackedBilled: number;
+  paymentUnknownCount: number;
+  paymentUnknownBilled: number;
+  creditUnknownCount: number;
+  creditUnknownBilled: number;
   margin: number;
   supplierPurchasesHt: number;
   supplierPurchasesTtc: number;
@@ -149,21 +154,32 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
   const {
     totals, previous, timeline, overdue, aging, collectionRate, quoteRate,
     estimatedDso, forecast, statuses, topCustomers, paymentMethods,
-    insurerExposure, quality,
+    insurerExposure, invoiceSources, quality,
   } = view;
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Receipt} label="CA net" value={euro.format(totals.netRevenue)} detail={`${euro.format(totals.billed)} facturé · ${euro.format(totals.credits)} d'avoirs`} trend={variation(totals.netRevenue, previous?.netRevenue)} />
-        <MetricCard icon={Banknote} label="Encaissé" value={euro.format(totals.collected)} detail={`${formatPercent(collectionRate)} du montant facturé`} trend={variation(totals.collected, previous?.collected)} tone="success" />
-        <MetricCard icon={CalendarClock} label="À encaisser" value={euro.format(totals.outstanding)} detail={`${integer.format(totals.overdueCount)} facture${totals.overdueCount > 1 ? 's' : ''} en retard`} tone={totals.overdueAmount > 0 ? 'danger' : 'neutral'} />
-        <MetricCard icon={TrendingUp} label="Marge brute HT" value={euro.format(totals.margin)} detail={`${formatPercent(ratio(totals.margin, totals.netRevenueHt))} du CA net HT`} trend={variation(totals.margin, previous?.margin)} tone={totals.margin >= 0 ? 'success' : 'danger'} />
-        <MetricCard icon={Scale} label="Panier moyen" value={euro.format(safeDivide(totals.netRevenue, totals.invoiceCount))} detail={`${integer.format(totals.invoiceCount)} facture${totals.invoiceCount > 1 ? 's' : ''}`} trend={variation(safeDivide(totals.netRevenue, totals.invoiceCount), previous ? safeDivide(previous.netRevenue, previous.invoiceCount) : undefined)} />
+        <MetricCard icon={Receipt} label="CA facturé" value={euro.format(totals.billed)} detail={`${euro.format(totals.amountHt)} HT · ${integer.format(totals.invoiceCount)} factures`} trend={variation(totals.billed, previous?.billed)} />
+        <MetricCard icon={Banknote} label="Encaissé connu" value={euro.format(totals.collected)} detail={`${formatPercent(collectionRate)} des factures aux règlements synchronisés`} trend={variation(totals.collected, previous?.collected)} tone="success" />
+        <MetricCard icon={CalendarClock} label="À encaisser connu" value={euro.format(totals.outstanding)} detail={`${integer.format(totals.overdueCount)} facture${totals.overdueCount > 1 ? 's' : ''} en retard · hors sources à rapprocher`} tone={totals.overdueAmount > 0 ? 'danger' : 'neutral'} />
+        <MetricCard icon={TrendingUp} label={totals.creditUnknownCount ? 'Marge brute provisoire HT' : 'Marge brute HT'} value={euro.format(totals.margin)} detail={`${formatPercent(ratio(totals.margin, totals.netRevenueHt))} du CA net HT connu`} trend={variation(totals.margin, previous?.margin)} tone={totals.margin >= 0 ? 'success' : 'danger'} />
+        <MetricCard icon={Scale} label="Panier moyen facturé" value={euro.format(safeDivide(totals.billed, totals.invoiceCount))} detail={`${integer.format(totals.invoiceCount)} facture${totals.invoiceCount > 1 ? 's' : ''}`} trend={variation(safeDivide(totals.billed, totals.invoiceCount), previous ? safeDivide(previous.billed, previous.invoiceCount) : undefined)} />
         <MetricCard icon={CircleDollarSign} label="TVA collectée" value={euro.format(totals.vat)} detail={`${euro.format(totals.amountHt)} de chiffre d'affaires HT`} />
         <MetricCard icon={ShoppingCart} label="Achats fournisseurs" value={euro.format(totals.supplierPurchasesHt)} detail={`${euro.format(totals.supplierProvisionalHt)} engagés sur BL · ${euro.format(totals.supplierFinalHt)} finalisés`} />
-        <MetricCard icon={WalletCards} label="Délai d'encaissement estimé" value={`${integer.format(Math.round(estimatedDso))} jours`} detail="Estimation basée sur le CA et le reste dû de la période" tone={estimatedDso > 45 ? 'danger' : 'neutral'} />
+        <MetricCard icon={WalletCards} label="Délai d'encaissement estimé" value={`${integer.format(Math.round(estimatedDso))} jours`} detail="Calculé uniquement sur les règlements synchronisés" tone={estimatedDso > 45 ? 'danger' : 'neutral'} />
         <MetricCard icon={Gift} label="Coût cadeaux" value={euro.format(totals.gifts)} detail={`${totals.draftCredits ? `${integer.format(totals.draftCredits)} avoir(s) en brouillon exclus` : 'Avoirs brouillons exclus'}`} />
       </div>
+
+      {(totals.paymentUnknownCount > 0 || totals.creditUnknownCount > 0) && (
+        <Alert className="border-due/30 bg-due-soft/35">
+          <TriangleAlert className="h-4 w-4 text-due" />
+          <AlertTitle>Réseau Glass inclus dans le chiffre d’affaires</AlertTitle>
+          <AlertDescription>
+            {integer.format(Math.max(totals.paymentUnknownCount, totals.creditUnknownCount))} facture(s), soit {euro.format(Math.max(totals.paymentUnknownBilled, totals.creditUnknownBilled))}, sont bien comptées dans le CA facturé.
+            Leurs règlements et avoirs restent à rapprocher : ils ne sont donc pas ajoutés artificiellement aux impayés et la marge reste provisoire.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {totals.overdueAmount > 0 && (
         <Alert className="border-urgent/30 bg-urgent-soft/40">
@@ -189,9 +205,9 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
 
       <Alert className="border-primary/20 bg-primary/5">
         <Scale className="h-4 w-4 text-primary" />
-        <AlertTitle>Marge brute calculée à partir des données réelles</AlertTitle>
+        <AlertTitle>{totals.creditUnknownCount ? 'Marge brute provisoire calculée sur les données connues' : 'Marge brute calculée à partir des données réelles'}</AlertTitle>
         <AlertDescription>
-          CA net HT moins achats fournisseurs HT. Ce montant n’est pas le bénéfice net : salaires, loyer, publicité, frais bancaires, impôts et autres charges restent à déduire.
+          CA net HT connu moins achats fournisseurs HT. Ce montant n’est pas le bénéfice net : salaires, loyer, publicité, frais bancaires, impôts et autres charges restent à déduire.
         </AlertDescription>
       </Alert>
 
@@ -272,6 +288,13 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
         <TopCustomersTable rows={topCustomers} />
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <BreakdownCard
+            icon={Receipt}
+            title="Origine du chiffre d’affaires"
+            description="Factures TTC intégrées par système source"
+            rows={invoiceSources}
+            empty="Aucune facture n'est disponible sur cette période."
+          />
+          <BreakdownCard
             icon={Landmark}
             title="Origine des règlements"
             description="Moyens de paiement détaillés et montants consolidés"
@@ -300,11 +323,11 @@ function FinancialStatementCard({ totals }: { totals: FinancialTotals }) {
       </div>
       <div className="mt-5 space-y-3">
         <StatementRow label="Chiffre d'affaires HT" value={totals.amountHt} />
-        <StatementRow label="Avoirs clients HT" value={-totals.creditsHt} tone="danger" />
-        <div className="border-t border-border pt-3"><StatementRow label="CA net HT" value={totals.netRevenueHt} strong /></div>
+        <StatementRow label="Avoirs clients connus HT" value={-totals.creditsHt} tone="danger" />
+        <div className="border-t border-border pt-3"><StatementRow label={totals.creditUnknownCount ? 'CA net HT connu' : 'CA net HT'} value={totals.netRevenueHt} strong /></div>
         <StatementRow label="Achats finalisés HT" value={-totals.supplierFinalHt} tone="danger" />
         <StatementRow label="BL engagés provisoires HT" value={-totals.supplierProvisionalHt} tone="danger" />
-        <div className="border-t border-border pt-3"><StatementRow label="Marge brute HT" value={totals.margin} strong tone={totals.margin >= 0 ? 'success' : 'danger'} /></div>
+        <div className="border-t border-border pt-3"><StatementRow label={totals.creditUnknownCount ? 'Marge brute provisoire HT' : 'Marge brute HT'} value={totals.margin} strong tone={totals.margin >= 0 ? 'success' : 'danger'} /></div>
         <div className="flex items-center justify-between gap-4 text-xs"><span className="text-muted-foreground">Taux de marge brute</span><span className="font-semibold tabular-nums text-done">{formatPercent(ratio(totals.margin, totals.netRevenueHt))}</span></div>
       </div>
     </Card>
@@ -347,7 +370,7 @@ function InvoiceStatusCard({ statuses, total }: { statuses: ReturnType<typeof bu
       </div>
       <div className="mt-5 space-y-4">
         {statuses.map((status) => (
-          <div key={status.status}>
+          <div key={status.id}>
             <div className="mb-2 flex items-center justify-between gap-3 text-xs">
               <span className="text-muted-foreground">{status.label} <span className="text-[10px]">({status.count})</span></span>
               <span className="font-medium tabular-nums">{euro.format(status.amount)}</span>
@@ -579,14 +602,15 @@ function buildView(data: FinancialDashboardData, period: FinancialPeriod) {
     ),
     overdue,
     aging: buildAging(invoices, now),
-    collectionRate: ratio(totals.collected, totals.billed),
+    collectionRate: ratio(totals.collected, totals.paymentTrackedBilled),
     quoteRate: ratio(totals.acceptedQuotes, totals.quoteCount),
-    estimatedDso: totals.billed > 0 ? (totals.outstanding / totals.billed) * periodDays : 0,
+    estimatedDso: totals.paymentTrackedBilled > 0 ? (totals.outstanding / totals.paymentTrackedBilled) * periodDays : 0,
     forecast: buildForecast(invoices, now),
     statuses: buildStatuses(invoices),
     topCustomers: buildTopCustomers(invoices, credits, contacts),
     paymentMethods: buildPaymentMethods(invoices, payments),
     insurerExposure: buildInsurerExposure(invoices, data),
+    invoiceSources: buildInvoiceSources(invoices),
     quality: buildQuality(invoices, supplierExpenses, data.profitability),
     invoiceRows,
   };
@@ -600,6 +624,9 @@ function calculateTotals(
   supplierExpenses: FinancialDashboardData['supplierExpenses'],
 ): FinancialTotals {
   const activeInvoices = invoices.filter((invoice) => invoice.status !== 'cancelled');
+  const paymentTrackedInvoices = activeInvoices.filter(hasCompletePaymentData);
+  const paymentUnknownInvoices = activeInvoices.filter((invoice) => !hasCompletePaymentData(invoice));
+  const creditUnknownInvoices = activeInvoices.filter((invoice) => invoice.credit_data_complete === false);
   const activeCredits = credits.filter((credit) => !String(credit.status ?? '').toLocaleLowerCase('fr-FR').includes('brouillon'));
   const billed = sum(activeInvoices.map((invoice) => numeric(invoice.amount_ttc)));
   const amountHt = sum(activeInvoices.map((invoice) => numeric(invoice.amount_ht)));
@@ -631,8 +658,13 @@ function calculateTotals(
     draftCredits: credits.length - activeCredits.length,
     netRevenue: billed - creditAmount,
     netRevenueHt,
-    collected: sum(activeInvoices.map((invoice) => numeric(invoice.amount_paid))),
-    outstanding: sum(activeInvoices.map(outstandingAmount)),
+    collected: sum(paymentTrackedInvoices.map((invoice) => numeric(invoice.amount_paid))),
+    outstanding: sum(paymentTrackedInvoices.map(outstandingAmount)),
+    paymentTrackedBilled: sum(paymentTrackedInvoices.map((invoice) => numeric(invoice.amount_ttc))),
+    paymentUnknownCount: paymentUnknownInvoices.length,
+    paymentUnknownBilled: sum(paymentUnknownInvoices.map((invoice) => numeric(invoice.amount_ttc))),
+    creditUnknownCount: creditUnknownInvoices.length,
+    creditUnknownBilled: sum(creditUnknownInvoices.map((invoice) => numeric(invoice.amount_ttc))),
     margin: netRevenueHt - supplierPurchasesHt,
     supplierPurchasesHt,
     supplierPurchasesTtc,
@@ -691,7 +723,7 @@ function buildTimeline(
     // Un paiement detaille donne la vraie date d'encaissement. Pour les
     // factures Onify qui n'en ont pas, le montant paye reste rattache a la
     // date de facture afin de ne pas disparaitre du graphique.
-    if (!invoicesWithDetailedPayments.has(invoice.id)) {
+    if (hasCompletePaymentData(invoice) && !invoicesWithDetailedPayments.has(invoice.id)) {
       point.encaisse += numeric(invoice.amount_paid);
     }
   }
@@ -753,14 +785,26 @@ function buildStatuses(invoices: Invoice[]) {
     { status: 'overdue', label: 'En retard', color: 'bg-urgent' },
     { status: 'draft', label: 'Brouillons', color: 'bg-muted-foreground' },
   ];
-  return definitions.map((definition) => {
-    const rows = invoices.filter((invoice) => invoice.status === definition.status);
-    return {
-      ...definition,
-      count: rows.length,
-      amount: sum(rows.map((invoice) => numeric(invoice.amount_ttc))),
-    };
-  });
+  const paymentUnknown = invoices.filter((invoice) => invoice.status !== 'cancelled' && !hasCompletePaymentData(invoice));
+  return [
+    {
+      id: 'payment-unknown',
+      label: 'Paiement à rapprocher',
+      color: 'bg-due',
+      count: paymentUnknown.length,
+      amount: sum(paymentUnknown.map((invoice) => numeric(invoice.amount_ttc))),
+    },
+    ...definitions.map((definition) => {
+      const rows = invoices.filter((invoice) => hasCompletePaymentData(invoice) && invoice.status === definition.status);
+      return {
+        id: definition.status,
+        label: definition.label,
+        color: definition.color,
+        count: rows.length,
+        amount: sum(rows.map((invoice) => numeric(invoice.amount_ttc))),
+      };
+    }),
+  ];
 }
 
 function buildTopCustomers(
@@ -778,7 +822,7 @@ function buildTopCustomers(
     };
     row.count++;
     row.revenue += numeric(invoice.amount_ttc);
-    row.collected += numeric(invoice.amount_paid);
+    row.collected += hasCompletePaymentData(invoice) ? numeric(invoice.amount_paid) : 0;
     row.outstanding += outstandingAmount(invoice);
     rows.set(id, row);
   }
@@ -804,17 +848,36 @@ function buildPaymentMethods(invoices: Invoice[], payments: FinancialDashboardDa
   }
   const detailedInvoiceIds = new Set(payments.map((payment) => payment.invoice_id).filter(Boolean));
   const consolidated = sum(invoices
-    .filter((invoice) => !detailedInvoiceIds.has(invoice.id))
+    .filter((invoice) => hasCompletePaymentData(invoice) && !detailedInvoiceIds.has(invoice.id))
     .map((invoice) => numeric(invoice.amount_paid)));
   if (consolidated > 0) {
     grouped.set('consolidated', {
       id: 'consolidated', label: 'Onify consolidé', amount: consolidated,
-      count: invoices.filter((invoice) => !detailedInvoiceIds.has(invoice.id) && numeric(invoice.amount_paid) > 0).length,
+      count: invoices.filter((invoice) => hasCompletePaymentData(invoice) && !detailedInvoiceIds.has(invoice.id) && numeric(invoice.amount_paid) > 0).length,
     });
   }
   return [...grouped.values()]
     .sort((a, b) => b.amount - a.amount)
     .map((row) => ({ ...row, detail: `· ${row.count} opération${row.count > 1 ? 's' : ''}` }));
+}
+
+function buildInvoiceSources(invoices: Invoice[]) {
+  const labels: Record<string, string> = {
+    crm: 'CRM',
+    onify: 'Onify',
+    reseau_glass: 'Réseau Glass',
+  };
+  const grouped = new Map<string, { id: string; label: string; amount: number; count: number }>();
+  for (const invoice of invoices.filter((item) => item.status !== 'cancelled')) {
+    const id = invoice.source_system ?? (invoice.onify_invoice_id ? 'onify' : 'crm');
+    const row = grouped.get(id) ?? { id, label: labels[id] ?? id, amount: 0, count: 0 };
+    row.amount += numeric(invoice.amount_ttc);
+    row.count++;
+    grouped.set(id, row);
+  }
+  return [...grouped.values()]
+    .sort((a, b) => b.amount - a.amount)
+    .map((row) => ({ ...row, detail: `· ${row.count} facture${row.count > 1 ? 's' : ''}` }));
 }
 
 function buildInsurerExposure(invoices: Invoice[], data: FinancialDashboardData) {
@@ -847,6 +910,8 @@ function buildQuality(
   const active = invoices.filter((invoice) => invoice.status !== 'cancelled');
   const quality = [
     { label: 'Factures sans client', count: active.filter((invoice) => !invoice.contact_id).length },
+    { label: 'Factures aux règlements non synchronisés', count: active.filter((invoice) => !hasCompletePaymentData(invoice)).length },
+    { label: 'Factures aux avoirs non rapprochés', count: active.filter((invoice) => invoice.credit_data_complete === false).length },
     { label: 'Restes dus sans échéance', count: active.filter((invoice) => outstandingAmount(invoice) > 0 && !invoice.due_date).length },
     { label: 'Achats fournisseurs sans détail', count: supplierExpenses.filter((expense) => expense.items.length === 0).length },
     { label: 'Factures encore en brouillon', count: active.filter((invoice) => invoice.status === 'draft').length },
@@ -862,17 +927,18 @@ function buildQuality(
 }
 
 function exportFinancialCsv(view: ReturnType<typeof buildView>) {
-  const header = ['Facture', 'Date', 'Client', 'Statut', 'Montant HT', 'TVA', 'Montant TTC', 'Encaissé', 'Reste dû', 'Marge estimée'];
+  const header = ['Facture', 'Source', 'Date', 'Client', 'Statut', 'Montant HT', 'TVA', 'Montant TTC', 'Encaissé', 'Reste dû', 'Marge estimée'];
   const rows = view.invoiceRows.map(({ invoice, contactName }) => [
     invoice.invoice_number,
+    invoice.source_system ?? (invoice.onify_invoice_id ? 'onify' : 'crm'),
     formatDate(invoice.issue_date),
     contactName,
     invoice.status,
     numeric(invoice.amount_ht),
     Math.max(0, numeric(invoice.amount_ttc) - numeric(invoice.amount_ht)),
     numeric(invoice.amount_ttc),
-    numeric(invoice.amount_paid),
-    outstandingAmount(invoice),
+    hasCompletePaymentData(invoice) ? numeric(invoice.amount_paid) : 'Non synchronisé',
+    hasCompletePaymentData(invoice) ? outstandingAmount(invoice) : 'Non synchronisé',
     numeric(invoice.estimated_margin),
   ]);
   const csv = `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(';')).join('\n')}`;
@@ -909,12 +975,19 @@ function periodRange(period: FinancialPeriod, now: Date): DateRange {
 }
 
 function outstandingAmount(invoice: Invoice): number {
+  // Une source sans detail de paiement contribue au CA facture, mais ne doit
+  // jamais etre transformee artificiellement en impaye.
+  if (!hasCompletePaymentData(invoice)) return 0;
   // Le statut metier est prioritaire : certaines anciennes factures Onify
   // payees conservent un reliquat technique qui ne doit pas devenir un impaye.
   if (invoice.status === 'paid' || invoice.status === 'cancelled') return 0;
   const stored = numeric(invoice.remaining_amount);
   if (stored > 0) return stored;
   return Math.max(0, numeric(invoice.amount_ttc) - numeric(invoice.amount_paid));
+}
+
+function hasCompletePaymentData(invoice: Invoice): boolean {
+  return invoice.payment_data_complete !== false;
 }
 
 function isOverdue(invoice: Invoice, now: Date): boolean {

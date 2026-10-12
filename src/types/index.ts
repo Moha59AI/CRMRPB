@@ -588,6 +588,16 @@ export interface Invoice {
   due_date: string | null;
   payment_date: string | null;
   status: InvoiceStatus;
+  /** Origine metier de la facture. Les anciennes lignes sans valeur restent traitees comme CRM. */
+  source_system?: 'crm' | 'onify' | 'reseau_glass';
+  /** Identifiant stable fourni par la source externe, distinct du numero affiche. */
+  external_invoice_id?: string | null;
+  /** Faux lorsque les reglements de la source ne sont pas encore synchronises. */
+  payment_data_complete?: boolean;
+  /** Faux lorsque les avoirs de la source ne sont pas encore rapproches facture par facture. */
+  credit_data_complete?: boolean;
+  source_imported_at?: string | null;
+  source_payload?: Record<string, unknown> | null;
   onify_invoice_id?: string | null;
   onify_payload?: Record<string, unknown> | null;
   onify_synced_at?: string | null;
