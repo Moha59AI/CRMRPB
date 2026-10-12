@@ -10,11 +10,13 @@
 // tablette fatiguée, ou simplement l'envie de lire plutôt que de viser —
 // tous les trois méritent la même réponse.
 
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, LayoutList, Loader2, RefreshCw } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import {
+  Boxes, CalendarDays, CarFront, CheckCircle2, ClipboardList, LayoutList,
+  Loader2, Plus, RefreshCw, ScanLine, ShieldCheck, Wrench, type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EtatErreur } from '@/components/EtatErreur';
@@ -27,7 +29,7 @@ import {
 } from '@/services/interventions-service';
 import type { AppointmentStatus } from '@/types';
 import { PanneauDossier } from './panneau-dossier';
-import { ZONES, compterParZone, placerVehicules } from './zones-atelier';
+import { ZONES, compterParZone, placerVehicules, type CleZone } from './zones-atelier';
 
 /*
   Three.js, React Three Fiber et Drei pèsent plus que tout le reste du CRM
@@ -113,6 +115,25 @@ export function AtelierPage() {
     [interventions, maintenant],
   );
   const compte = useMemo(() => compterParZone(places), [places]);
+  const selectionInitialisee = useRef(false);
+
+  // À l'ouverture, le véhicule actuellement en intervention est le plus
+  // utile. Ensuite la sélection appartient à l'utilisateur : un clic dans
+  // le vide peut réellement fermer le panneau.
+  useEffect(() => {
+    if (selectionInitialisee.current || interventions.length === 0) return;
+    const prioritaire = places.find((place) => place.zone === 'en_cours')
+      ?? places.find((place) => place.zone === 'a_venir')
+      ?? places[0];
+    if (prioritaire) setSelection(prioritaire.intervention.id);
+    selectionInitialisee.current = true;
+  }, [interventions.length, places]);
+
+  useEffect(() => {
+    if (selection && !interventions.some((intervention) => intervention.id === selection)) {
+      setSelection(null);
+    }
+  }, [interventions, selection]);
 
   const choisie = interventions.find((i) => i.id === selection) ?? null;
   const zoneChoisie = places.find((p) => p.intervention.id === selection)?.zone ?? null;
@@ -142,49 +163,22 @@ export function AtelierPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <PageHeader
-        title="Atelier interactif"
-        description="Les interventions du jour, à leur poste"
-        action={
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            <div className="col-span-2 grid grid-cols-2 rounded-lg border border-border bg-muted/40 p-0.5 sm:col-span-1 sm:inline-flex">
-              {(['atelier', 'liste'] as Vue[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVue(v)}
-                  aria-pressed={vue === v}
-                  className={cn(
-                    'flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors sm:min-h-0 sm:py-1.5',
-                    vue === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-                  )}
-                >
-                  {v === 'atelier'
-                    ? <><Boxes className="h-4 w-4" aria-hidden />Atelier</>
-                    : <><LayoutList className="h-4 w-4" aria-hidden />Liste</>}
-                </button>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="col-span-2 w-full justify-center rounded-full sm:col-span-1 sm:w-auto"
-              onClick={() => void requete.refetch()}
-              disabled={requete.isFetching}
-            >
-              <RefreshCw className={cn('mr-2 h-4 w-4', requete.isFetching && 'animate-spin')} />
-              Actualiser
-            </Button>
-          </div>
-        }
+      <EnteteAtelier
+        vue={vue}
+        onChangerVue={setVue}
+        compte={compte}
+        total={interventions.length}
+        actualisation={requete.isFetching}
+        onActualiser={() => void requete.refetch()}
+        onNouveauDossier={() => navigate('/leads', { state: { ouvrirNouveauLead: true } })}
       />
 
       {/* Les compteurs de postes, lisibles sans la 3D. */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2 scrollbar-thin sm:px-4">
+      <div className="flex gap-1.5 overflow-x-auto border-b border-border bg-card px-2 py-2 scrollbar-thin sm:px-4">
         {ZONES.map((zone) => (
           <span
             key={zone.cle}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs shadow-sm"
           >
             <span
               className="h-2 w-2 rounded-full"
@@ -218,30 +212,33 @@ export function AtelierPage() {
             </p>
           </div>
         ) : (
-          <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-h-[320px] overflow-hidden rounded-xl border border-border bg-surface lg:min-h-0">
-              {vue === 'atelier' ? (
-                <Suspense fallback={<ChargementScene />}>
-                  <SceneAtelier
-                    interventions={interventions}
+          <div className="grid h-full min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm xl:min-h-0">
+              <div className="min-h-[390px] flex-1 overflow-hidden">
+                {vue === 'atelier' ? (
+                  <Suspense fallback={<ChargementScene />}>
+                    <SceneAtelier
+                      interventions={interventions}
+                      selection={selection}
+                      onSelectionner={setSelection}
+                      maintenant={maintenant}
+                    />
+                  </Suspense>
+                ) : (
+                  <ListeAtelier
+                    places={places}
                     selection={selection}
                     onSelectionner={setSelection}
-                    maintenant={maintenant}
+                    monId={profile?.id ?? null}
                   />
-                </Suspense>
-              ) : (
-                <ListeAtelier
-                  places={places}
-                  selection={selection}
-                  onSelectionner={setSelection}
-                  monId={profile?.id ?? null}
-                />
-              )}
+                )}
+              </div>
+              <ParcoursAtelier intervention={choisie} zone={zoneChoisie} />
             </div>
 
             {/* Sous `lg`, le panneau passe sous la scène plutôt que de la
                 rétrécir : un atelier large de 300 px ne se lit pas. */}
-            <div className="min-h-0 lg:h-full">
+            <div className="min-h-0 xl:h-full">
               <PanneauDossier
                 intervention={choisie}
                 zone={zoneChoisie}
@@ -260,6 +257,159 @@ export function AtelierPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function EnteteAtelier({
+  vue, onChangerVue, compte, total, actualisation, onActualiser, onNouveauDossier,
+}: {
+  vue: Vue;
+  onChangerVue: (vue: Vue) => void;
+  compte: ReturnType<typeof compterParZone>;
+  total: number;
+  actualisation: boolean;
+  onActualiser: () => void;
+  onNouveauDossier: () => void;
+}) {
+  const aujourdHui = new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  }).format(new Date());
+
+  const indicateurs: { label: string; valeur: number; icone: LucideIcon; couleur: string }[] = [
+    { label: 'véhicules', valeur: total, icone: CarFront, couleur: 'text-slate-700 bg-slate-100' },
+    { label: 'en intervention', valeur: compte.en_cours, icone: Wrench, couleur: 'text-emerald-700 bg-emerald-100' },
+    { label: 'terminés', valeur: compte.termine, icone: CheckCircle2, couleur: 'text-sky-700 bg-sky-100' },
+  ];
+
+  return (
+    <header className="border-b border-border bg-card">
+      <div className="gutter-x flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold tracking-tight text-foreground">Atelier interactif</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Suivez les véhicules et ouvrez leur dossier depuis leur poste.
+          </p>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-medium capitalize text-foreground shadow-sm">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+            {aujourdHui}
+          </span>
+
+          <div className="grid grid-cols-2 rounded-xl border border-border bg-muted/50 p-0.5">
+            {(['atelier', 'liste'] as Vue[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => onChangerVue(v)}
+                aria-pressed={vue === v}
+                className={cn(
+                  'flex min-h-9 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-xs font-semibold transition-colors',
+                  vue === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {v === 'atelier'
+                  ? <><Boxes className="h-3.5 w-3.5" aria-hidden />Vue atelier</>
+                  : <><LayoutList className="h-3.5 w-3.5" aria-hidden />Liste</>}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl border border-border bg-background"
+            onClick={onActualiser}
+            disabled={actualisation}
+            aria-label="Actualiser l’atelier"
+          >
+            <RefreshCw className={cn('h-4 w-4', actualisation && 'animate-spin')} />
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-9 rounded-xl bg-emerald-600 px-3 font-semibold hover:bg-emerald-700"
+            onClick={onNouveauDossier}
+          >
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+            Nouveau dossier
+          </Button>
+        </div>
+      </div>
+
+      <div className="gutter-x flex gap-2 overflow-x-auto pb-3 scrollbar-thin">
+        {indicateurs.map(({ label, valeur, icone: Icone, couleur }) => (
+          <div key={label} className="flex min-w-[132px] items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 shadow-sm">
+            <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', couleur)}>
+              <Icone className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <strong className="block text-sm font-bold tabular-nums text-foreground">{valeur}</strong>
+              <span className="block truncate text-[10px] text-muted-foreground">{label}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </header>
+  );
+}
+
+const ETAPES_ATELIER: { label: string; icone: LucideIcon }[] = [
+  { label: 'Dossier', icone: ClipboardList },
+  { label: 'Vitrage', icone: ScanLine },
+  { label: 'Pose', icone: Wrench },
+  { label: 'Contrôle', icone: ShieldCheck },
+  { label: 'Restitution', icone: CheckCircle2 },
+];
+
+function ParcoursAtelier({ intervention, zone }: {
+  intervention: Intervention | null;
+  zone: CleZone | null;
+}) {
+  const active = !intervention ? -1
+    : zone === 'termine' ? 4
+      : zone === 'en_cours' ? 2
+        : zone === 'a_venir' ? 1
+          : 0;
+
+  return (
+    <nav aria-label="Avancement du dossier" className="overflow-x-auto border-t border-border bg-card px-3 py-2.5 sm:px-5">
+      <ol className="grid min-w-[430px] grid-cols-5">
+        {ETAPES_ATELIER.map(({ label, icone: Icone }, index) => {
+          const terminee = index < active;
+          const courante = index === active;
+          return (
+            <li key={label} className="relative flex flex-col items-center gap-1 text-center">
+              {index > 0 && (
+                <span className={cn(
+                  'absolute right-1/2 top-3.5 h-0.5 w-full',
+                  index <= active ? 'bg-emerald-500' : 'bg-border',
+                )} aria-hidden />
+              )}
+              <span className={cn(
+                'relative z-10 flex h-7 w-7 items-center justify-center rounded-full border transition-colors',
+                terminee && 'border-emerald-500 bg-emerald-500 text-white',
+                courante && 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-4 ring-emerald-100/80',
+                !terminee && !courante && 'border-border bg-background text-muted-foreground',
+              )}>
+                {terminee
+                  ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  : <Icone className="h-3.5 w-3.5" aria-hidden />}
+              </span>
+              <span
+                aria-current={courante ? 'step' : undefined}
+                className={cn('text-[9px] font-medium sm:text-[10px]', courante ? 'text-emerald-700' : 'text-muted-foreground')}
+              >
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 

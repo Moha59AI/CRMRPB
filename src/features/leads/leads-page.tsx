@@ -134,6 +134,14 @@ export function LeadsPage() {
 
   // New lead dialog
   const [newLeadOpen, setNewLeadOpen] = useState(false);
+  useEffect(() => {
+    const etat = location.state as { ouvrirNouveauLead?: boolean } | null;
+    if (!etat?.ouvrirNouveauLead) return;
+    setNewLeadOpen(true);
+    // L'intention est consommée : recharger la page ne doit pas rouvrir le
+    // formulaire après que l'utilisateur l'a fermé.
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   // Perdu et Cloture sortent le lead du travail actif : un glisser-deposer
   // ou un clic trop rapide ne doit pas suffire a les appliquer.
