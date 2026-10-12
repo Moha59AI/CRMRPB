@@ -45,6 +45,11 @@ interface FinancialTotals {
   supplierPurchasesHt: number;
   supplierPurchasesTtc: number;
   supplierPurchaseDocuments: number;
+  supplierProvisionalHt: number;
+  supplierFinalHt: number;
+  supplierCardTtc: number;
+  supplierOutstandingTtc: number;
+  supplierReviewCount: number;
   gifts: number;
   invoiceCount: number;
   overdueCount: number;
@@ -155,7 +160,7 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
         <MetricCard icon={TrendingUp} label="Marge brute HT" value={euro.format(totals.margin)} detail={`${formatPercent(ratio(totals.margin, totals.netRevenueHt))} du CA net HT`} trend={variation(totals.margin, previous?.margin)} tone={totals.margin >= 0 ? 'success' : 'danger'} />
         <MetricCard icon={Scale} label="Panier moyen" value={euro.format(safeDivide(totals.netRevenue, totals.invoiceCount))} detail={`${integer.format(totals.invoiceCount)} facture${totals.invoiceCount > 1 ? 's' : ''}`} trend={variation(safeDivide(totals.netRevenue, totals.invoiceCount), previous ? safeDivide(previous.netRevenue, previous.invoiceCount) : undefined)} />
         <MetricCard icon={CircleDollarSign} label="TVA collectée" value={euro.format(totals.vat)} detail={`${euro.format(totals.amountHt)} de chiffre d'affaires HT`} />
-        <MetricCard icon={ShoppingCart} label="Achats fournisseurs" value={euro.format(totals.supplierPurchasesHt)} detail={`${integer.format(totals.supplierPurchaseDocuments)} document${totals.supplierPurchaseDocuments > 1 ? 's' : ''} · montant HT`} />
+        <MetricCard icon={ShoppingCart} label="Achats fournisseurs" value={euro.format(totals.supplierPurchasesHt)} detail={`${euro.format(totals.supplierProvisionalHt)} engagés sur BL · ${euro.format(totals.supplierFinalHt)} finalisés`} />
         <MetricCard icon={WalletCards} label="Délai d'encaissement estimé" value={`${integer.format(Math.round(estimatedDso))} jours`} detail="Estimation basée sur le CA et le reste dû de la période" tone={estimatedDso > 45 ? 'danger' : 'neutral'} />
         <MetricCard icon={Gift} label="Coût cadeaux" value={euro.format(totals.gifts)} detail={`${totals.draftCredits ? `${integer.format(totals.draftCredits)} avoir(s) en brouillon exclus` : 'Avoirs brouillons exclus'}`} />
       </div>
@@ -166,6 +171,18 @@ function DashboardContent({ view }: { view: ReturnType<typeof buildView> }) {
           <AlertTitle>Encaissements à sécuriser</AlertTitle>
           <AlertDescription>
             {euro.format(totals.overdueAmount)} sont arrivés à échéance. Les factures les plus anciennes apparaissent plus bas pour prioriser les relances.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(totals.supplierReviewCount > 0 || totals.supplierOutstandingTtc > 0) && (
+        <Alert className="border-due/30 bg-due-soft/35">
+          <ShoppingCart className="h-4 w-4 text-due" />
+          <AlertTitle>Suivi des achats fournisseurs</AlertTitle>
+          <AlertDescription>
+            {euro.format(totals.supplierOutstandingTtc)} d’encours fournisseur identifié
+            {totals.supplierCardTtc > 0 ? ` · ${euro.format(totals.supplierCardTtc)} d’achats par carte` : ''}
+            {totals.supplierReviewCount > 0 ? ` · ${totals.supplierReviewCount} document(s) à contrôler` : ''}.
           </AlertDescription>
         </Alert>
       )}
@@ -285,7 +302,8 @@ function FinancialStatementCard({ totals }: { totals: FinancialTotals }) {
         <StatementRow label="Chiffre d'affaires HT" value={totals.amountHt} />
         <StatementRow label="Avoirs clients HT" value={-totals.creditsHt} tone="danger" />
         <div className="border-t border-border pt-3"><StatementRow label="CA net HT" value={totals.netRevenueHt} strong /></div>
-        <StatementRow label="Achats fournisseurs HT" value={-totals.supplierPurchasesHt} tone="danger" />
+        <StatementRow label="Achats finalisés HT" value={-totals.supplierFinalHt} tone="danger" />
+        <StatementRow label="BL engagés provisoires HT" value={-totals.supplierProvisionalHt} tone="danger" />
         <div className="border-t border-border pt-3"><StatementRow label="Marge brute HT" value={totals.margin} strong tone={totals.margin >= 0 ? 'success' : 'danger'} /></div>
         <div className="flex items-center justify-between gap-4 text-xs"><span className="text-muted-foreground">Taux de marge brute</span><span className="font-semibold tabular-nums text-done">{formatPercent(ratio(totals.margin, totals.netRevenueHt))}</span></div>
       </div>
@@ -589,6 +607,17 @@ function calculateTotals(
   const creditAmountHt = sum(activeCredits.map(creditAmountExcludingTax));
   const supplierPurchasesHt = sum(supplierExpenses.map((expense) => numeric(expense.amount_ht)));
   const supplierPurchasesTtc = sum(supplierExpenses.map((expense) => numeric(expense.amount_ttc)));
+  const supplierProvisionalHt = sum(supplierExpenses
+    .filter((expense) => expense.amount_basis === 'provisional')
+    .map((expense) => numeric(expense.amount_ht)));
+  const supplierFinalHt = supplierPurchasesHt - supplierProvisionalHt;
+  const supplierCardTtc = sum(supplierExpenses
+    .filter((expense) => expense.payment_method === 'card')
+    .map((expense) => numeric(expense.amount_ttc)));
+  const supplierOutstandingTtc = sum(supplierExpenses
+    .filter((expense) => ['unpaid', 'scheduled'].includes(expense.payment_status ?? ''))
+    .map((expense) => numeric(expense.amount_ttc)));
+  const supplierReviewCount = supplierExpenses.filter((expense) => expense.needs_review).length;
   const netRevenueHt = amountHt - creditAmountHt;
   const acceptedQuotes = quotes.filter((quote) => quote.status === 'accepted');
   const now = new Date();
@@ -608,6 +637,11 @@ function calculateTotals(
     supplierPurchasesHt,
     supplierPurchasesTtc,
     supplierPurchaseDocuments: supplierExpenses.length,
+    supplierProvisionalHt,
+    supplierFinalHt,
+    supplierCardTtc,
+    supplierOutstandingTtc,
+    supplierReviewCount,
     gifts: sum(gifts.filter((gift) => gift.status !== 'cancelled').map((gift) => numeric(gift.amount))),
     invoiceCount: activeInvoices.length,
     overdueCount: overdueInvoices.length,

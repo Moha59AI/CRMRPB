@@ -78,3 +78,6 @@ verify_jwt = true
 
 [functions.intervention-weather]
 verify_jwt = true
+
+[functions.supplier-document-process]
+verify_jwt = false

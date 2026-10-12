@@ -56,7 +56,11 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments, sendIonosEmail, syncIonosMailbox, type IonosMailboxStatus, marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
+  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, fetchSupplierDocumentProcessingStates,
+  getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments,
+  retrySupplierDocumentProcessing, sendIonosEmail, syncIonosMailbox,
+  type IonosMailboxStatus, type SupplierDocumentProcessingState,
+  marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
 import { EmailHtmlViewer } from './email-html-viewer';
@@ -223,6 +227,23 @@ function statusClass(email: Communication): string {
   return 'border-upcoming/25 bg-upcoming-soft text-upcoming';
 }
 
+function supplierProcessingLabel(job: SupplierDocumentProcessingState | undefined): string {
+  if (!job) return 'En attente de mise en file';
+  if (job.status === 'pending') return 'Analyse programmée';
+  if (job.status === 'processing') return 'Analyse IA en cours';
+  if (job.status === 'completed') return 'Intégré aux dépenses';
+  if (job.status === 'review_required') return 'Contrôle comptable requis';
+  if (job.status === 'failed') return 'Analyse en échec';
+  return 'Document non comptable';
+}
+
+function supplierProcessingClass(job: SupplierDocumentProcessingState | undefined): string {
+  if (job?.status === 'completed') return 'border-done/30 bg-done-soft text-done';
+  if (job?.status === 'review_required' || job?.status === 'failed') return 'border-urgent/30 bg-urgent-soft text-urgent';
+  if (job?.status === 'ignored') return 'border-border bg-muted text-muted-foreground';
+  return 'border-due/30 bg-due-soft text-due-foreground';
+}
+
 export function EmailInboxPage() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<MailboxView>('inbound');
@@ -236,6 +257,13 @@ export function EmailInboxPage() {
   const emailsQuery = useQuery({
     queryKey: ['mailbox-emails'],
     queryFn: fetchMailboxEmails,
+  });
+  const supplierProcessingQuery = useQuery({
+    queryKey: ['supplier-document-processing'],
+    queryFn: fetchSupplierDocumentProcessingStates,
+    refetchInterval: (query) => (
+      (query.state.data ?? []).some((job) => ['pending', 'processing'].includes(job.status)) ? 5_000 : false
+    ),
   });
   const ionosConnectionQuery = useQuery({
     queryKey: ['ionos-email-connection'],
@@ -668,6 +696,7 @@ export function EmailInboxPage() {
                 signature={emailSignature}
                 senderName={emailSenderName}
                 leads={allLeads}
+                supplierJobs={(supplierProcessingQuery.data ?? []).filter((job) => job.communication_id === selectedEmail.id)}
                 onBack={() => { setMobileDetailOpen(false); setSelectedId(null); }}
               />
             ) : (
@@ -914,6 +943,7 @@ function EmailDetail({
   signature,
   senderName,
   leads,
+  supplierJobs,
   onBack,
 }: {
   email: Communication;
@@ -922,6 +952,7 @@ function EmailDetail({
   signature: string;
   senderName: string;
   leads: Lead[];
+  supplierJobs: SupplierDocumentProcessingState[];
   onBack: () => void;
 }) {
   const inbound = email.direction === 'inbound';
@@ -950,6 +981,10 @@ function EmailDetail({
   const otherAttachments = supplierPdfs.length > 0
     ? email.email_attachments.filter((attachment) => !isPdfAttachment(attachment))
     : email.email_attachments;
+  const supplierJobsByAttachment = useMemo(
+    () => new Map(supplierJobs.map((job) => [job.attachment_id, job])),
+    [supplierJobs],
+  );
 
   const handleLinked = (updatedEmail: Communication) => {
     queryClient.setQueryData<Communication[]>(['mailbox-emails'], (current) => (
@@ -989,6 +1024,18 @@ function EmailDetail({
       }
     },
     onError: (error) => toast.error((error as Error)?.message || "Impossible d'envoyer la réponse"),
+  });
+  const retrySupplierMutation = useMutation({
+    mutationFn: retrySupplierDocumentProcessing,
+    onSuccess: async () => {
+      toast.success('Analyse fournisseur relancée');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['supplier-document-processing'] }),
+        queryClient.invalidateQueries({ queryKey: ['supplier-expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['supplier-document-analyses'] }),
+      ]);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Relance impossible'),
   });
 
   const clearAttachmentUrl = () => {
@@ -1138,28 +1185,53 @@ function EmailDetail({
                 </span>
               </h3>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {supplierPdfs.map((attachment, index) => (
-                  <button
-                    key={`${attachment.id}-supplier-${index}`}
-                    type="button"
-                    className="group flex min-w-0 items-center gap-3 rounded-lg border border-due/20 bg-background p-3 text-left transition hover:border-due/40 hover:shadow-sm disabled:cursor-wait disabled:opacity-70"
-                    onClick={() => void openAttachment(attachment)}
-                    disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-due-soft text-due">
-                      {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <FileText className="h-4 w-4" />}
+                {supplierPdfs.map((attachment, index) => {
+                  const job = supplierJobsByAttachment.get(attachment.id);
+                  const canRetry = job?.status === 'failed';
+                  return (
+                    <div key={`${attachment.id}-supplier-${index}`} className="rounded-lg border border-due/20 bg-background p-3">
+                      <button
+                        type="button"
+                        className="group flex w-full min-w-0 items-center gap-3 text-left disabled:cursor-wait disabled:opacity-70"
+                        onClick={() => void openAttachment(attachment)}
+                        disabled={attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id}
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-due-soft text-due">
+                          {attachmentViewer?.status === 'loading' && attachmentViewer.attachment.id === attachment.id
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <FileText className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{attachment.filename}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            PDF fournisseur{attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
+                          </p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-due" />
+                      </button>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
+                        <Badge variant="outline" className={`rounded-full text-[10px] ${supplierProcessingClass(job)}`}>
+                          {job?.status === 'processing' && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                          {job?.status === 'completed' && <CheckCircle2 className="mr-1 h-3 w-3" />}
+                          {supplierProcessingLabel(job)}
+                        </Badge>
+                        {canRetry && job && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 rounded-full px-2 text-xs"
+                            onClick={() => retrySupplierMutation.mutate(job.id)}
+                            disabled={retrySupplierMutation.isPending}
+                          >
+                            <RefreshCw className="mr-1 h-3 w-3" /> Relancer
+                          </Button>
+                        )}
+                        {job?.last_error && <p className="w-full text-[11px] text-urgent">{job.last_error}</p>}
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{attachment.filename}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        PDF fournisseur{attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} Ko` : ''}
-                      </p>
-                    </div>
-                    <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-due" />
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

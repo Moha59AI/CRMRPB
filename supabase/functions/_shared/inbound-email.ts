@@ -229,6 +229,33 @@ export async function storeInboundEmail(
   if (insertError?.code === '23505') return 'duplicate';
   if (insertError) throw new Error(insertError.message);
 
+  if (correspondant.type === 'fournisseur') {
+    const supplierPdfs = email.attachments.filter((attachment) => (
+      attachment.content_type?.toLowerCase() === 'application/pdf'
+      || attachment.filename.toLowerCase().endsWith('.pdf')
+    ));
+    if (supplierPdfs.length > 0) {
+      const { error: queueError } = await admin.from('supplier_document_jobs').upsert(
+        supplierPdfs.map((attachment) => ({
+          workspace_id: email.workspaceId,
+          communication_id: email.id,
+          attachment_id: attachment.id,
+          storage_path: attachment.storage_path,
+          filename: attachment.filename,
+          content_type: attachment.content_type,
+          supplier_hint: correspondant.nom,
+        })),
+        {
+          onConflict: 'workspace_id,communication_id,attachment_id',
+          ignoreDuplicates: true,
+        },
+      );
+      // Une migration non encore appliquée ne doit jamais empêcher la réception
+      // de l'email. Le rattrapage SQL remettra ces PDF dans la file ensuite.
+      if (queueError) console.warn('Mise en file du PDF fournisseur impossible', queueError.message);
+    }
+  }
+
   const { data: recipients, error: recipientsError } = await admin
     .from('profiles')
     .select('id')

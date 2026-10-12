@@ -56,6 +56,18 @@ export interface LinkEmailToLeadInput {
   leadId: string;
 }
 
+export interface SupplierDocumentProcessingState {
+  id: string;
+  communication_id: string;
+  attachment_id: string;
+  filename: string;
+  status: 'pending' | 'processing' | 'completed' | 'review_required' | 'failed' | 'ignored';
+  attempts: number;
+  analysis_id: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
 const EMAIL_PAGE_SIZE = 500;
 const EMAIL_LIST_COLUMNS = [
   'id', 'workspace_id', 'lead_id', 'case_id', 'contact_id', 'user_id',
@@ -323,6 +335,27 @@ export async function fetchMailboxEmails(): Promise<Communication[]> {
   }
 
   return emails;
+}
+
+export async function fetchSupplierDocumentProcessingStates(): Promise<SupplierDocumentProcessingState[]> {
+  const { data, error } = await supabase
+    .from('supplier_document_jobs')
+    .select('id, communication_id, attachment_id, filename, status, attempts, analysis_id, last_error, created_at')
+    .order('created_at', { ascending: false })
+    .limit(2_000);
+  if (error) {
+    // La boîte mail reste utilisable pendant le déploiement de la migration.
+    if (['42P01', 'PGRST200', 'PGRST205'].includes(error.code ?? '')) return [];
+    throw new Error(error.message);
+  }
+  return (data as SupplierDocumentProcessingState[] | null) ?? [];
+}
+
+export async function retrySupplierDocumentProcessing(jobId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke('supplier-document-process', {
+    body: { jobId, force: true },
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchEmailHtml(communicationId: string): Promise<string | null> {

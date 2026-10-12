@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BellRing, BrainCircuit, CheckCircle2, KeyRound, ListChecks, Loader2,
+  BellRing, BrainCircuit, CheckCircle2, FileSearch, KeyRound, ListChecks, Loader2,
   Radar, ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -93,6 +93,28 @@ export function AiSettingsPage() {
                 <p className="mt-1 text-sm text-muted-foreground">GPT-5.6 Terra · raisonnement faible</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Le coût réel de chaque analyse est affiché dans la fiche du lead.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="rounded-xl p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <FileSearch className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Analyse automatique des PDF fournisseurs</h2>
+                  <Badge variant="outline" className="rounded-full">
+                    {status?.configured ? 'Active' : 'Clé requise'}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Les BL, factures et avoirs PDF reçus depuis les adresses fournisseur reconnues sont transmis à OpenAI pour lire les références vitrage, les montants et les échéances. L’original reste conservé dans le CRM.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Un résultat ambigu demande un contrôle humain. Aucun document ne peut confirmer seul un débit bancaire qui n’y est pas explicitement indiqué.
                 </p>
               </div>
             </div>
