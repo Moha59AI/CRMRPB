@@ -43,11 +43,34 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
 };
 
 /**
+ * Modules qui n'existent que dans l'espace de donnees fictives.
+ *
+ * Une experimentation ne doit pas apparaitre dans le CRM du quotidien tant
+ * qu'elle n'a pas ete validee : ni dans la navigation, ni par son adresse.
+ * La liste est ici parce que les trois filtres -- garde de route, barre
+ * laterale, barre d'onglets -- passent tous par `cheminAutorise`. Une regle
+ * recopiee a trois endroits finirait par diverger.
+ */
+export const CHEMINS_ZONE_TEST: readonly string[] = ['/atelier'];
+
+export function estCheminZoneTest(chemin: string): boolean {
+  return CHEMINS_ZONE_TEST.some((c) => chemin === c || chemin.startsWith(c + '/'));
+}
+
+/**
  * Le chemin le plus specifique l'emporte : /settings/webhooks est reserve aux
  * administrateurs meme si /settings est ouvert aux responsables.
+ *
+ * `dansZoneTest` vaut `false` par defaut : un appelant qui oublie de le
+ * transmettre cache l'experimentation au lieu de l'exposer.
  */
-export function cheminAutorise(chemin: string, role: UserRole | null): boolean {
+export function cheminAutorise(
+  chemin: string,
+  role: UserRole | null,
+  dansZoneTest = false,
+): boolean {
   if (!role) return false;
+  if (!dansZoneTest && estCheminZoneTest(chemin)) return false;
 
   // Le compte technicien est un accès planning, pas un accès CRM allégé.
   // Cette liste blanche doit précéder la règle générale : les chemins absents

@@ -20,9 +20,11 @@ import { cn } from '@/lib/utils';
  * faudrait compenser par une marge basse dans chacune des pages.
  */
 export function BarreOnglets({
-  role, onOuvrirMenu,
+  role, onOuvrirMenu, dansZoneTest,
 }: {
   role: UserRole | null;
+  /** Les modules en cours d'essai n'apparaissent que dans l'espace fictif. */
+  dansZoneTest?: boolean;
   onOuvrirMenu: () => void;
 }) {
   const location = useLocation();
@@ -32,7 +34,7 @@ export function BarreOnglets({
   // d'ouvrir ne s'affiche pas, plutôt que de mener à un refus.
   const onglets = cheminsPouce
     .map((chemin) => navItems.find((i) => i.path === chemin))
-    .filter((i): i is NavItem => Boolean(i) && cheminAutorise(i!.path, role));
+    .filter((i): i is NavItem => Boolean(i) && cheminAutorise(i!.path, role, dansZoneTest));
 
   if (onglets.length === 0) return null;
 

@@ -57,6 +57,13 @@ export interface Workspace {
 export interface Profile {
   id: string;
   workspace_id: string;
+  /**
+   * L'espace de travail actif est celui des données fictives.
+   *
+   * Recopié depuis `workspaces.est_zone_test` au chargement du profil. Les
+   * modules en cours d'essai n'existent que là.
+   */
+  dans_zone_test?: boolean;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;

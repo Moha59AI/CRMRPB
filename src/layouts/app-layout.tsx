@@ -33,9 +33,13 @@ export function AppLayout() {
   // refusees : proposer une porte fermee est une mauvaise facon de securiser.
   const sectionsVisibles = useMemo(
     () => navSections
-      .map((s) => ({ ...s, items: s.items.filter((i) => cheminAutorise(i.path, profile?.role ?? null)) }))
+      .map((s) => ({ ...s, items: s.items.filter(
+        (i) => cheminAutorise(i.path, profile?.role ?? null, profile?.dans_zone_test),
+      ) }))
       .filter((s) => s.items.length > 0),
-    [profile?.role]
+    // L'espace de travail compte autant que le role : basculer dans la zone
+    // de test doit faire apparaitre ses modules, et en sortir les retirer.
+    [profile?.role, profile?.dans_zone_test]
   );
   const [expanded, setExpanded] = useState(false);
   const [tiroirOuvert, setTiroirOuvert] = useState(false);
@@ -264,6 +268,7 @@ export function AppLayout() {
 
         <BarreOnglets
           role={profile?.role ?? null}
+          dansZoneTest={profile?.dans_zone_test}
           onOuvrirMenu={() => setTiroirOuvert(true)}
         />
       </main>

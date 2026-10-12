@@ -22,10 +22,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /*
+    Le profil embarque la nature de son espace de travail.
+
+    Les expérimentations ne vivent que dans l'espace de données fictives, et
+    trois endroits doivent le savoir : le garde de route, la barre latérale
+    et la barre d'onglets. Le lire ici, en même temps que le profil, évite
+    une requête séparée dont la réponse arriverait après la première
+    décision — et qui ferait donc clignoter un écran avant de le refuser.
+  */
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('*, workspaces(est_zone_test)')
       .eq('id', userId)
       .maybeSingle();
 
@@ -33,7 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Error fetching profile:', error.message);
       return null;
     }
-    return data as Profile | null;
+    if (!data) return null;
+
+    const { workspaces, ...profil } = data as Record<string, unknown> & {
+      workspaces?: { est_zone_test?: boolean } | null;
+    };
+    return {
+      ...(profil as Omit<Profile, 'dans_zone_test'>),
+      dans_zone_test: Boolean(workspaces?.est_zone_test),
+    };
   };
 
   const refreshProfile = async () => {

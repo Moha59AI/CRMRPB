@@ -233,11 +233,64 @@ test('chargement, panne et journée vide se distinguent', async () => {
   assert.match(page, /Aucune intervention aujourd’hui/);
 });
 
-test('l’atelier est atteignable et réservé aux mêmes rôles', async () => {
+test('l’atelier n’existe que dans l’espace de données fictives', async () => {
+  const { CHEMINS_ZONE_TEST, cheminAutorise, estCheminZoneTest } =
+    await import('../src/config/permissions.ts');
+
+  // Une expérimentation ne doit pas apparaître dans le CRM du quotidien
+  // tant qu'elle n'a pas été validée.
+  assert.ok(CHEMINS_ZONE_TEST.includes('/atelier'));
+  assert.equal(estCheminZoneTest('/atelier'), true);
+  assert.equal(estCheminZoneTest('/atelier/poste-2'), true);
+  assert.equal(estCheminZoneTest('/agenda'), false);
+
+  // Hors de l'espace fictif, personne n'y entre — pas même un administrateur.
+  for (const role of ['admin', 'manager', 'advisor', 'technician']) {
+    assert.equal(cheminAutorise('/atelier', role), false, role);
+    assert.equal(cheminAutorise('/atelier', role, false), false, role);
+  }
+  // Dedans, la matrice des rôles reprend la main.
+  assert.equal(cheminAutorise('/atelier', 'admin', true), true);
+  assert.equal(cheminAutorise('/atelier', 'accountant', true), false);
+
+  // Le reste du CRM n'est pas affecté par le drapeau.
+  assert.equal(cheminAutorise('/leads', 'admin'), true);
+  assert.equal(cheminAutorise('/leads', 'admin', true), true);
+});
+
+test('oublier de transmettre le drapeau cache, et n’expose pas', async () => {
+  const { cheminAutorise } = await import('../src/config/permissions.ts');
+
+  // La valeur par défaut est le choix sûr : un appelant distrait masque
+  // l'expérimentation au lieu de la publier.
+  assert.equal(cheminAutorise('/atelier', 'admin'), false);
+});
+
+test('les trois filtres connaissent l’espace de travail', async () => {
+  const garde = await read('src/features/auth/protected-route.tsx');
+  const layout = await read('src/layouts/app-layout.tsx');
+  const onglets = await read('src/components/BarreOnglets.tsx');
+  const contexte = await read('src/features/auth/auth-context.tsx');
+
+  // Garde de route, barre latérale et barre d'onglets : masquer l'entrée
+  // sans refuser l'adresse laisserait l'atelier atteignable à la main.
+  assert.match(garde, /cheminAutorise\(location\.pathname, profile\.role, profile\.dans_zone_test\)/);
+  assert.match(layout, /cheminAutorise\(i\.path, profile\?\.role \?\? null, profile\?\.dans_zone_test\)/);
+  assert.match(onglets, /cheminAutorise\(i!\.path, role, dansZoneTest\)/);
+
+  // La nature de l'espace arrive avec le profil, pas par une requête
+  // séparée dont la réponse suivrait la première décision.
+  assert.match(contexte, /select\('\*, workspaces\(est_zone_test\)'\)/);
+  assert.match(contexte, /dans_zone_test: Boolean\(workspaces\?\.est_zone_test\)/);
+});
+
+test('la route et la navigation existent toujours, pour le jour où', async () => {
   const routes = await read('src/app/app-routes.tsx');
   const navigation = await read('src/config/navigation.ts');
   const permissions = await read('src/config/permissions.ts');
 
+  // Promouvoir l'atelier consistera à le retirer de `CHEMINS_ZONE_TEST`,
+  // rien d'autre.
   assert.match(routes, /<Route path="\/atelier" element=\{charger\(<AtelierPage \/>\)\} \/>/);
   assert.match(navigation, /path: '\/atelier'/);
   assert.match(permissions, /'\/atelier': \['admin', 'manager', 'advisor', 'technician'\]/);

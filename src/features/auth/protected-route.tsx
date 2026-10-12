@@ -32,7 +32,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   // Le controle cote interface evite d'afficher un ecran qui echouerait de
   // toute facon : la regle qui compte est celle des politiques RLS.
-  if (!cheminAutorise(location.pathname, profile.role)) {
+  if (!cheminAutorise(location.pathname, profile.role, profile.dans_zone_test)) {
     return <Navigate to={accueilDuRole(profile.role)} replace />;
   }
 
