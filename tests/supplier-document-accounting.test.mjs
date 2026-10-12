@@ -101,3 +101,30 @@ test('les nouvelles tables comptables sont protégées par RLS', async () => {
   assert.match(migration, /profile\.role in \('admin', 'manager', 'accountant'\)/);
   assert.match(migration, /profile\.role in \('admin', 'accountant'\)/);
 });
+
+test('les dépenses fournisseurs restent lisibles et triées par date du document', async () => {
+  const [service, page] = await Promise.all([
+    read('src/features/finance/supplier-expenses-service.ts'),
+    read('src/features/finance/supplier-expenses-page.tsx'),
+  ]);
+  assert.match(service, /order\('invoice_date',[\s\S]{0,100}order\('updated_at'/);
+  assert.match(page, /Date document/);
+  assert.match(page, /LCR prévue/);
+  assert.match(page, /Facture reçue · non réglée/);
+  assert.match(page, /Détail indisponible/);
+  assert.match(page, /Date à confirmer/);
+});
+
+test('une facture sans date alimente la marge avec la date de réception et reste à contrôler', async () => {
+  const [processor, migration] = await Promise.all([
+    read('supabase/functions/supplier-document-process/index.ts'),
+    read('supabase/migrations/20261012153000_supplier_expense_data_coherence.sql'),
+  ]);
+  assert.match(processor, /function documentForAccounting/);
+  assert.match(processor, /expense_date_basis: 'received_at'/);
+  assert.match(processor, /source_received_at: communication\?\.delivered_at \?\? communication\?\.created_at/);
+  assert.match(processor, /force \? \['pending', 'failed', 'review_required'\]/);
+  assert.match(migration, /analysis\.document_date is null/);
+  assert.match(migration, /analysis\.supplier_expense_id is null/);
+  assert.match(migration, /Aucun montant n'est recalculé ou inventé/);
+});

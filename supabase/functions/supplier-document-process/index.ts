@@ -33,6 +33,8 @@ type SupplierDocumentJob = {
   supplier_hint: string | null;
   status: JobStatus;
   attempts: number;
+  created_at: string;
+  source_received_at?: string | null;
 };
 
 type ExtractedItem = {
@@ -71,6 +73,7 @@ type ExtractedDocument = {
   confidence: number;
   warnings: string[];
   items: ExtractedItem[];
+  expense_date_basis?: 'document' | 'received_at';
 };
 
 type Relationship = {
@@ -149,6 +152,32 @@ function roundMoney(value: number): number {
 function backoffDate(attempts: number): string {
   const minutes = Math.pow(2, Math.min(attempts, MAX_ATTEMPTS));
   return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
+function documentForAccounting(job: SupplierDocumentJob, document: ExtractedDocument): ExtractedDocument {
+  if (document.document_date) {
+    return { ...document, expense_date_basis: 'document' };
+  }
+  const receivedAt = job.source_received_at ?? job.created_at;
+  const receivedDate = dateValue(receivedAt?.slice(0, 10)) ?? new Date().toISOString().slice(0, 10);
+  return {
+    ...document,
+    document_date: receivedDate,
+    expense_date_basis: 'received_at',
+    warnings: uniqueStrings([
+      ...document.warnings,
+      'Date du document à confirmer : la date de réception de l’e-mail est utilisée provisoirement.',
+    ]),
+  };
+}
+
+function analysisMetadata(job: SupplierDocumentJob, document: ExtractedDocument, warnings: string[]) {
+  return {
+    vehicle_registration: document.vehicle_registration,
+    invoice_date_basis: document.expense_date_basis ?? 'document',
+    source_received_at: job.source_received_at ?? job.created_at,
+    warnings,
+  };
 }
 
 function constantTimeEquals(left: string, right: string): boolean {
@@ -732,9 +761,12 @@ async function processDeliveryNote(
 ): Promise<AccountingResult> {
   const existingFromSource = await existingExpenseFromSource(job);
   if (existingFromSource) return { expenseId: existingFromSource, expenseIds: [existingFromSource], reviewRequired: initialReview, warnings: initialWarnings };
-  if (!document.supplier || !document.document_number || !document.document_date) {
+  if (!document.supplier || !document.document_number) {
     return { expenseId: null, expenseIds: [], reviewRequired: true, warnings: initialWarnings };
   }
+  const accountingDocument = documentForAccounting(job, document);
+  document = accountingDocument;
+  initialWarnings = uniqueStrings([...initialWarnings, ...document.warnings]);
   const amounts = completeAmounts(document);
   if (amounts.amountHt === null || amounts.vatAmount === null || amounts.amountTtc === null) {
     return { expenseId: null, expenseIds: [], reviewRequired: true, warnings: initialWarnings };
@@ -779,7 +811,7 @@ async function processDeliveryNote(
     sites: uniqueStrings(document.items.map((item) => item.site)).join(' / ') || null,
     item_count: document.items.length,
     items: expenseItems(document.items),
-    portal_date: document.document_date,
+    portal_date: document.expense_date_basis === 'document' ? document.document_date : null,
     observation: warnings.join(' · ') || null,
     source_import: 'supplier-email-ai',
     accounting_status: accountingStatus,
@@ -795,7 +827,7 @@ async function processDeliveryNote(
     case_id: relationships.primary?.caseId ?? null,
     contact_id: relationships.primary?.contactId ?? null,
     customer_invoice_id: relationships.primary?.customerInvoiceId ?? null,
-    analysis_metadata: { vehicle_registration: document.vehicle_registration, warnings },
+    analysis_metadata: analysisMetadata(job, document, warnings),
     ...sourceFields(job),
   };
   const { data: inserted, error } = await admin.from('supplier_expenses').insert(row).select('id').single();
@@ -899,7 +931,7 @@ async function updateExpenseWithInvoice(
     invoice_number: document.invoice_number ?? document.document_number,
     order_number: document.order_number ?? stringValue(expense.order_number),
     invoice_date: document.document_date,
-    invoice_received_at: new Date().toISOString(),
+    invoice_received_at: job.source_received_at ?? job.created_at,
     amount_ht: roundMoney(amounts.amountHt - existingCreditHt),
     vat_amount: roundMoney(amounts.vatAmount - existingCreditVat),
     amount_ttc: roundMoney(amounts.amountTtc - existingCreditTtc),
@@ -931,7 +963,7 @@ async function updateExpenseWithInvoice(
     case_id: relationships.primary?.caseId ?? expense.case_id ?? null,
     contact_id: relationships.primary?.contactId ?? expense.contact_id ?? null,
     customer_invoice_id: relationships.primary?.customerInvoiceId ?? expense.customer_invoice_id ?? null,
-    analysis_metadata: { vehicle_registration: document.vehicle_registration, warnings: allWarnings },
+    analysis_metadata: analysisMetadata(job, document, allWarnings),
     ...source,
   };
   const { error } = await admin.from('supplier_expenses').update(update).eq('id', expense.id);
@@ -970,7 +1002,7 @@ async function insertStandaloneInvoice(
     order_number: document.order_number,
     delivery_note_number: document.delivery_note_numbers.length === 1 ? document.delivery_note_numbers[0] : null,
     invoice_date: document.document_date,
-    invoice_received_at: new Date().toISOString(),
+    invoice_received_at: job.source_received_at ?? job.created_at,
     amount_ht: amounts.amountHt,
     vat_amount: amounts.vatAmount,
     amount_ttc: amounts.amountTtc,
@@ -982,7 +1014,7 @@ async function insertStandaloneInvoice(
     sites: uniqueStrings(document.items.map((item) => item.site)).join(' / ') || null,
     item_count: document.items.length,
     items: expenseItems(document.items),
-    portal_date: document.document_date,
+    portal_date: document.expense_date_basis === 'document' ? document.document_date : null,
     observation: allWarnings.join(' · ') || null,
     source_import: 'supplier-email-ai',
     accounting_status: documentReviewRequired && !paymentConfirmationRequired
@@ -1000,7 +1032,7 @@ async function insertStandaloneInvoice(
     case_id: relationships.primary?.caseId ?? null,
     contact_id: relationships.primary?.contactId ?? null,
     customer_invoice_id: relationships.primary?.customerInvoiceId ?? null,
-    analysis_metadata: { vehicle_registration: document.vehicle_registration, warnings: allWarnings },
+    analysis_metadata: analysisMetadata(job, document, allWarnings),
     ...sourceFields(job),
   };
   const { data: inserted, error } = await admin.from('supplier_expenses').insert(row).select('id').single();
@@ -1031,7 +1063,7 @@ async function attachInvoiceSourceToExisting(
     : Boolean(first.payment_confirmation_required);
   const update: Record<string, unknown> = {
     ...sourceFields(job),
-    invoice_received_at: new Date().toISOString(),
+    invoice_received_at: job.source_received_at ?? job.created_at,
     analysis_confidence: document.confidence,
     needs_review: documentReviewRequired || paymentConfirmationRequired,
     document_review_required: documentReviewRequired,
@@ -1079,9 +1111,11 @@ async function processInvoice(
 ): Promise<AccountingResult> {
   const existingFromSource = await existingExpenseFromSource(job);
   if (existingFromSource) return { expenseId: existingFromSource, expenseIds: [existingFromSource], reviewRequired: initialReview, warnings: initialWarnings };
-  if (!document.supplier || !document.document_number || !document.document_date) {
+  if (!document.supplier || !document.document_number) {
     return { expenseId: null, expenseIds: [], reviewRequired: true, warnings: initialWarnings };
   }
+  document = documentForAccounting(job, document);
+  initialWarnings = uniqueStrings([...initialWarnings, ...document.warnings]);
   const completed = completeAmounts(document);
   if (completed.amountHt === null || completed.vatAmount === null || completed.amountTtc === null) {
     return { expenseId: null, expenseIds: [], reviewRequired: true, warnings: initialWarnings };
@@ -1520,23 +1554,33 @@ async function processJob(job: SupplierDocumentJob, force: boolean) {
       last_error: null,
     })
     .eq('id', job.id)
-    .in('status', ['pending', 'failed'])
+    .in('status', force ? ['pending', 'failed', 'review_required'] : ['pending', 'failed'])
     .select('*')
     .maybeSingle();
   if (claimError) throw new Error(`JOB_CLAIM_FAILED: ${claimError.message}`);
   if (!claimed) return { skipped: true, id: job.id };
 
   try {
-    const analysis = await analyzePdf(claimed as SupplierDocumentJob, force);
-    const accounting = await applyAccounting(claimed as SupplierDocumentJob, analysis.document);
-    const persisted = await persistAnalysis(claimed as SupplierDocumentJob, analysis, accounting);
+    const { data: communication, error: communicationError } = await admin
+      .from('communications')
+      .select('created_at, delivered_at')
+      .eq('id', claimed.communication_id)
+      .maybeSingle();
+    if (communicationError) console.error('SUPPLIER_COMMUNICATION_DATE_READ_FAILED', communicationError.message);
+    const claimedJob = {
+      ...(claimed as SupplierDocumentJob),
+      source_received_at: communication?.delivered_at ?? communication?.created_at ?? claimed.created_at,
+    };
+    const analysis = await analyzePdf(claimedJob, force);
+    const accounting = await applyAccounting(claimedJob, analysis.document);
+    const persisted = await persistAnalysis(claimedJob, analysis, accounting);
     await markJob(job.id, persisted.status, {
       analysis_id: persisted.id,
       completed_at: new Date().toISOString(),
       last_error: null,
     });
     if (persisted.status === 'review_required') {
-      await notifyReview(claimed as SupplierDocumentJob, analysis.document, accounting.warnings);
+      await notifyReview(claimedJob, analysis.document, accounting.warnings);
     }
     return {
       skipped: false,

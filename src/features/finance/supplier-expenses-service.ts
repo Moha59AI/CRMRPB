@@ -77,6 +77,12 @@ export interface SupplierExpense {
   source_communication_id?: string | null;
   source_attachment_id?: string | null;
   analysis_confidence?: number | null;
+  analysis_metadata?: {
+    invoice_date_basis?: 'document' | 'received_at';
+    source_received_at?: string | null;
+    warnings?: string[];
+    [key: string]: unknown;
+  } | null;
   needs_review?: boolean;
   document_review_required?: boolean;
   payment_confirmation_required?: boolean;
@@ -138,8 +144,8 @@ export async function fetchSupplierExpenses(): Promise<SupplierExpense[]> {
   const { data, error } = await supabase
     .from('supplier_expenses')
     .select('*')
-    .order('updated_at', { ascending: false })
     .order('invoice_date', { ascending: false })
+    .order('updated_at', { ascending: false })
     .order('document_number', { ascending: false })
     .limit(2_000);
 

@@ -45,8 +45,8 @@ const statusLabels: Record<NonNullable<SupplierExpense['accounting_status']>, st
   committed: 'Dépense engagée',
   card_to_confirm: 'CB à confirmer',
   paid_card_invoice_pending: 'CB payée · facture attendue',
-  invoiced_unpaid: 'Facture reçue · à payer',
-  payment_scheduled: 'Paiement planifié',
+  invoiced_unpaid: 'Facture reçue · non réglée',
+  payment_scheduled: 'Échéance prévue',
   paid: 'Payé',
   credited: 'Avoir appliqué',
   review_required: 'À contrôler',
@@ -64,6 +64,22 @@ function dateFr(value: string | null) {
 
 function montant(value: number | null) {
   return value == null ? '—' : euro.format(value);
+}
+
+function usesReceivedDate(expense: SupplierExpense) {
+  return expense.analysis_metadata?.invoice_date_basis === 'received_at';
+}
+
+function accountingStatusLabel(expense: SupplierExpense) {
+  if (expense.accounting_status !== 'payment_scheduled') {
+    return expense.accounting_status
+      ? statusLabels[expense.accounting_status]
+      : expense.document_type === 'invoice' ? 'Facture importée' : 'Historique';
+  }
+  const dueDate = expense.due_date ? ` · ${dateFr(expense.due_date)}` : '';
+  if (expense.payment_method === 'direct_debit') return `LCR prévue${dueDate}`;
+  if (expense.payment_method === 'bank_transfer') return `Virement prévu${dueDate}`;
+  return `Échéance prévue${dueDate}`;
 }
 
 function texteRecherche(expense: SupplierExpense) {
@@ -274,7 +290,7 @@ export function SupplierExpensesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead>Date</TableHead><TableHead>Fournisseur</TableHead><TableHead>Document</TableHead>
+                        <TableHead>Date document</TableHead><TableHead>Fournisseur</TableHead><TableHead>Document</TableHead>
                         <TableHead>Étape comptable</TableHead><TableHead className="text-right">HT</TableHead>
                         <TableHead className="text-right">TVA</TableHead><TableHead className="text-right">TTC</TableHead>
                         <TableHead className="w-24" />
@@ -283,7 +299,11 @@ export function SupplierExpensesPage() {
                     <TableBody>
                       {filtered.map((expense) => (
                         <TableRow key={expense.id} className={cn('cursor-pointer', expense.needs_review && 'bg-urgent-soft/25')} onClick={() => setSelected(expense)}>
-                          <TableCell className="whitespace-nowrap">{dateFr(expense.invoice_date)}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {usesReceivedDate(expense) ? (
+                              <div><p>Reçu le {dateFr(expense.invoice_date)}</p><p className="text-[11px] text-urgent">Date à confirmer</p></div>
+                            ) : dateFr(expense.invoice_date)}
+                          </TableCell>
                           <TableCell className="font-medium">{expense.supplier}</TableCell>
                           <TableCell><DocumentBadge expense={expense} /></TableCell>
                           <TableCell><AccountingStatus expense={expense} /></TableCell>
@@ -306,7 +326,7 @@ export function SupplierExpensesPage() {
                       </div>
                       <div className="mt-2"><AccountingStatus expense={expense} /></div>
                       <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span>{dateFr(expense.invoice_date)}</span><span className="truncate">{expense.sites || 'Site non précisé'}</span>
+                        <span>{usesReceivedDate(expense) ? `Reçu le ${dateFr(expense.invoice_date)} · date à confirmer` : dateFr(expense.invoice_date)}</span><span className="truncate">{expense.sites || 'Site non précisé'}</span>
                       </div>
                     </button>
                   ))}
@@ -463,8 +483,9 @@ function DocumentBadge({ expense }: { expense: SupplierExpense }) {
   const reference = expense.document_type === 'invoice'
     ? expense.invoice_number || expense.document_number
     : expense.delivery_note_number || expense.document_number;
+  const singleLineDescription = expense.item_count === 1 ? expense.items[0]?.description?.trim() : null;
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-1.5 first:mt-0">
+    <div className="mt-1 flex max-w-md flex-wrap items-center gap-1.5 first:mt-0">
       <Badge variant="outline" className={cn(
         'font-normal',
         credit && 'border-urgent/30 bg-urgent/10 text-urgent',
@@ -473,20 +494,26 @@ function DocumentBadge({ expense }: { expense: SupplierExpense }) {
         {documentLabels[expense.document_type]} {reference}
       </Badge>
       {expense.amount_basis === 'provisional' && <Badge variant="secondary" className="font-normal">Provisoire</Badge>}
-      <span className="text-[11px] text-muted-foreground">{expense.item_count} ligne{expense.item_count > 1 ? 's' : ''}</span>
+      {expense.item_count > 0 ? (
+        <span className="text-[11px] text-muted-foreground">{expense.item_count} ligne{expense.item_count > 1 ? 's' : ''}</span>
+      ) : (
+        <Badge variant="outline" className="border-due/30 bg-due-soft text-[11px] font-normal text-due-foreground">Détail indisponible</Badge>
+      )}
+      {singleLineDescription && <p className="basis-full truncate text-[11px] text-muted-foreground">{singleLineDescription}</p>}
     </div>
   );
 }
 
 function AccountingStatus({ expense }: { expense: SupplierExpense }) {
   const status = expense.accounting_status;
-  const label = status ? statusLabels[status] : expense.document_type === 'invoice' ? 'Facture importée' : 'Historique';
+  const label = accountingStatusLabel(expense);
   return (
     <Badge variant="outline" className={cn(
       'whitespace-nowrap font-normal',
       status === 'paid' && 'border-done/30 bg-done-soft text-done',
       status === 'paid_card_invoice_pending' && 'border-done/30 bg-done-soft text-done',
       status === 'card_to_confirm' && 'border-due/40 bg-due-soft text-due-foreground',
+      status === 'payment_scheduled' && 'border-due/30 bg-due-soft text-due-foreground',
       status === 'review_required' && 'border-urgent/30 bg-urgent-soft text-urgent',
       status === 'credited' && 'border-primary/20 bg-primary/5 text-primary',
     )}>
@@ -544,7 +571,11 @@ function ExpenseDialog({
           <>
             <DialogHeader className="border-b border-border px-5 py-4 pr-12">
               <DialogTitle>{documentLabels[expense.document_type]} {expense.invoice_number || expense.delivery_note_number || expense.document_number} · {expense.supplier}</DialogTitle>
-              <DialogDescription>{dateFr(expense.invoice_date)} · {expense.sites || 'Site non précisé'}</DialogDescription>
+              <DialogDescription>
+                {usesReceivedDate(expense)
+                  ? `Reçu le ${dateFr(expense.invoice_date)} · date du document à confirmer`
+                  : dateFr(expense.invoice_date)} · {expense.sites || 'Site non précisé'}
+              </DialogDescription>
             </DialogHeader>
             <div className="overflow-y-auto p-5">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
