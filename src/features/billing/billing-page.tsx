@@ -113,6 +113,17 @@ const paymentMethodLabels: Record<string, string> = {
   other: 'Autre',
 };
 
+function invoiceSource(invoice: Invoice): { label: string; className: string } {
+  const source = invoice.source_system ?? (invoice.onify_invoice_id ? 'onify' : 'crm');
+  if (source === 'reseau_glass') {
+    return { label: 'Réseau Glass', className: 'border-violet-200 bg-violet-50 text-violet-700' };
+  }
+  if (source === 'onify') {
+    return { label: 'Onify', className: 'border-sky-200 bg-sky-50 text-sky-700' };
+  }
+  return { label: 'CRM', className: 'border-border bg-muted/50 text-muted-foreground' };
+}
+
 const euroFormat = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 function formatEuro(amount: number | null | undefined): string {
   if (amount == null || amount === 0) return '—';
@@ -201,6 +212,7 @@ export function BillingPage() {
   const overdueInvoices = useMemo(() => {
     const now = new Date();
     return (invoices ?? []).filter((inv) => {
+      if (inv.payment_data_complete === false) return false;
       if (inv.status === 'overdue') return true;
       if (inv.status === 'sent' && inv.due_date && new Date(inv.due_date) < now) return true;
       return false;
@@ -287,6 +299,7 @@ export function BillingPage() {
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="text-xs">N° Facture</TableHead>
+                        <TableHead className="text-xs">Source</TableHead>
                         <TableHead className="text-xs">Dossier</TableHead>
                         <TableHead className="text-xs">Client</TableHead>
                         <TableHead className="text-xs text-right">Montant HT</TableHead>
@@ -304,6 +317,11 @@ export function BillingPage() {
                       {invoices.map((inv) => (
                         <LigneFacture key={inv.id} inv={inv}>
                           <TableCell className="font-medium text-foreground text-sm">{inv.invoice_number}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`whitespace-nowrap rounded-full text-[10px] ${invoiceSource(inv).className}`}>
+                              {invoiceSource(inv).label}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{caseNumberFor(inv.case_id)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{contactNameFor(inv.contact_id)}</TableCell>
                           <TableCell className="text-right tabular-nums text-sm">{formatEuro(inv.amount_ht)}</TableCell>
@@ -313,7 +331,11 @@ export function BillingPage() {
                           <TableCell className="text-right tabular-nums text-sm font-medium">{formatEuro(inv.amount_ttc)}</TableCell>
                           <TableCell className="text-right tabular-nums text-sm">{formatEuro(inv.insurance_amount)}</TableCell>
                           <TableCell className="text-right tabular-nums text-sm">{formatEuro(inv.franchise_amount)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-sm">{formatEuro(inv.remaining_amount)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-sm">
+                            {inv.payment_data_complete === false
+                              ? <span className="whitespace-nowrap text-xs font-medium text-due">À rapprocher</span>
+                              : formatEuro(inv.remaining_amount)}
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{formatDate(inv.due_date)}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={`rounded-full text-[10px] ${invoiceStatusColor(inv.status)}`}>

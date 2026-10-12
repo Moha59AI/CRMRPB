@@ -455,6 +455,11 @@ async function syncInvoices(
       issue_date: invoice.date_facture ?? invoice.created_at ?? syncedAt,
       due_date: invoice.date_echeance ?? null,
       status: invoiceStatus(invoice.statut),
+      source_system: 'onify',
+      external_invoice_id: String(invoice.invoice_id),
+      payment_data_complete: true,
+      credit_data_complete: true,
+      source_imported_at: syncedAt,
       onify_invoice_id: String(invoice.invoice_id),
       onify_payload: {
         object: invoice.objet ?? null,

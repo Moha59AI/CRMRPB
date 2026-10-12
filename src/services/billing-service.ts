@@ -27,7 +27,9 @@ export async function createQuote(q: Partial<Quote>): Promise<{ error: string | 
 export async function fetchInvoices(params: { status?: string }): Promise<Invoice[]> {
   let query = supabase.from('invoices').select('*').order('issue_date', { ascending: false });
   if (params.status && params.status !== 'all') query = query.eq('status', params.status);
-  const { data, error } = await query.limit(200);
+  // Le registre inclut plusieurs sources (CRM, Onify et Reseau Glass).
+  // Une limite a 200 tronquait le chiffre d'affaires et la liste des factures.
+  const { data, error } = await query.limit(5000);
   if (error) throw new Error(error.message);
   return (data as Invoice[]) ?? [];
 }

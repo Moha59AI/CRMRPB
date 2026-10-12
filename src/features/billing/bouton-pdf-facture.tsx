@@ -24,7 +24,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import type { Invoice } from '@/types';
 
-type FactureOuvrable = Pick<Invoice, 'id' | 'invoice_number' | 'onify_invoice_id' | 'onify_pdf_path'>;
+type FactureOuvrable = Pick<Invoice, 'id' | 'invoice_number' | 'source_system' | 'onify_invoice_id' | 'onify_pdf_path'>;
 
 function nomFichier(numero: string): string {
   return `${numero.replace(/[^A-Za-z0-9._-]/g, '-')}.pdf`;
@@ -109,7 +109,12 @@ export function usePdfFacture(facture: FactureOuvrable) {
     ? <VisionneusePdf facture={facture} url={url} onFermer={() => setUrl(null)} />
     : null;
 
-  return { ouvrir, enCours, visionneuse, disponible: Boolean(facture.onify_invoice_id) };
+  return {
+    ouvrir,
+    enCours,
+    visionneuse,
+    disponible: Boolean(facture.onify_invoice_id || facture.source_system === 'reseau_glass'),
+  };
 }
 
 /**
