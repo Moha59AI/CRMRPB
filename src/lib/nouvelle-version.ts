@@ -63,6 +63,12 @@ export function surveillerNouvelleVersion(auChangement: () => void): () => void 
   const minuteur = window.setInterval(verifier, INTERVALLE_MS);
   document.addEventListener('visibilitychange', verifier);
 
+  // Vérifier dès l'ouverture évite qu'une navigation interne affiche encore
+  // pendant cinq minutes un ancien module lourd (atelier 3D, finance, mail).
+  // La requête est sans cache et ne recharge jamais de force : si une saisie
+  // est en cours, l'utilisateur garde la main et choisit le bon moment.
+  void verifier();
+
   return () => {
     arrete = true;
     window.clearInterval(minuteur);

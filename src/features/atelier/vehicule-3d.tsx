@@ -64,7 +64,10 @@ export function Vehicule3D({
     g.position.y += (hauteur - g.position.y) * k;
   });
 
-  const teinte = selectionne ? '#19aa58' : couleur;
+  // La sélection ne repeint pas le véhicule. Dans l'atelier de référence,
+  // le vert appartient au poste, au halo et au dossier actif ; la carrosserie
+  // conserve sa couleur réelle afin de rester identifiable.
+  const teinte = couleur;
   const vitres = '#244a58';
   const metal = '#b9c1c4';
 

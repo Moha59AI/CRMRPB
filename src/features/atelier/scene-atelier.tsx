@@ -37,14 +37,46 @@ export function SceneAtelier({
   const [contextePerdu, setContextePerdu] = useState(false);
   const [etiquettes, setEtiquettes] = useState<PositionEtiquette[]>([]);
 
-  // Au-delà de douze étiquettes, une vue de garage devient une liste posée
-  // par-dessus une image. La sélection reste toujours prioritaire.
+  /*
+    La vue 3D représente les trois postes physiques de l'atelier, pas la
+    totalité de la file du jour. Empiler toutes les voitures d'une même
+    étape finissait par transformer la maquette en parking illisible. Le
+    premier dossier de chaque étape occupe donc le poste ; si l'utilisateur
+    a sélectionné un autre dossier depuis la Liste, c'est lui qui prend sa
+    place. Les compteurs et la Liste continuent, eux, d'afficher absolument
+    toutes les interventions.
+
+    Les rendez-vous annulés n'occupent pas un poste réel. Ils restent dans la
+    Liste et ne reviennent dans la scène que lorsqu'ils sont explicitement
+    sélectionnés, afin de pouvoir consulter leur dossier sans créer une
+    fausse quatrième zone de travail.
+  */
+  const placesVisibles = useMemo(() => {
+    const visibles: PlaceVehicule[] = [];
+
+    for (const cle of ['a_venir', 'en_cours', 'termine'] as const) {
+      const candidates = places.filter((place) => place.zone === cle);
+      const choisie = candidates.find((place) => place.intervention.id === selection)
+        ?? candidates[0];
+      if (choisie) visibles.push(choisie);
+    }
+
+    const annuleeSelectionnee = places.find((place) => (
+      place.zone === 'annule' && place.intervention.id === selection
+    ));
+    if (annuleeSelectionnee) visibles.push(annuleeSelectionnee);
+
+    return visibles;
+  }, [places, selection]);
+
+  // Une seule étiquette par poste : le dossier reste lisible et la voiture
+  // conserve sa silhouette, comme dans la maquette de référence.
   const placesEtiquetees = useMemo(() => {
     const triees = selection
-      ? [...places].sort((a, b) => Number(b.intervention.id === selection) - Number(a.intervention.id === selection))
-      : places;
-    return triees.slice(0, 12);
-  }, [places, selection]);
+      ? [...placesVisibles].sort((a, b) => Number(b.intervention.id === selection) - Number(a.intervention.id === selection))
+      : placesVisibles;
+    return triees;
+  }, [placesVisibles, selection]);
 
   const projeter = useCallback((suivantes: PositionEtiquette[]) => {
     setEtiquettes((precedentes) => positionsEgales(precedentes, suivantes) ? precedentes : suivantes);
@@ -119,13 +151,13 @@ export function SceneAtelier({
         <pointLight position={[6, 5.8, -2]} color="#effff2" intensity={18} distance={16} decay={2} />
 
         <CadrageAutomatique />
-        <DecorAtelier places={places} />
-        {ZONES.map((zone) => (
+        <DecorAtelier places={placesVisibles} />
+        {ZONES.filter((zone) => zone.cle !== 'annule').map((zone) => (
           <MarquageZone key={zone.cle} zone={zone} />
         ))}
 
         <Suspense fallback={null}>
-          {places.map((place) => (
+          {placesVisibles.map((place) => (
             <VehiculeInteractif
               key={place.intervention.id}
               place={place}
@@ -159,7 +191,7 @@ export function SceneAtelier({
       <div className="pointer-events-none absolute inset-0 z-10" aria-label="Repères des véhicules">
         {etiquettes.map((etiquette) => {
           if (!etiquette.visible) return null;
-          const place = places.find((p) => p.intervention.id === etiquette.id);
+           const place = placesVisibles.find((p) => p.intervention.id === etiquette.id);
           if (!place) return null;
           const i = place.intervention;
           const active = i.id === selection;
@@ -321,7 +353,7 @@ function CadrageAutomatique() {
     const zoom = Math.min(
       taille.width / (2 * rayonX),
       taille.height / (2 * rayonY),
-    ) * 1.08;
+    ) * 1.18;
 
     camera.zoom = Math.max(14, zoom);
     camera.updateProjectionMatrix();

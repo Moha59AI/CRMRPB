@@ -6,7 +6,7 @@
 // d'un vrai centre de vitrage : porte sectionnelle, rack à pare-brise,
 // établi, outillage, accueil et techniciens autour du véhicule en cours.
 
-import { RoundedBox } from '@react-three/drei';
+import { Html, RoundedBox } from '@react-three/drei';
 import type { PlaceVehicule } from './zones-atelier';
 
 const VERT = '#18a957';
@@ -90,30 +90,32 @@ function Architecture() {
         <meshStandardMaterial color="#f7f8f6" roughness={0.88} />
       </mesh>
 
-      {/* Bandeau de marque abstrait : le vrai nom reste dans le HTML, lisible
-          et accessible. */}
+      {/* Plaque physique et marque en HTML transformé : elle reste nette dans
+          une vue isométrique, contrairement à une texture de texte. */}
       <group position={[-5.8, 3.65, -8.18]}>
         <RoundedBox args={[4.9, 1.15, 0.12]} radius={0.16} smoothness={4}>
           <meshStandardMaterial color="#ffffff" roughness={0.65} />
         </RoundedBox>
-        <mesh position={[-1.72, 0, 0.09]}>
-          <boxGeometry args={[0.48, 0.58, 0.08]} />
-          <meshStandardMaterial color={VERT} />
-        </mesh>
-        <mesh position={[-1.17, 0.19, 0.09]}>
-          <boxGeometry args={[0.48, 0.2, 0.08]} />
-          <meshStandardMaterial color={ANTHRACITE} />
-        </mesh>
-        <mesh position={[-1.17, -0.19, 0.09]}>
-          <boxGeometry args={[0.48, 0.2, 0.08]} />
-          <meshStandardMaterial color={ANTHRACITE} />
-        </mesh>
-        {[0, 0.48, 0.96, 1.44].map((x, index) => (
-          <mesh key={x} position={[x - 0.35, index % 2 ? -0.16 : 0.16, 0.09]}>
-            <boxGeometry args={[0.33, 0.18, 0.08]} />
-            <meshStandardMaterial color={index < 2 ? ANTHRACITE : VERT} />
-          </mesh>
-        ))}
+        <Html
+          transform
+          center
+          position={[0, 0, 0.09]}
+          distanceFactor={8.2}
+          zIndexRange={[1, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div className="flex w-[230px] items-center justify-center gap-3 rounded-xl bg-white px-4 py-2 text-slate-900 shadow-sm">
+            <span className="rounded-lg bg-emerald-600 px-2 py-1 text-lg font-black tracking-[-0.08em] text-white">
+              RPB
+            </span>
+            <span className="leading-none">
+              <strong className="block text-[12px] font-black tracking-wide">RELAIS</strong>
+              <span className="mt-1 block text-[8px] font-bold tracking-[0.18em] text-emerald-700">
+                PARE-BRISE
+              </span>
+            </span>
+          </div>
+        </Html>
       </group>
 
       {/* Plafonniers suspendus, sans toit afin de garder la lecture
@@ -394,10 +396,35 @@ function PosteEnIntervention({ position, rotation, variante }: {
   const decalage = variante % 2 ? -1 : 1;
   return (
     <group position={[position[0], 0, position[1]]} rotation={[0, rotation, 0]}>
+      {/* Deux rails et quatre bras matérialisent le vrai poste de pose. Le
+          vert encadre le véhicule actif sans peindre toute la dalle. */}
+      {[-0.78, 0.78].map((x) => (
+        <RoundedBox
+          key={`rail-${x}`}
+          position={[x, 0.1, 0]}
+          args={[0.22, 0.16, 4.85]}
+          radius={0.07}
+          smoothness={3}
+          castShadow
+        >
+          <meshStandardMaterial color="#18a957" metalness={0.38} roughness={0.42} />
+        </RoundedBox>
+      ))}
+      {[-1.48, 1.48].flatMap((z) => [-1, 1].map((sens) => (
+        <group key={`bras-${z}-${sens}`} position={[0.95 * sens, 0.16, z]} rotation={[0, 0.52 * sens, 0]}>
+          <RoundedBox args={[1.1, 0.12, 0.17]} radius={0.05} smoothness={3} castShadow>
+            <meshStandardMaterial color="#2f3b3a" metalness={0.48} roughness={0.4} />
+          </RoundedBox>
+          <mesh position={[0.58 * sens, 0.02, 0]}>
+            <cylinderGeometry args={[0.13, 0.13, 0.12, 16]} />
+            <meshStandardMaterial color="#111827" roughness={0.74} />
+          </mesh>
+        </group>
+      )))}
       <Technicien position={[1.45 * decalage, 0, -0.35]} rotation={decalage > 0 ? -1.25 : 1.25} couleur="#1f6f49" />
       <Technicien position={[-1.35 * decalage, 0, 0.75]} rotation={decalage > 0 ? 1.35 : -1.35} couleur="#263238" />
       <Chariot position={[2.05 * decalage, 0, 1.55]} />
-      <mesh position={[0, 0.035, 0]} receiveShadow>
+      <mesh position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 4]} receiveShadow>
         <ringGeometry args={[2.55, 2.66, 4]} />
         <meshBasicMaterial color={VERT} transparent opacity={0.9} />
       </mesh>
