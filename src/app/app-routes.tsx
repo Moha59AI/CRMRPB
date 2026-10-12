@@ -55,10 +55,12 @@ const BancListe = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({
 const BancFiche = lazy(() => import('@/features/diag/banc-fiche').then((m) => ({ default: m.BancFiche })));
 const ApercuAccueil = lazy(() => import('@/features/diag/apercu-accueil').then((m) => ({ default: m.ApercuAccueil })));
 const ApercuLeads = lazy(() => import('@/features/diag/apercu-leads').then((m) => ({ default: m.ApercuLeads })));
+const AtelierPage = lazy(() => import('@/features/atelier/atelier-page').then((m) => ({ default: m.AtelierPage })));
 const InterventionsPage = lazy(() => import('@/features/interventions/interventions-page').then((m) => ({ default: m.InterventionsPage })));
 const ApercuMail = lazy(() => import('@/features/diag/apercu-mail').then((m) => ({ default: m.ApercuMail })));
 const ApercuAgenda = lazy(() => import('@/features/diag/apercu-agenda').then((m) => ({ default: m.ApercuAgenda })));
 const ApercuInterventions = lazy(() => import('@/features/diag/apercu-interventions').then((m) => ({ default: m.ApercuInterventions })));
+const ApercuAtelier = lazy(() => import('@/features/diag/apercu-atelier').then((m) => ({ default: m.ApercuAtelier })));
 
 function ChargementPage({ superposee = false }: { superposee?: boolean }) {
   return (
@@ -112,6 +114,7 @@ export function AppRoutes() {
             <Route path="/apercu-mail" element={charger(<ApercuMail />)} />
             <Route path="/apercu-agenda" element={charger(<ApercuAgenda />)} />
             <Route path="/apercu-interventions" element={charger(<ApercuInterventions />)} />
+            <Route path="/apercu-atelier" element={charger(<ApercuAtelier />)} />
             <Route path="/diag-fiche/:id" element={charger(<BancFiche pleinePage />)} />
           </>
         )}
@@ -127,6 +130,7 @@ export function AppRoutes() {
           <Route path="/leads" element={charger(<LeadsPage />)} />
           <Route path="/relances" element={charger(<RelancesPage />)} />
           <Route path="/interventions" element={charger(<InterventionsPage />)} />
+          <Route path="/atelier" element={charger(<AtelierPage />)} />
           <Route path="/interventions/:leadId" element={charger(<DossierModal pleinePage />)} />
           <Route path="/clients/:contactId" element={charger(<ClientModal pleinePage />)} />
           <Route path="/cases" element={charger(<CasesPage />)} />

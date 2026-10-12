@@ -22,6 +22,7 @@ import {
   Link2,
   Wrench,
   Palette,
+  Boxes,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -62,6 +63,12 @@ export const navSections: NavSection[] = [
         path: '/interventions',
         icon: Wrench,
         description: 'Où aller, quand, et comment s’y rendre',
+      },
+      {
+        label: 'Atelier',
+        path: '/atelier',
+        icon: Boxes,
+        description: 'Les interventions du jour, à leur poste',
       },
       {
         label: "Aujourd'hui",

@@ -547,3 +547,14 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Dans l'atelier 3D, le doigt pilote la caméra — jamais la page.
+
+   `!important` est ici le seul moyen : OrbitControls pose `touch-action`
+   en style en ligne sur le canvas, et le remet à `auto` à chaque
+   démontage. En mode strict, React monte puis démonte puis remonte, et le
+   canvas restait en `auto` — un glissement faisait alors défiler la page
+   au lieu de tourner l'atelier. */
+.atelier-3d canvas {
+  touch-action: none !important;
+}
