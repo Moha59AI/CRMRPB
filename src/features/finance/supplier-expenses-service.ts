@@ -39,6 +39,7 @@ export type SupplierPaymentStatus = 'unknown' | 'unpaid' | 'scheduled' | 'paid' 
 
 export interface SupplierExpense {
   id: string;
+  updated_at: string;
   supplier: string;
   document_type: SupplierDocumentType;
   document_number: string;
@@ -137,6 +138,7 @@ export async function fetchSupplierExpenses(): Promise<SupplierExpense[]> {
   const { data, error } = await supabase
     .from('supplier_expenses')
     .select('*')
+    .order('updated_at', { ascending: false })
     .order('invoice_date', { ascending: false })
     .order('document_number', { ascending: false })
     .limit(2_000);

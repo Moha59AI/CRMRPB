@@ -78,6 +78,7 @@ const euro = new Intl.NumberFormat('fr-FR', {
   style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
 });
 const integer = new Intl.NumberFormat('fr-FR');
+const AUTO_REFRESH_MS = 30_000;
 
 const chartConfig = {
   facture: { label: 'Facturé', color: 'hsl(var(--primary))' },
@@ -97,6 +98,9 @@ export function FinancialDashboardPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['financial-dashboard'],
     queryFn: fetchFinancialDashboardData,
+    refetchInterval: AUTO_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
 
   const view = useMemo(() => data ? buildView(data, period) : null, [data, period]);

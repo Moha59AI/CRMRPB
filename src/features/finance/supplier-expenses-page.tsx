@@ -31,6 +31,7 @@ import {
 const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 const entier = new Intl.NumberFormat('fr-FR');
 const dateCourte = new Intl.DateTimeFormat('fr-FR');
+const AUTO_REFRESH_MS = 30_000;
 
 type TypeFiltre = 'all' | SupplierExpense['document_type'];
 
@@ -86,21 +87,32 @@ export function SupplierExpensesPage() {
   const expensesQuery = useQuery({
     queryKey: ['supplier-expenses'],
     queryFn: fetchSupplierExpenses,
+    refetchInterval: AUTO_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
   const accountsQuery = useQuery({
     queryKey: ['supplier-accounts-overview'],
     queryFn: fetchSupplierAccountOverview,
+    refetchInterval: AUTO_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
   const analysesQuery = useQuery({
     queryKey: ['supplier-document-analyses'],
     queryFn: fetchSupplierDocumentAnalyses,
+    refetchInterval: AUTO_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
   const jobsQuery = useQuery({
     queryKey: ['supplier-document-jobs'],
     queryFn: fetchSupplierDocumentJobs,
     refetchInterval: (query) => (
-      (query.state.data ?? []).some((job) => ['pending', 'processing'].includes(job.status)) ? 5_000 : false
+      (query.state.data ?? []).some((job) => ['pending', 'processing'].includes(job.status)) ? 5_000 : AUTO_REFRESH_MS
     ),
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
   });
   const data = useMemo(() => expensesQuery.data ?? [], [expensesQuery.data]);
   const accounts = accountsQuery.data ?? [];

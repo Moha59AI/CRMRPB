@@ -37,6 +37,10 @@ test('les sources externes sont dedoublonnees et Onify reste complet', async () 
 test('Finance compte Reseau Glass dans le CA sans creer de faux impayes', async () => {
   const page = await read('src/features/finance/financial-dashboard-page.tsx');
 
+  assert.match(page, /const AUTO_REFRESH_MS = 30_000/);
+  assert.match(page, /refetchInterval: AUTO_REFRESH_MS/);
+  assert.match(page, /refetchOnWindowFocus: true/);
+  assert.match(page, /refetchOnMount: 'always'/);
   assert.match(page, /label="CA facturé" value=\{euro\.format\(totals\.billed\)\}/);
   assert.match(page, /function hasCompletePaymentData/);
   assert.match(page, /if \(!hasCompletePaymentData\(invoice\)\) return 0/);

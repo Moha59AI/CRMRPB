@@ -36,3 +36,16 @@ test('la page fournisseurs expose les totaux et le détail des achats sans prome
   assert.match(routes, /path="\/finance\/fournisseurs"/);
   assert.match(navigation, /label: 'Fournisseurs'/);
 });
+
+test('les nouveaux documents fournisseurs remontent sans actualisation manuelle', async () => {
+  const [page, service] = await Promise.all([
+    read('src/features/finance/supplier-expenses-page.tsx'),
+    read('src/features/finance/supplier-expenses-service.ts'),
+  ]);
+
+  assert.match(page, /const AUTO_REFRESH_MS = 30_000/);
+  assert.match(page, /refetchInterval: AUTO_REFRESH_MS/);
+  assert.match(page, /refetchOnWindowFocus: true/);
+  assert.match(page, /refetchOnMount: 'always'/);
+  assert.match(service, /order\('updated_at', \{ ascending: false \}\)/);
+});
