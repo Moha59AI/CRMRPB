@@ -58,6 +58,14 @@ const caseStatusOrder: string[] = [
   'sav', 'completed',
 ];
 
+const onifyPaymentLabels: Record<string, string> = {
+  pending: 'Aucun règlement reçu',
+  tva_only: 'TVA réglée',
+  insurance_only: 'Part assureur réglée',
+  partial: 'Règlement partiel',
+  complete: 'Règlement complet',
+};
+
 function getStatusColor(status: string): string {
   const early = ['new', 'qualification'];
   const mid = ['documents_pending', 'insurance_declaration', 'glass_ordered', 'appointment_scheduled', 'payment_pending'];
@@ -774,6 +782,24 @@ function CaseDetailSheet({
                   <InfoRow label="Type d'intervention" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
                 </Section>
 
+                {caseData.onify_glass_case_id && (
+                  <Section title="Suivi Glass Onify">
+                    <InfoRow label="Référence Glass" value={caseData.onify_reference ?? caseData.case_number} />
+                    <InfoRow label="Type de dossier" value={caseData.onify_type} />
+                    <InfoRow label="Statut du dossier" value={caseData.onify_status_label ?? caseData.onify_status_code} />
+                    <InfoRow label="Statut des travaux" value={caseData.onify_work_status_label ?? caseData.onify_work_status_code} />
+                    <InfoRow label="Étape Onify" value={caseData.onify_stage} />
+                    <InfoRow
+                      label="Règlement"
+                      value={caseData.onify_payment_status
+                        ? onifyPaymentLabels[caseData.onify_payment_status] ?? caseData.onify_payment_status
+                        : null}
+                    />
+                    <InfoRow label="Vitrages" value={caseData.onify_glass_items?.join(', ') || null} />
+                    <InfoRow label="Dernière mise à jour" value={formatDateTime(caseData.onify_updated_at ?? caseData.onify_synced_at)} />
+                  </Section>
+                )}
+
                 <Section title="Client">
                   <InfoRow label="Nom" value={clientName} />
                   <InfoRow label="Téléphone" value={clientInfo?.phone ?? null} />
@@ -782,17 +808,21 @@ function CaseDetailSheet({
                 </Section>
 
                 <Section title="Véhicule">
-                  <InfoRow label="Marque / Modèle" value={leadInfo ? [leadInfo.vehicle_make, leadInfo.vehicle_model].filter(Boolean).join(' ') : null} />
-                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? null} />
+                  <InfoRow label="Marque / Modèle" value={[
+                    leadInfo?.vehicle_make ?? caseData.onify_vehicle_make,
+                    leadInfo?.vehicle_model ?? caseData.onify_vehicle_model,
+                  ].filter(Boolean).join(' ') || null} />
+                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? caseData.onify_vehicle_registration} />
                   <InfoRow label="Type de vitrage" value={caseData.glass_type} />
                   <InfoRow label="Capteurs" value={caseData.has_sensors ? 'Oui' : 'Non'} />
                   <InfoRow label="Caméra ADAS" value={caseData.has_adas_camera ? 'Oui' : 'Non'} />
                 </Section>
 
                 <Section title="Assurance">
-                  <InfoRow label="Compagnie" value={insurerInfo?.name ?? (leadInfo?.insurance ?? null)} />
+                  <InfoRow label="Compagnie" value={insurerInfo?.name ?? leadInfo?.insurance ?? caseData.onify_insurer_name} />
                   <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
                   <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
+                  <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
                 </Section>
 
                 <Section title="Rendez-vous">
@@ -835,9 +865,9 @@ function CaseDetailSheet({
               {/* === VÉHICULE === */}
               <TabsContent value="vehicule" className="space-y-3 mt-4">
                 <Section title="Détails du véhicule">
-                  <InfoRow label="Marque" value={leadInfo?.vehicle_make ?? null} />
-                  <InfoRow label="Modèle" value={leadInfo?.vehicle_model ?? null} />
-                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? null} />
+                  <InfoRow label="Marque" value={leadInfo?.vehicle_make ?? caseData.onify_vehicle_make} />
+                  <InfoRow label="Modèle" value={leadInfo?.vehicle_model ?? caseData.onify_vehicle_model} />
+                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? caseData.onify_vehicle_registration} />
                 </Section>
                 <Section title="Vitrage">
                   <InfoRow label="Type de vitrage" value={caseData.glass_type} />
@@ -853,13 +883,14 @@ function CaseDetailSheet({
               {/* === ASSURANCE === */}
               <TabsContent value="assurance" className="space-y-3 mt-4">
                 <Section title="Compagnie d'assurance">
-                  <InfoRow label="Nom" value={insurerInfo?.name ?? (leadInfo?.insurance ?? null)} />
+                  <InfoRow label="Nom" value={insurerInfo?.name ?? leadInfo?.insurance ?? caseData.onify_insurer_name} />
                   <InfoRow label="Téléphone" value={insurerInfo?.phone ?? null} />
                   <InfoRow label="Email" value={insurerInfo?.email ?? null} />
                 </Section>
                 <Section title="Contrat & Sinistre">
                   <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
                   <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
+                  <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
                   <InfoRow label="Franchise" value={formatEuro(caseData.franchise_amount)} />
                 </Section>
               </TabsContent>

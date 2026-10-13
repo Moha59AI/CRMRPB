@@ -26,6 +26,7 @@ const countCards: Array<{
   { key: 'invoices', label: 'Factures', icon: FileText },
   { key: 'quotes', label: 'Devis', icon: FileCheck2 },
   { key: 'credits', label: 'Avoirs', icon: Database },
+  { key: 'glassCases', label: 'Dossiers Glass', icon: ShieldCheck },
 ];
 
 export function OnifySettingsPage() {
@@ -50,7 +51,7 @@ export function OnifySettingsPage() {
     try {
       const counts = await syncOnify();
       toast.success(
-        `${counts.contacts} client${counts.contacts > 1 ? 's' : ''} et ${counts.invoices} facture${counts.invoices > 1 ? 's' : ''} actualisés`,
+        `${counts.contacts} client${counts.contacts > 1 ? 's' : ''}, ${counts.invoices} facture${counts.invoices > 1 ? 's' : ''} et ${counts.glassCases} dossier${counts.glassCases > 1 ? 's' : ''} Glass actualisés`,
       );
       await loadConnection();
     } catch (error) {
@@ -87,7 +88,7 @@ export function OnifySettingsPage() {
             <ShieldCheck className="h-4 w-4" />
             <AlertTitle>Onify reste protégé</AlertTitle>
             <AlertDescription>
-              La connexion lit les clients, notes, appels, devis, factures et avoirs, puis les copie dans ce CRM. Aucune donnée n'est créée, modifiée ou supprimée dans Onify.
+              La connexion lit les clients, dossiers Glass, notes, appels, devis, factures et avoirs, puis les copie dans ce CRM. Aucune donnée n'est créée, modifiée ou supprimée dans Onify.
             </AlertDescription>
           </Alert>
 
@@ -109,6 +110,7 @@ export function OnifySettingsPage() {
             <Separator className="my-5" />
             <div className="grid gap-3 sm:grid-cols-2">
               <InfoRow label="Dernière synchronisation" value={connection?.last_success_at ? new Date(connection.last_success_at).toLocaleString('fr-FR') : 'Jamais'} />
+              <InfoRow label="Dernière reprise Glass" value={settings.glass_last_sync_at ? new Date(settings.glass_last_sync_at).toLocaleString('fr-FR') : 'Historique à reprendre'} />
               <InfoRow label="Notes restantes" value={settings.notes_remaining ? 'Oui, prochain lot automatique' : 'Non'} />
             </div>
           </Card>

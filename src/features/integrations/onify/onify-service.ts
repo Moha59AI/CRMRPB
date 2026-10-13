@@ -8,12 +8,18 @@ export interface OnifySyncCounts {
   invoices: number;
   quotes: number;
   credits: number;
+  glassCases: number;
+  glassLeads: number;
+  leadAddresses: number;
+  vehicles: number;
+  pdfs: number;
   notesRemaining: boolean;
 }
 
 export interface OnifySettings {
   direction: 'onify_to_crm';
   last_sync_at: string | null;
+  glass_last_sync_at: string | null;
   notes_page: number;
   notes_remaining: boolean;
   last_counts: OnifySyncCounts | null;
@@ -40,6 +46,9 @@ export function parseOnifySettings(connection: IntegrationConnection | null): On
   return {
     direction: 'onify_to_crm',
     last_sync_at: typeof settings.last_sync_at === 'string' ? settings.last_sync_at : null,
+    glass_last_sync_at: typeof settings.glass_last_sync_at === 'string'
+      ? settings.glass_last_sync_at
+      : null,
     notes_page: Number(settings.notes_page ?? 1),
     notes_remaining: settings.notes_remaining === true,
     last_counts: settings.last_counts && typeof settings.last_counts === 'object'

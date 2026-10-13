@@ -102,6 +102,42 @@ type OnifyCall = Json & {
   tags?: unknown[] | null;
 };
 
+type OnifyStatus = {
+  code?: string | null;
+  libelle?: string | null;
+};
+
+type OnifyGlassCase = Json & {
+  dossier_id: string | number;
+  reference?: string | null;
+  type?: string | null;
+  statut?: OnifyStatus | null;
+  statut_travaux?: OnifyStatus | null;
+  statut_paiement?: string | null;
+  etape?: string | null;
+  archive?: boolean;
+  client?: {
+    contact_id?: string | number | null;
+    prenom?: string | null;
+    nom?: string | null;
+    entreprise?: string | null;
+  } | null;
+  vehicule?: {
+    immatriculation?: string | null;
+    marque?: string | null;
+    modele?: string | null;
+  } | null;
+  assureur?: string | null;
+  sinistre?: {
+    numero?: string | null;
+    date?: string | null;
+  } | null;
+  vitrages?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  finalise_at?: string | null;
+};
+
 type SyncCounts = {
   contacts: number;
   /** Leads ayant recu l'adresse de leur contact. */
@@ -111,6 +147,10 @@ type SyncCounts = {
   invoices: number;
   quotes: number;
   credits: number;
+  /** Dossiers de prise en charge Glass crees ou actualises. */
+  glassCases: number;
+  /** Fiches leads completees ou rattachees grace a Glass. */
+  glassLeads: number;
   /** Leads et rendez-vous enrichis avec le véhicule fourni par Onify. */
   vehicles: number;
   notesRemaining: boolean;
@@ -249,18 +289,22 @@ async function listAll<T>(
 async function onifyToken(workspaceId: string): Promise<string> {
   const secretName = `onify_api_key_${workspaceId}`;
   const { data } = await adminClient.rpc('vault_read_secret', { secret_name: secretName });
-  if (data) return String(data);
-
-  // Amorçage unique depuis les secrets chiffrés de la fonction. Dès la
-  // première synchronisation, la clé est également conservée dans Vault.
   const bootstrap = Deno.env.get('ONIFY_API_KEY') ?? '';
-  if (!bootstrap) throw new Error('Cle API Onify manquante');
-  const { error } = await adminClient.rpc('vault_create_secret', {
-    new_secret_name: secretName,
-    new_secret: bootstrap,
-  });
-  if (error) throw new Error(`Stockage Vault Onify impossible : ${error.message}`);
-  return bootstrap;
+  if (bootstrap) {
+    // Une nouvelle Secret key remplace explicitement la valeur de Vault au
+    // prochain passage. La clé ne transite jamais par le navigateur ni Git.
+    const rpc = data ? 'vault_update_secret' : 'vault_create_secret';
+    const args = data
+      ? { secret_name: secretName, new_secret: bootstrap }
+      : { new_secret_name: secretName, new_secret: bootstrap };
+    if (String(data ?? '') !== bootstrap) {
+      const { error } = await adminClient.rpc(rpc, args);
+      if (error) throw new Error(`Stockage Vault Onify impossible : ${error.message}`);
+    }
+    return bootstrap;
+  }
+  if (data) return String(data);
+  throw new Error('Cle API Onify manquante');
 }
 
 async function ensureConnection(workspaceId: string) {
@@ -431,6 +475,69 @@ function vatRate(totalHt: number, vat: number): number {
   return Math.round((vat / totalHt) * 10_000) / 100;
 }
 
+function normalizedLabel(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('fr-FR');
+}
+
+function glassType(items: string[] | null | undefined): string | null {
+  const label = normalizedLabel(items?.join(' '));
+  if (!label) return null;
+  if (label.includes('pare brise') || label.includes('windshield')) return 'pare_brise';
+  if (label.includes('lunette') || label.includes('arriere')) return 'lunette_arriere';
+  if (label.includes('custode')) return 'custode';
+  if (label.includes('lateral') || label.includes('porte') || label.includes('glace')) {
+    return 'glace_laterale';
+  }
+  return 'autre';
+}
+
+const CASE_STATUS_RANK: Record<string, number> = {
+  new: 0,
+  qualification: 1,
+  documents_pending: 2,
+  insurance_declaration: 3,
+  glass_ordered: 4,
+  appointment_scheduled: 5,
+  intervention_done: 6,
+  invoice_sent: 7,
+  payment_pending: 8,
+  payment_received: 9,
+  gift_given: 10,
+  sav: 10,
+  completed: 11,
+};
+
+function glassCaseStatus(item: OnifyGlassCase): string {
+  const status = cleanText(item.statut?.code);
+  const workStatus = cleanText(item.statut_travaux?.code);
+  const paymentStatus = cleanText(item.statut_paiement);
+  if (status === 'finalise') return 'completed';
+  if (paymentStatus === 'complete') return 'payment_received';
+  if (
+    status === 'partiellement_paye'
+    || workStatus === 'paiement_attente'
+    || ['tva_only', 'insurance_only', 'partial'].includes(paymentStatus ?? '')
+  ) return 'payment_pending';
+  if (['travaux_autorises', 'travaux_en_attente', 'verif_bdg_en_cours'].includes(workStatus ?? '')) {
+    return 'insurance_declaration';
+  }
+  return 'qualification';
+}
+
+function advancedCaseStatus(current: unknown, item: OnifyGlassCase): string {
+  const value = cleanText(current) ?? 'new';
+  if (cleanText(item.statut?.code) === 'annule') return value;
+  const imported = glassCaseStatus(item);
+  return (CASE_STATUS_RANK[imported] ?? 0) > (CASE_STATUS_RANK[value] ?? 0)
+    ? imported
+    : value;
+}
+
 async function syncInvoices(
   workspaceId: string,
   invoices: OnifyInvoice[],
@@ -539,6 +646,92 @@ async function syncCredits(
     onify_synced_at: syncedAt,
   }));
   await upsertBatches('onify_credit_notes', rows, 'workspace_id,onify_credit_id');
+}
+
+async function syncGlassCases(
+  workspaceId: string,
+  glassCases: OnifyGlassCase[],
+  contactIds: Map<string, string>,
+): Promise<{ cases: number; leads: number }> {
+  const { data: existing, error } = await adminClient
+    .from('windscreen_cases')
+    .select('id, case_number, status, onify_glass_case_id')
+    .eq('workspace_id', workspaceId)
+    .limit(10000);
+  if (error) throw new Error(`dossiers Glass: ${error.message}`);
+
+  const byOnifyId = new Map((existing ?? [])
+    .filter((row) => row.onify_glass_case_id)
+    .map((row) => [String(row.onify_glass_case_id), row]));
+  const byCaseNumber = new Map((existing ?? [])
+    .filter((row) => !row.onify_glass_case_id && row.case_number)
+    .map((row) => [String(row.case_number).trim(), row]));
+  const uniqueCases = new Map<string, OnifyGlassCase>();
+  for (const item of glassCases) uniqueCases.set(String(item.dossier_id), item);
+
+  const syncedAt = new Date().toISOString();
+  const updateRows: Json[] = [];
+  const insertRows: Json[] = [];
+  for (const item of uniqueCases.values()) {
+    const onifyId = String(item.dossier_id);
+    const reference = cleanText(item.reference) ?? `GLASS-${onifyId}`;
+    const match = byOnifyId.get(onifyId) ?? byCaseNumber.get(reference);
+    const items = Array.isArray(item.vitrages)
+      ? item.vitrages.map((value) => cleanText(value)).filter((value): value is string => Boolean(value))
+      : [];
+    const shared: Json = {
+      workspace_id: workspaceId,
+      case_number: reference,
+      contact_id: item.client?.contact_id == null
+        ? null
+        : contactIds.get(String(item.client.contact_id)) ?? null,
+      status: advancedCaseStatus(match?.status, item),
+      glass_type: glassType(items),
+      insurance_claim_number: cleanText(item.sinistre?.numero),
+      insurance_claim_date: cleanText(item.sinistre?.date),
+      onify_glass_case_id: onifyId,
+      onify_reference: cleanText(item.reference),
+      onify_type: cleanText(item.type),
+      onify_status_code: cleanText(item.statut?.code),
+      onify_status_label: cleanText(item.statut?.libelle),
+      onify_work_status_code: cleanText(item.statut_travaux?.code),
+      onify_work_status_label: cleanText(item.statut_travaux?.libelle),
+      onify_payment_status: cleanText(item.statut_paiement),
+      onify_stage: cleanText(item.etape),
+      onify_archived: item.archive === true,
+      onify_insurer_name: cleanText(item.assureur),
+      onify_vehicle_registration: cleanText(item.vehicule?.immatriculation),
+      onify_vehicle_make: cleanText(item.vehicule?.marque),
+      onify_vehicle_model: cleanText(item.vehicule?.modele),
+      onify_glass_items: items,
+      onify_payload: item,
+      onify_created_at: cleanText(item.created_at),
+      onify_updated_at: cleanText(item.updated_at),
+      onify_finalized_at: cleanText(item.finalise_at),
+      onify_synced_at: syncedAt,
+    };
+    if (match) updateRows.push({ ...shared, id: match.id });
+    else insertRows.push({ ...shared, created_at: item.created_at ?? syncedAt });
+  }
+
+  await upsertBatches('windscreen_cases', updateRows, 'id');
+  await upsertBatches(
+    'windscreen_cases',
+    insertRows,
+    'workspace_id,onify_glass_case_id',
+  );
+
+  const { data: links, error: linkError } = await adminClient
+    .rpc('rattacher_dossiers_glass', { p_workspace_id: workspaceId });
+  if (linkError) throw new Error(`rapprochement Glass: ${linkError.message}`);
+  const { error: insurerLinkError } = await adminClient
+    .rpc('rapprocher_assureurs_glass', { p_workspace_id: workspaceId });
+  if (insurerLinkError) throw new Error(`rapprochement assureurs Glass: ${insurerLinkError.message}`);
+  const stats = links && typeof links === 'object' ? links as Json : {};
+  return {
+    cases: uniqueCases.size,
+    leads: numeric(stats.cases_linked_to_leads) + numeric(stats.leads_enriched),
+  };
 }
 
 async function syncCalls(
@@ -684,13 +877,20 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   const updatedSince = lastSync
     ? new Date(new Date(lastSync).getTime() - 5 * 60_000).toISOString()
     : undefined;
+  // Glass possède son propre curseur : lors du premier déploiement, il faut
+  // reprendre tout l'historique même si les autres modules sont déjà à jour.
+  const glassLastSync = cleanText(settings.glass_last_sync_at);
+  const glassUpdatedSince = glassLastSync
+    ? new Date(new Date(glassLastSync).getTime() - 5 * 60_000).toISOString()
+    : undefined;
 
-  const [customers, invoices, quotes, credits, calls] = await Promise.all([
+  const [customers, invoices, quotes, credits, calls, glassCases] = await Promise.all([
     listAll<OnifyCustomer>(token, '/crm/customers', updatedSince),
     listAll<OnifyInvoice>(token, '/billing/invoices', updatedSince),
     listAll<OnifyQuote>(token, '/billing/quotes', updatedSince),
     listAll<OnifyCredit>(token, '/billing/credits', updatedSince),
     listAll<OnifyCall>(token, '/callify/calls', updatedSince),
+    listAll<OnifyGlassCase>(token, '/recovery/cases', glassUpdatedSince),
   ]);
 
   const contactIds = await syncContacts(workspaceId, customers);
@@ -701,17 +901,20 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   const { data: leadAddresses, error: propagationError } = await adminClient
     .rpc('propager_adresses_contacts', { p_workspace_id: workspaceId });
   if (propagationError) throw new Error(`propagation adresses: ${propagationError.message}`);
-  // Une synchronisation incrementale peut ne renvoyer aucun contact. On relit
-  // alors la correspondance complete nécessaire aux documents et aux appels.
-  if (!contactIds.size) {
-    const { data, error } = await adminClient.from('contacts')
-      .select('id, onify_customer_id')
-      .eq('workspace_id', workspaceId)
-      .not('onify_customer_id', 'is', null)
-      .limit(10000);
-    if (error) throw new Error(error.message);
-    for (const row of data ?? []) contactIds.set(String(row.onify_customer_id), row.id);
+  // Une synchronisation incrementale peut renvoyer des dossiers relatifs a un
+  // contact qui n'a pas change. La correspondance complete est donc toujours
+  // completee depuis le CRM, sans remplacer les identifiants du lot courant.
+  const { data: knownContacts, error: knownContactsError } = await adminClient.from('contacts')
+    .select('id, onify_customer_id')
+    .eq('workspace_id', workspaceId)
+    .not('onify_customer_id', 'is', null)
+    .limit(10000);
+  if (knownContactsError) throw new Error(knownContactsError.message);
+  for (const row of knownContacts ?? []) {
+    const onifyId = String(row.onify_customer_id);
+    if (!contactIds.has(onifyId)) contactIds.set(onifyId, row.id);
   }
+  const glass = await syncGlassCases(workspaceId, glassCases, contactIds);
   const invoiceIds = await syncInvoices(workspaceId, invoices, contactIds);
   await syncQuotes(workspaceId, quotes, contactIds);
   const { data: vehicles, error: vehicleError } = await adminClient
@@ -737,6 +940,8 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     invoices: invoices.length,
     quotes: quotes.length,
     credits: credits.length,
+    glassCases: glass.cases,
+    glassLeads: glass.leads,
     vehicles: Number(vehicles ?? 0),
     notesRemaining: notes.remaining,
   };
@@ -757,6 +962,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
         direction: 'onify_to_crm',
         api_key_ref: 'stored',
         last_sync_at: new Date().toISOString(),
+        glass_last_sync_at: new Date().toISOString(),
         notes_page: notes.nextPage,
         notes_remaining: notes.remaining,
         last_counts: counts,
