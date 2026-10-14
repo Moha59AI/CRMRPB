@@ -112,9 +112,10 @@ test('la fiche client conserve et expose la copie Onify', async () => {
 });
 
 test('la fiche Glass affiche une vue 3D exacte issue d un catalogue trace', async () => {
-  const [page, viewer, service, edgeFunction, migration, config] = await Promise.all([
+  const [page, viewer, thumbnail, service, edgeFunction, migration, config] = await Promise.all([
     read('src/features/cases/cases-page.tsx'),
     read('src/features/cases/vehicle-3d-viewer.tsx'),
+    read('src/features/cases/vehicle-thumbnail.tsx'),
     read('src/services/vehicle-3d-service.ts'),
     read('supabase/functions/vehicle-3d-match/index.ts'),
     read('supabase/migrations/20261014123000_vehicle_3d_catalog.sql'),
@@ -127,6 +128,10 @@ test('la fiche Glass affiche une vue 3D exacte issue d un catalogue trace', asyn
   assert.match(viewer, /Vue 3D du véhicule/);
   assert.match(viewer, /Le CRM n’affiche pas un autre véhicule à sa place/);
   assert.match(viewer, /query\.data\.model\.licenseLabel/);
+  assert.match(page, /<VehicleThumbnail/g);
+  assert.match(thumbnail, /thumbnailUrl/);
+  assert.match(thumbnail, /IntersectionObserver/);
+  assert.match(thumbnail, /loading="lazy"/);
   assert.match(service, /vehicle-3d-match/);
   assert.match(edgeFunction, /api\.sketchfab\.com\/v3\/search/);
   assert.match(edgeFunction, /NonCommercial/i);

@@ -23,6 +23,14 @@ type Vehicle3DResponse = {
   error?: string;
 };
 
+export function vehicle3DQueryKey(make: string, model: string) {
+  return [
+    'vehicle-3d-model',
+    make.trim().toLocaleLowerCase('fr-FR'),
+    model.trim().toLocaleLowerCase('fr-FR'),
+  ] as const;
+}
+
 export async function fetchVehicle3DModel(
   make: string,
   model: string,

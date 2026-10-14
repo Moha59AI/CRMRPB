@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Box, Car, Database, ExternalLink, Rotate3D } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchVehicle3DModel } from '@/services/vehicle-3d-service';
+import { fetchVehicle3DModel, vehicle3DQueryKey } from '@/services/vehicle-3d-service';
 
 interface Vehicle3DViewerProps {
   make: string | null | undefined;
@@ -31,7 +31,7 @@ export function Vehicle3DViewer({ make, model, registration }: Vehicle3DViewerPr
   const cleanModel = model?.trim() ?? '';
   const enabled = Boolean(cleanMake && cleanModel);
   const query = useQuery({
-    queryKey: ['vehicle-3d-model', cleanMake.toLocaleLowerCase('fr-FR'), cleanModel.toLocaleLowerCase('fr-FR')],
+    queryKey: vehicle3DQueryKey(cleanMake, cleanModel),
     queryFn: () => fetchVehicle3DModel(cleanMake, cleanModel),
     enabled,
     staleTime: 24 * 60 * 60 * 1000,

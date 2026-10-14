@@ -40,6 +40,7 @@ import { syncOnify } from '@/features/integrations/onify/onify-service';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
 import { Vehicle3DViewer } from './vehicle-3d-viewer';
+import { VehicleThumbnail } from './vehicle-thumbnail';
 
 // ============ CONSTANTS ============
 
@@ -338,12 +339,17 @@ function clientNameForCase(
   return lead ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Client sans nom' : 'Client non rattaché';
 }
 
-function vehicleForCase(caseData: WindscreenCase, leadMap: Map<string, Lead>): string {
-  const onifyVehicle = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
-    .filter(Boolean).join(' ');
-  if (onifyVehicle) return onifyVehicle;
+function vehicleIdentityForCase(caseData: WindscreenCase, leadMap: Map<string, Lead>) {
+  if (caseData.onify_vehicle_make || caseData.onify_vehicle_model) {
+    return { make: caseData.onify_vehicle_make, model: caseData.onify_vehicle_model };
+  }
   const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
-  return lead ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ') : '';
+  return { make: lead?.vehicle_make ?? null, model: lead?.vehicle_model ?? null };
+}
+
+function vehicleForCase(caseData: WindscreenCase, leadMap: Map<string, Lead>): string {
+  const vehicle = vehicleIdentityForCase(caseData, leadMap);
+  return [vehicle.make, vehicle.model].filter(Boolean).join(' ');
 }
 
 function insurerForCase(
@@ -1268,6 +1274,7 @@ function CaseMobileRow({
   onOpen: () => void;
 }) {
   const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicleIdentity = vehicleIdentityForCase(caseData, leadMap);
   const vehicleInfo = vehicleForCase(caseData, leadMap);
   const insurerName = insurerForCase(caseData, insurerMap, leadMap);
   const advisor = caseData.assigned_user_id
@@ -1301,12 +1308,18 @@ function CaseMobileRow({
           />
         </span>
 
-        <span className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-          <Car className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+        <span className="mt-3 flex items-center gap-3 text-xs">
+          <VehicleThumbnail
+            make={vehicleIdentity.make}
+            model={vehicleIdentity.model}
+            className="h-14 w-20"
+          />
           <span className="min-w-0 text-foreground">
             <span className="block truncate font-medium">{vehicleInfo || 'Véhicule non renseigné'}</span>
             <span className="text-[11px] text-muted-foreground">{caseData.onify_vehicle_registration || 'Plaque non renseignée'}</span>
           </span>
+        </span>
+        <span className="mt-2 flex items-center gap-2 text-xs">
           <Shield className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
           <span className="min-w-0 truncate text-muted-foreground">{insurerName || 'Assurance non renseignée'}</span>
         </span>
@@ -1344,6 +1357,7 @@ function GlassCaseCard({
   onOpen: () => void;
 }) {
   const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicleIdentity = vehicleIdentityForCase(caseData, leadMap);
   const vehicle = vehicleForCase(caseData, leadMap);
   const insurer = insurerForCase(caseData, insurerMap, leadMap);
   const invoiceSummary = summarizeInvoices(invoices);
@@ -1364,9 +1378,11 @@ function GlassCaseCard({
 
         <span className="block p-4">
           <span className="flex items-center gap-3 rounded-xl bg-muted/25 p-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-sm">
-              <Car className="h-6 w-6" strokeWidth={1.6} />
-            </span>
+            <VehicleThumbnail
+              make={vehicleIdentity.make}
+              model={vehicleIdentity.model}
+              className="h-14 w-20 shadow-sm"
+            />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-foreground">{vehicle || 'Véhicule à compléter'}</span>
               <span className="mt-0.5 block text-xs font-medium tracking-wide text-muted-foreground">
@@ -1424,6 +1440,7 @@ function CaseRow({
   onOpen: () => void;
 }) {
   const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicleIdentity = vehicleIdentityForCase(caseData, leadMap);
   const vehicleInfo = vehicleForCase(caseData, leadMap);
   const insurerName = insurerForCase(caseData, insurerMap, leadMap);
   const advisor = caseData.assigned_user_id ? profileMap.get(caseData.assigned_user_id) : null;
@@ -1443,8 +1460,17 @@ function CaseRow({
         )}
       </TableCell>
       <TableCell className="py-4">
-        <p className="max-w-[180px] truncate text-sm font-medium text-foreground">{vehicleInfo || 'À compléter'}</p>
-        <p className="mt-1 text-xs font-medium tracking-wide text-muted-foreground">{caseData.onify_vehicle_registration || '—'}</p>
+        <div className="flex min-w-[230px] items-center gap-3">
+          <VehicleThumbnail
+            make={vehicleIdentity.make}
+            model={vehicleIdentity.model}
+            className="h-14 w-20"
+          />
+          <div className="min-w-0">
+            <p className="max-w-[180px] truncate text-sm font-medium text-foreground">{vehicleInfo || 'À compléter'}</p>
+            <p className="mt-1 text-xs font-medium tracking-wide text-muted-foreground">{caseData.onify_vehicle_registration || '—'}</p>
+          </div>
+        </div>
       </TableCell>
       <TableCell className="py-4">
         <p className="max-w-[200px] truncate text-sm font-medium text-foreground">{insurerName || 'Assurance à compléter'}</p>
