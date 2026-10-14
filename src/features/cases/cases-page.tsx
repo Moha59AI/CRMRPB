@@ -39,6 +39,7 @@ import { useEstMobile } from '@/hooks/use-media-query';
 import { syncOnify } from '@/features/integrations/onify/onify-service';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
+import { Vehicle3DViewer } from './vehicle-3d-viewer';
 
 // ============ CONSTANTS ============
 
@@ -1968,6 +1969,11 @@ function CaseDetailSheet({
 
               {/* === VÉHICULE === */}
               <TabsContent value="vehicule" className="space-y-3 mt-4">
+                <Vehicle3DViewer
+                  make={caseData.onify_vehicle_make ?? leadInfo?.vehicle_make}
+                  model={caseData.onify_vehicle_model ?? leadInfo?.vehicle_model}
+                  registration={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration}
+                />
                 <Section title="Détails du véhicule">
                   <InfoRow label="Marque" value={caseData.onify_vehicle_make ?? leadInfo?.vehicle_make} />
                   <InfoRow label="Modèle" value={caseData.onify_vehicle_model ?? leadInfo?.vehicle_model} />
