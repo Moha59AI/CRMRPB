@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@
 import {
   Search, Plus, FileText, Car, Shield, Wrench, Gift as GiftIcon, Calendar,
   Phone, MessageSquare, Receipt, CheckCircle2, Circle, AlertCircle,
-  ArrowRight, ExternalLink, Loader2, X, RefreshCw,
+  ArrowRight, ExternalLink, Loader2, X, RefreshCw, CalendarClock,
+  ClipboardCheck, Banknote, ChevronRight, Clock3, LayoutDashboard,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -28,12 +29,15 @@ import { fetchGifts, fetchInvoices, fetchQuotes } from '@/services/billing-servi
 import { fetchAfterSalesCases, fetchCaseById, fetchCaseDocuments, fetchGlassCases, toggleCaseDocument } from '@/services/cases-service';
 import { fetchContacts, fetchInsurers } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
-import { createTask, fetchAppointments, fetchTasks } from '@/services/planning-service';
+import {
+  createTask, fetchAppointments, fetchTasks, type AppointmentAvecClient,
+} from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
 import { fetchAffaireByCaseId } from '@/services/affaires-service';
 import { useEstMobile } from '@/hooks/use-media-query';
 import { syncOnify } from '@/features/integrations/onify/onify-service';
 import { useAuth } from '@/features/auth/auth-context';
+import { cn } from '@/lib/utils';
 
 // ============ CONSTANTS ============
 
@@ -59,6 +63,59 @@ const caseStatusOrder: string[] = [
   'invoice_sent', 'payment_pending', 'payment_received', 'gift_given',
   'sav', 'completed',
 ];
+
+type GlassStage = 'preparation' | 'planning' | 'intervention' | 'finance' | 'done' | 'sav';
+type GlassStageFilter = 'all' | GlassStage;
+
+const glassStageDefinitions: Array<{
+  key: GlassStage;
+  label: string;
+  description: string;
+  statuses: string[];
+}> = [
+  {
+    key: 'preparation',
+    label: 'À préparer',
+    description: 'Dossier et accord',
+    statuses: ['new', 'qualification', 'documents_pending', 'insurance_declaration'],
+  },
+  {
+    key: 'planning',
+    label: 'Commande & RDV',
+    description: 'Vitrage et créneau',
+    statuses: ['glass_ordered', 'appointment_scheduled'],
+  },
+  {
+    key: 'intervention',
+    label: 'Intervention',
+    description: 'Travaux réalisés',
+    statuses: ['intervention_done'],
+  },
+  {
+    key: 'finance',
+    label: 'Facturation',
+    description: 'Facture et règlement',
+    statuses: ['invoice_sent', 'payment_pending'],
+  },
+  {
+    key: 'done',
+    label: 'Clôturés',
+    description: 'Dossiers terminés',
+    statuses: ['payment_received', 'gift_given', 'completed'],
+  },
+  {
+    key: 'sav',
+    label: 'SAV',
+    description: 'À reprendre',
+    statuses: ['sav'],
+  },
+];
+
+function glassStageOf(caseData: WindscreenCase): GlassStage {
+  if (caseData.status === 'sav') return 'sav';
+  if (caseData.onify_archived) return 'done';
+  return glassStageDefinitions.find((stage) => stage.statuses.includes(caseData.status))?.key ?? 'preparation';
+}
 
 const onifyPaymentLabels: Record<string, string> = {
   pending: 'Aucun règlement reçu',
@@ -135,6 +192,45 @@ function formatDateTime(date: string | null | undefined): string {
   return new Date(date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function clientNameForCase(
+  caseData: WindscreenCase,
+  contactMap: Map<string, Contact>,
+  leadMap: Map<string, Lead>,
+): string {
+  const contact = caseData.contact_id ? contactMap.get(caseData.contact_id) : null;
+  if (contact) return `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || 'Client sans nom';
+  const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
+  return lead ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Client sans nom' : 'Client non rattaché';
+}
+
+function vehicleForCase(caseData: WindscreenCase, leadMap: Map<string, Lead>): string {
+  const onifyVehicle = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
+    .filter(Boolean).join(' ');
+  if (onifyVehicle) return onifyVehicle;
+  const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
+  return lead ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ') : '';
+}
+
+function insurerForCase(
+  caseData: WindscreenCase,
+  insurerMap: Map<string, Insurer>,
+  leadMap: Map<string, Lead>,
+): string {
+  if (caseData.onify_insurer_name) return caseData.onify_insurer_name;
+  const insurer = caseData.insurer_id ? insurerMap.get(caseData.insurer_id) : null;
+  if (insurer?.name) return insurer.name;
+  const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
+  return lead?.insurance ?? '';
+}
+
+type GlassPriority = {
+  caseData: WindscreenCase;
+  title: string;
+  detail: string;
+  tone: 'urgent' | 'warning' | 'info';
+  score: number;
+};
+
 // ============ MAIN PAGE ============
 
 export function GlassPage() {
@@ -145,6 +241,7 @@ export function GlassPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
+  const [stageFilter, setStageFilter] = useState<GlassStageFilter>('all');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(searchParams.get('id'));
   const ouvrirDossier = (id: string) => {
     setSelectedCaseId(id);
@@ -155,9 +252,9 @@ export function GlassPage() {
     setSearchParams({}, { replace: true });
   };
 
-  const { data: cases, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['cases', 'glass', search, statusFilter, advisorFilter],
-    queryFn: () => fetchGlassCases({ search, status: statusFilter, assignedUserId: advisorFilter }),
+  const { data: glassCases, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['cases', 'glass', 'all'],
+    queryFn: () => fetchGlassCases({}),
   });
 
   const synchroniser = useMutation({
@@ -180,6 +277,17 @@ export function GlassPage() {
   const { data: contacts } = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const { data: profiles } = useQuery({ queryKey: ['profiles-all'], queryFn: fetchProfiles });
   const { data: insurers } = useQuery({ queryKey: ['insurers-all'], queryFn: () => fetchInsurers() });
+  const [dashboardRange] = useState(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 90);
+    return { start: start.toISOString(), end: end.toISOString() };
+  });
+  const { data: appointments, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ['appointments', 'glass-dashboard', dashboardRange.start, dashboardRange.end],
+    queryFn: () => fetchAppointments({ startDate: dashboardRange.start, endDate: dashboardRange.end }),
+  });
 
   const leadMap = useMemo(() => {
     const m = new Map<string, Lead>();
@@ -205,11 +313,130 @@ export function GlassPage() {
     return m;
   }, [insurers]);
 
+  const allCases = useMemo(() => glassCases ?? [], [glassCases]);
+
+  const stageCounts = useMemo(() => {
+    const counts: Record<GlassStage, number> = {
+      preparation: 0,
+      planning: 0,
+      intervention: 0,
+      finance: 0,
+      done: 0,
+      sav: 0,
+    };
+    allCases.forEach((caseData) => { counts[glassStageOf(caseData)] += 1; });
+    return counts;
+  }, [allCases]);
+
+  const linkedGlassAppointments = useMemo(() => {
+    const byId = new Map(allCases.map((caseData) => [caseData.id, caseData]));
+    const byAffaire = new Map(allCases.map((caseData) => [caseData.affaire_id, caseData]));
+    return (appointments ?? [])
+      .filter((appointment) => ['scheduled', 'confirmed'].includes(appointment.status))
+      .map((appointment) => ({
+        appointment,
+        caseData: (appointment.case_id ? byId.get(appointment.case_id) : null)
+          ?? (appointment.affaire_id ? byAffaire.get(appointment.affaire_id) : null),
+      }))
+      .filter((item): item is { appointment: AppointmentAvecClient; caseData: WindscreenCase } => Boolean(item.caseData));
+  }, [allCases, appointments]);
+
+  const dashboardAppointments = useMemo(
+    () => linkedGlassAppointments.slice(0, 6),
+    [linkedGlassAppointments],
+  );
+
+  const appointmentLinks = useMemo(() => {
+    const links = new Set<string>();
+    linkedGlassAppointments.forEach(({ appointment }) => {
+      if (appointment.case_id) links.add(`case:${appointment.case_id}`);
+      if (appointment.affaire_id) links.add(`affaire:${appointment.affaire_id}`);
+    });
+    return links;
+  }, [linkedGlassAppointments]);
+
+  const allPriorities = useMemo(() => {
+    const now = Date.now();
+    return allCases
+      .map((caseData): GlassPriority | null => {
+        if (glassStageOf(caseData) === 'done') return null;
+        const reference = caseData.onify_reference ?? caseData.case_number;
+        const linkedAppointment = appointmentLinks.has(`case:${caseData.id}`)
+          || appointmentLinks.has(`affaire:${caseData.affaire_id}`)
+          || Boolean(caseData.appointment_date && new Date(caseData.appointment_date).getTime() >= now);
+        const appointmentTime = caseData.appointment_date
+          ? new Date(caseData.appointment_date).getTime()
+          : null;
+
+        if (caseData.status === 'sav') {
+          return { caseData, title: 'SAV à traiter', detail: `${reference} · reprise nécessaire`, tone: 'urgent', score: 100 };
+        }
+        if (caseData.status === 'payment_pending') {
+          return { caseData, title: 'Règlement à suivre', detail: `${reference} · dossier non soldé`, tone: 'warning', score: 92 };
+        }
+        if (!caseData.contact_id && !caseData.lead_id) {
+          return { caseData, title: 'Client à rattacher', detail: `${reference} · aucun contact relié`, tone: 'urgent', score: 88 };
+        }
+        if (appointmentTime && appointmentTime >= now && appointmentTime - now <= 48 * 60 * 60 * 1000) {
+          return { caseData, title: 'Rendez-vous proche', detail: `${reference} · ${formatDateTime(caseData.appointment_date)}`, tone: 'info', score: 84 };
+        }
+        if (!caseData.onify_vehicle_registration && !caseData.vehicle_id && !vehicleForCase(caseData, leadMap)) {
+          return { caseData, title: 'Véhicule à compléter', detail: `${reference} · plaque et modèle absents`, tone: 'warning', score: 76 };
+        }
+        if (glassStageOf(caseData) === 'preparation'
+          && !caseData.onify_insurer_name
+          && !caseData.insurer_id
+          && !insurerForCase(caseData, insurerMap, leadMap)) {
+          return { caseData, title: 'Assurance à compléter', detail: `${reference} · assureur non renseigné`, tone: 'warning', score: 70 };
+        }
+        if (['insurance_declaration', 'glass_ordered'].includes(caseData.status) && !linkedAppointment) {
+          return { caseData, title: 'Rendez-vous à planifier', detail: `${reference} · aucun créneau relié`, tone: 'info', score: 64 };
+        }
+
+        const lastUpdate = caseData.onify_updated_at ?? caseData.updated_at;
+        const ageInDays = Math.floor((now - new Date(lastUpdate).getTime()) / (24 * 60 * 60 * 1000));
+        if (ageInDays >= 7) {
+          return { caseData, title: 'Dossier sans mise à jour', detail: `${reference} · ${ageInDays} jours`, tone: 'info', score: 40 + Math.min(ageInDays, 30) };
+        }
+        return null;
+      })
+      .filter((priority): priority is GlassPriority => priority !== null)
+      .sort((a, b) => b.score - a.score);
+  }, [allCases, appointmentLinks, insurerMap, leadMap]);
+
+  const visibleCases = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase('fr-FR');
+    return allCases.filter((caseData) => {
+      if (stageFilter !== 'all' && glassStageOf(caseData) !== stageFilter) return false;
+      if (statusFilter !== 'all' && caseData.status !== statusFilter) return false;
+      if (advisorFilter !== 'all' && caseData.assigned_user_id !== advisorFilter) return false;
+      if (!needle) return true;
+      const searchable = [
+        caseData.case_number,
+        caseData.onify_reference,
+        caseData.onify_vehicle_registration,
+        vehicleForCase(caseData, leadMap),
+        insurerForCase(caseData, insurerMap, leadMap),
+        clientNameForCase(caseData, contactMap, leadMap),
+        caseData.onify_status_label,
+        caseData.onify_work_status_label,
+      ].filter(Boolean).join(' ').toLocaleLowerCase('fr-FR');
+      return searchable.includes(needle);
+    });
+  }, [advisorFilter, allCases, contactMap, insurerMap, leadMap, search, stageFilter, statusFilter]);
+
+  const activeCount = allCases.length - stageCounts.done;
+  const lastSyncAt = allCases
+    .map((caseData) => caseData.onify_synced_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+
   return (
     <>
       <PageHeader
         title="Glass"
-        description="Tous les dossiers Glass repris depuis Onify, avec leur client, véhicule et suivi"
+        description="Tous les dossiers Glass repris depuis Onify, pilotés du premier contrôle jusqu'au règlement"
         action={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             {profile?.role === 'admin' && (
@@ -236,80 +463,22 @@ export function GlassPage() {
         }
       />
 
-      {/* Search + Filters */}
-      <div className="flex flex-wrap items-end gap-3 gutter-x border-b border-border py-4">
-        <div className="w-full min-w-0 space-y-1.5 sm:min-w-[200px] sm:flex-1">
-          <Label className="text-xs text-muted-foreground">Recherche</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Référence, plaque, véhicule, assurance..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-lg pl-9"
-            />
-          </div>
-        </div>
-
-        <div className="w-full space-y-1.5 sm:w-auto">
-          <Label className="text-xs text-muted-foreground">Statut</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full rounded-lg sm:w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous les statuts</SelectItem>
-              {caseStatusOrder.map((s) => (
-                <SelectItem key={s} value={s}>{caseStatusLabels[s]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="w-full space-y-1.5 sm:w-auto">
-          <Label className="text-xs text-muted-foreground">Conseiller</Label>
-          <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
-            <SelectTrigger className="w-full rounded-lg sm:w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tous</SelectItem>
-              {(profiles ?? []).map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.first_name} {p.last_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {(search || statusFilter !== 'all' || advisorFilter !== 'all') && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="rounded-lg"
-            onClick={() => { setSearch(''); setStatusFilter('all'); setAdvisorFilter('all'); }}
-          >
-            <X className="mr-1 h-3.5 w-3.5" />
-            Effacer
-          </Button>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 overflow-y-auto bg-muted/15 scrollbar-thin">
+        <div className="gutter-x space-y-5 py-5 sm:py-6">
         {isLoading && (
-          <div className="gutter-x py-4 sm:py-6">
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          <div className="space-y-5">
+            <Skeleton className="h-36 w-full rounded-2xl" />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-2xl" />
               ))}
             </div>
+            <Skeleton className="h-72 w-full rounded-2xl" />
           </div>
         )}
 
         {isError && (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-border bg-card p-12 text-center shadow-sm">
             <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
             <p className="text-sm text-muted-foreground">{(error as Error)?.message || 'Erreur de chargement'}</p>
             <Button variant="outline" className="mt-4 rounded-full" onClick={() => refetch()}>
@@ -318,8 +487,8 @@ export function GlassPage() {
           </div>
         )}
 
-        {!isLoading && !isError && cases && cases.length === 0 && (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
+        {!isLoading && !isError && allCases.length === 0 && (
+          <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-border bg-card p-12 text-center shadow-sm">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
               <FileText className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
             </div>
@@ -337,51 +506,179 @@ export function GlassPage() {
           </div>
         )}
 
-        {!isLoading && !isError && cases && cases.length > 0 && estMobile && (
-          <ul className="divide-y divide-border">
-            {cases.map((c) => (
-              <CaseMobileRow
-                key={c.id}
-                caseData={c}
+        {!isLoading && !isError && allCases.length > 0 && (
+          <>
+            <GlassDashboardSummary
+              total={allCases.length}
+              active={activeCount}
+              priorities={allPriorities.length}
+              appointments={linkedGlassAppointments.length}
+              done={stageCounts.done}
+              lastSyncAt={lastSyncAt}
+            />
+
+            <GlassWorkflow
+              counts={stageCounts}
+              activeStage={stageFilter}
+              onStageChange={(stage) => {
+                setStageFilter((current) => current === stage ? 'all' : stage);
+                setStatusFilter('all');
+              }}
+            />
+
+            <div className="grid gap-5 xl:grid-cols-[1.25fr_0.9fr]">
+              <GlassPriorities
+                priorities={allPriorities.slice(0, 6)}
                 leadMap={leadMap}
                 contactMap={contactMap}
-                profileMap={profileMap}
-                insurerMap={insurerMap}
-                onOpen={() => ouvrirDossier(c.id)}
+                onOpen={ouvrirDossier}
               />
-            ))}
-          </ul>
-        )}
+              <GlassUpcomingAppointments
+                appointments={dashboardAppointments}
+                loading={appointmentsLoading}
+                leadMap={leadMap}
+                contactMap={contactMap}
+                onOpen={ouvrirDossier}
+              />
+            </div>
 
-        {!isLoading && !isError && cases && cases.length > 0 && !estMobile && (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs">N° dossier</TableHead>
-                <TableHead className="text-xs">Client</TableHead>
-                <TableHead className="text-xs">Véhicule</TableHead>
-                <TableHead className="text-xs">Assurance</TableHead>
-                <TableHead className="text-xs">Statut</TableHead>
-                <TableHead className="text-xs">Conseiller</TableHead>
-                <TableHead className="text-xs">Date RDV</TableHead>
-                <TableHead className="text-xs text-right">Montant</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cases.map((c) => (
-                <CaseRow
-                  key={c.id}
-                  caseData={c}
-                  leadMap={leadMap}
-                  contactMap={contactMap}
-                  profileMap={profileMap}
-                  insurerMap={insurerMap}
-                  onOpen={() => ouvrirDossier(c.id)}
-                />
-              ))}
-            </TableBody>
-          </Table>
+            <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <LayoutDashboard className="h-4 w-4 text-primary" />
+                    <h2 className="text-sm font-semibold text-foreground">Tous les dossiers</h2>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {visibleCases.length} dossier{visibleCases.length > 1 ? 's' : ''} affiché{visibleCases.length > 1 ? 's' : ''} sur {allCases.length}
+                  </p>
+                </div>
+                {stageFilter !== 'all' && (
+                  <Badge variant="outline" className="w-fit rounded-full border-primary/30 bg-primary/5 text-primary">
+                    Étape : {glassStageDefinitions.find((stage) => stage.key === stageFilter)?.label}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/20 px-4 py-4 sm:px-5">
+                <div className="w-full min-w-0 space-y-1.5 sm:min-w-[240px] sm:flex-1">
+                  <Label className="text-xs text-muted-foreground">Recherche</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Client, référence, plaque, véhicule, assurance..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="rounded-lg bg-card pl-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-full space-y-1.5 sm:w-auto">
+                  <Label className="text-xs text-muted-foreground">Statut</Label>
+                  <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setStageFilter('all'); }}>
+                    <SelectTrigger className="w-full rounded-lg bg-card sm:w-[190px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les statuts</SelectItem>
+                      {caseStatusOrder.map((status) => (
+                        <SelectItem key={status} value={status}>{caseStatusLabels[status]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-full space-y-1.5 sm:w-auto">
+                  <Label className="text-xs text-muted-foreground">Conseiller</Label>
+                  <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
+                    <SelectTrigger className="w-full rounded-lg bg-card sm:w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous</SelectItem>
+                      {(profiles ?? []).map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.first_name} {profile.last_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {(search || statusFilter !== 'all' || advisorFilter !== 'all' || stageFilter !== 'all') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={() => {
+                      setSearch('');
+                      setStatusFilter('all');
+                      setAdvisorFilter('all');
+                      setStageFilter('all');
+                    }}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Effacer
+                  </Button>
+                )}
+              </div>
+
+              {visibleCases.length === 0 ? (
+                <div className="flex min-h-48 flex-col items-center justify-center p-8 text-center">
+                  <Search className="h-7 w-7 text-muted-foreground" />
+                  <p className="mt-3 text-sm font-medium text-foreground">Aucun dossier avec ces filtres</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Effacez un filtre ou choisissez une autre étape.</p>
+                </div>
+              ) : estMobile ? (
+                <ul className="divide-y divide-border">
+                  {visibleCases.map((caseData) => (
+                    <CaseMobileRow
+                      key={caseData.id}
+                      caseData={caseData}
+                      leadMap={leadMap}
+                      contactMap={contactMap}
+                      profileMap={profileMap}
+                      insurerMap={insurerMap}
+                      onOpen={() => ouvrirDossier(caseData.id)}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">N° dossier</TableHead>
+                        <TableHead className="text-xs">Client</TableHead>
+                        <TableHead className="text-xs">Véhicule</TableHead>
+                        <TableHead className="text-xs">Assurance</TableHead>
+                        <TableHead className="text-xs">Statut</TableHead>
+                        <TableHead className="text-xs">Conseiller</TableHead>
+                        <TableHead className="text-xs">Date RDV</TableHead>
+                        <TableHead className="text-xs text-right">Franchise</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleCases.map((caseData) => (
+                        <CaseRow
+                          key={caseData.id}
+                          caseData={caseData}
+                          leadMap={leadMap}
+                          contactMap={contactMap}
+                          profileMap={profileMap}
+                          insurerMap={insurerMap}
+                          onOpen={() => ouvrirDossier(caseData.id)}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </section>
+          </>
         )}
+        </div>
       </div>
 
       {/* Detail sheet */}
@@ -397,6 +694,298 @@ export function GlassPage() {
       )}
 
     </>
+  );
+}
+
+function GlassDashboardSummary({
+  total, active, priorities, appointments, done, lastSyncAt,
+}: {
+  total: number;
+  active: number;
+  priorities: number;
+  appointments: number;
+  done: number;
+  lastSyncAt?: string;
+}) {
+  const metrics = [
+    {
+      icon: ClipboardCheck,
+      label: 'Dossiers actifs',
+      value: active,
+      detail: 'Encore dans le parcours',
+      tone: 'primary',
+    },
+    {
+      icon: AlertCircle,
+      label: 'À traiter',
+      value: priorities,
+      detail: 'Actions détectées',
+      tone: priorities > 0 ? 'warning' : 'done',
+    },
+    {
+      icon: CalendarClock,
+      label: 'RDV à venir',
+      value: appointments,
+      detail: 'Sur les 90 prochains jours',
+      tone: 'upcoming',
+    },
+    {
+      icon: CheckCircle2,
+      label: 'Clôturés',
+      value: done,
+      detail: 'Réglés ou terminés',
+      tone: 'done',
+    },
+  ] as const;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex flex-col gap-4 bg-gradient-to-br from-primary/10 via-card to-done-soft/60 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <Wrench className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Vue opérationnelle</p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">Pilotage Glass</h2>
+              <span className="text-sm font-medium text-muted-foreground">{total} dossiers Onify</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Voyez immédiatement ce qui avance, ce qui bloque et les prochains rendez-vous.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
+          <RefreshCw className="h-3.5 w-3.5 text-primary" />
+          <span>Dernière synchro : {lastSyncAt ? formatDateTime(lastSyncAt) : 'non disponible'}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
+        {metrics.map(({ icon: Icon, label, value, detail, tone }) => (
+          <div key={label} className="relative min-w-0 px-4 py-4 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-lg',
+                tone === 'warning' && 'bg-due-soft text-due',
+                tone === 'upcoming' && 'bg-upcoming-soft text-upcoming',
+                tone === 'done' && 'bg-done-soft text-done',
+                tone === 'primary' && 'bg-primary/10 text-primary',
+              )}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
+            </div>
+            <p className="mt-3 truncate text-xs font-medium text-foreground">{label}</p>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GlassWorkflow({
+  counts, activeStage, onStageChange,
+}: {
+  counts: Record<GlassStage, number>;
+  activeStage: GlassStageFilter;
+  onStageChange: (stage: GlassStage) => void;
+}) {
+  const icons: Record<GlassStage, typeof FileText> = {
+    preparation: FileText,
+    planning: CalendarClock,
+    intervention: Wrench,
+    finance: Banknote,
+    done: CheckCircle2,
+    sav: AlertCircle,
+  };
+  const maximum = Math.max(1, ...Object.values(counts));
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Parcours des dossiers</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Cliquez sur une étape pour afficher uniquement les dossiers concernés.</p>
+        </div>
+        {activeStage !== 'all' && <span className="text-xs font-medium text-primary">Filtre actif</span>}
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {glassStageDefinitions.map((stage) => {
+          const Icon = icons[stage.key];
+          const selected = activeStage === stage.key;
+          const percentage = Math.max(5, (counts[stage.key] / maximum) * 100);
+          return (
+            <button
+              key={stage.key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onStageChange(stage.key)}
+              className={cn(
+                'group rounded-xl border px-3 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm',
+                selected ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-surface/60',
+              )}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg bg-card text-muted-foreground shadow-sm transition-colors group-hover:text-primary',
+                  selected && 'bg-primary text-primary-foreground',
+                  stage.key === 'sav' && !selected && 'bg-urgent-soft text-urgent',
+                  stage.key === 'done' && !selected && 'bg-done-soft text-done',
+                )}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className={cn(
+                  'text-xl font-semibold tabular-nums',
+                  stage.key === 'sav' && counts[stage.key] > 0 ? 'text-urgent' : 'text-foreground',
+                )}>{counts[stage.key]}</span>
+              </span>
+              <span className="mt-3 block text-xs font-semibold text-foreground">{stage.label}</span>
+              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{stage.description}</span>
+              <span className="mt-3 block h-1 overflow-hidden rounded-full bg-muted">
+                <span
+                  className={cn(
+                    'block h-full rounded-full transition-[width] duration-500',
+                    stage.key === 'sav' ? 'bg-urgent' : stage.key === 'done' ? 'bg-done' : 'bg-primary',
+                  )}
+                  style={{ width: `${percentage}%` }}
+                />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function GlassPriorities({
+  priorities, leadMap, contactMap, onOpen,
+}: {
+  priorities: GlassPriority[];
+  leadMap: Map<string, Lead>;
+  contactMap: Map<string, Contact>;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">À traiter en priorité</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Les dossiers qui demandent une action claire.</p>
+        </div>
+        <Badge variant="outline" className="rounded-full bg-surface text-xs">{priorities.length}</Badge>
+      </div>
+
+      {priorities.length === 0 ? (
+        <div className="flex min-h-44 flex-col items-center justify-center p-8 text-center">
+          <CheckCircle2 className="h-7 w-7 text-done" />
+          <p className="mt-3 text-sm font-medium text-foreground">Aucune priorité détectée</p>
+          <p className="mt-1 text-xs text-muted-foreground">Les dossiers actifs sont à jour.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {priorities.map((priority) => {
+            const Icon = priority.tone === 'urgent' ? AlertCircle : priority.tone === 'warning' ? ClipboardCheck : Clock3;
+            const clientName = clientNameForCase(priority.caseData, contactMap, leadMap);
+            const vehicle = vehicleForCase(priority.caseData, leadMap);
+            return (
+              <button
+                key={priority.caseData.id}
+                type="button"
+                onClick={() => onOpen(priority.caseData.id)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/35 sm:px-5"
+              >
+                <span className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                  priority.tone === 'urgent' && 'bg-urgent-soft text-urgent',
+                  priority.tone === 'warning' && 'bg-due-soft text-due',
+                  priority.tone === 'info' && 'bg-upcoming-soft text-upcoming',
+                )}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="truncate text-sm font-semibold text-foreground">{clientName}</span>
+                    {vehicle && <span className="truncate text-[11px] text-muted-foreground">{vehicle}</span>}
+                  </span>
+                  <span className="mt-0.5 block text-xs font-medium text-foreground">{priority.title}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{priority.detail}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function GlassUpcomingAppointments({
+  appointments, loading, leadMap, contactMap, onOpen,
+}: {
+  appointments: Array<{ appointment: AppointmentAvecClient; caseData: WindscreenCase }>;
+  loading: boolean;
+  leadMap: Map<string, Lead>;
+  contactMap: Map<string, Contact>;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Prochains rendez-vous</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Créneaux reliés aux dossiers Glass.</p>
+        </div>
+        <Calendar className="h-4 w-4 text-primary" />
+      </div>
+
+      {loading ? (
+        <div className="space-y-3 p-4">
+          {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-14 w-full rounded-lg" />)}
+        </div>
+      ) : appointments.length === 0 ? (
+        <div className="flex min-h-44 flex-col items-center justify-center p-8 text-center">
+          <CalendarClock className="h-7 w-7 text-muted-foreground" />
+          <p className="mt-3 text-sm font-medium text-foreground">Aucun rendez-vous relié</p>
+          <p className="mt-1 text-xs text-muted-foreground">Les prochains créneaux Glass apparaîtront ici.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {appointments.map(({ appointment, caseData }) => {
+            const start = new Date(appointment.start_time);
+            const clientName = clientNameForCase(caseData, contactMap, leadMap);
+            return (
+              <button
+                key={appointment.id}
+                type="button"
+                onClick={() => onOpen(caseData.id)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/35 sm:px-5"
+              >
+                <span className="flex w-12 shrink-0 flex-col items-center rounded-lg border border-primary/20 bg-primary/5 px-1.5 py-1.5 text-primary">
+                  <span className="text-[9px] font-semibold uppercase">{start.toLocaleDateString('fr-FR', { month: 'short' })}</span>
+                  <span className="text-lg font-semibold leading-none tabular-nums">{start.toLocaleDateString('fr-FR', { day: '2-digit' })}</span>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-foreground">{clientName}</span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · {appointment.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {appointment.address || vehicleForCase(caseData, leadMap) || caseData.onify_reference || caseData.case_number}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

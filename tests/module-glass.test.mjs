@@ -47,6 +47,21 @@ test('les statuts Glass restent pilotes par Onify et la synchro manuelle reste a
   assert.doesNotMatch(page, /updateCase\(id, \{ status \}\)/);
 });
 
+test('Glass est un cockpit operationnel avant la liste detaillee', async () => {
+  const page = await read('src/features/cases/cases-page.tsx');
+
+  assert.match(page, /Pilotage Glass/);
+  assert.match(page, /Parcours des dossiers/);
+  assert.match(page, /À traiter en priorité/);
+  assert.match(page, /Prochains rendez-vous/);
+  assert.match(page, /Tous les dossiers/);
+  assert.match(page, /glassStageDefinitions/);
+  assert.match(page, /setStageFilter/);
+  assert.match(page, /fetchAppointments\(\{ startDate: dashboardRange\.start, endDate: dashboardRange\.end \}\)/);
+  assert.match(page, /clientNameForCase\(caseData, contactMap, leadMap\)/);
+  assert.match(page, />Franchise<\/TableHead>/);
+});
+
 test('la fiche client conserve et expose la copie Onify', async () => {
   const [sync, migration, fiche] = await Promise.all([
     read('supabase/functions/onify-sync/index.ts'),
