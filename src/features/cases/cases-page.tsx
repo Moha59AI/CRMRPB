@@ -6,7 +6,7 @@ import {
   Phone, MessageSquare, Receipt, CheckCircle2, Circle, AlertCircle,
   ArrowRight, ExternalLink, Loader2, X, RefreshCw, CalendarClock,
   ClipboardCheck, Banknote, ChevronRight, Clock3, LayoutDashboard,
-  LayoutGrid, List, SlidersHorizontal, Send,
+  LayoutGrid, List, SlidersHorizontal, Send, ArrowUpDown,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -70,6 +70,7 @@ type GlassProcessStep = 'declare' | 'sign' | 'lre' | 'followup' | 'paid';
 type GlassProcessFilter = 'all' | GlassProcessStep;
 type GlassViewMode = 'list' | 'cards';
 type GlassInsightPanel = 'priorities' | 'appointments' | null;
+type GlassSortOrder = 'arrival_desc' | 'arrival_asc' | 'updated_desc';
 
 const glassStageDefinitions: Array<{
   key: GlassStage;
@@ -214,6 +215,38 @@ function daysSince(date: string | null | undefined): number | null {
   return Math.max(0, Math.floor((Date.now() - timestamp) / (24 * 60 * 60 * 1000)));
 }
 
+function glassCaseTimestamp(caseData: WindscreenCase, sortOrder: GlassSortOrder): number | null {
+  const date = sortOrder === 'updated_desc'
+    ? caseData.onify_updated_at ?? caseData.updated_at ?? caseData.onify_created_at ?? caseData.created_at
+    : caseData.onify_created_at ?? caseData.created_at;
+  if (!date) return null;
+  const timestamp = new Date(date).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function compareGlassCases(a: WindscreenCase, b: WindscreenCase, sortOrder: GlassSortOrder): number {
+  const aTimestamp = glassCaseTimestamp(a, sortOrder);
+  const bTimestamp = glassCaseTimestamp(b, sortOrder);
+  if (aTimestamp == null && bTimestamp == null) {
+    return (a.onify_reference ?? a.case_number).localeCompare(
+      b.onify_reference ?? b.case_number,
+      'fr',
+      { numeric: true },
+    );
+  }
+  if (aTimestamp == null) return 1;
+  if (bTimestamp == null) return -1;
+  const dateComparison = sortOrder === 'arrival_asc'
+    ? aTimestamp - bTimestamp
+    : bTimestamp - aTimestamp;
+  if (dateComparison !== 0) return dateComparison;
+  return (a.onify_reference ?? a.case_number).localeCompare(
+    b.onify_reference ?? b.case_number,
+    'fr',
+    { numeric: true },
+  );
+}
+
 const onifyPaymentLabels: Record<string, string> = {
   pending: 'Aucun règlement reçu',
   tva_only: 'TVA réglée',
@@ -345,6 +378,7 @@ export function GlassPage() {
   const [insurerFilter, setInsurerFilter] = useState('all');
   const [billingFilter, setBillingFilter] = useState('all');
   const [processFilter, setProcessFilter] = useState<GlassProcessFilter>('all');
+  const [sortOrder, setSortOrder] = useState<GlassSortOrder>('arrival_desc');
   const [viewMode, setViewMode] = useState<GlassViewMode>('list');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [insightPanel, setInsightPanel] = useState<GlassInsightPanel>(null);
@@ -562,10 +596,10 @@ export function GlassPage() {
         caseData.onify_work_status_label,
       ].filter(Boolean).join(' ').toLocaleLowerCase('fr-FR');
       return searchable.includes(needle);
-    });
+    }).sort((a, b) => compareGlassCases(a, b, sortOrder));
   }, [
     advisorFilter, allCases, billingFilter, contactMap, insurerFilter, insurerMap,
-    invoicesByCase, leadMap, processFilter, search, statusFilter,
+    invoicesByCase, leadMap, processFilter, search, sortOrder, statusFilter,
   ]);
 
   const activeCount = allCases.length - processCounts.paid;
@@ -757,6 +791,18 @@ export function GlassPage() {
                     />
                   </div>
                 </div>
+
+                <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as GlassSortOrder)}>
+                  <SelectTrigger className="w-full rounded-xl bg-card sm:w-[230px]" aria-label="Trier les dossiers">
+                    <ArrowUpDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="arrival_desc">Arrivée : plus récents</SelectItem>
+                    <SelectItem value="arrival_asc">Arrivée : plus anciens</SelectItem>
+                    <SelectItem value="updated_desc">Dernière mise à jour</SelectItem>
+                  </SelectContent>
+                </Select>
 
                 <Button
                   type="button"

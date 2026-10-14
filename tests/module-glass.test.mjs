@@ -71,6 +71,18 @@ test('Glass est un cockpit operationnel avant la liste detaillee', async () => {
   assert.match(page, /GlassProgressTrack/);
 });
 
+test('les dossiers Glass sont tries par date d arrivee du plus recent au plus ancien par defaut', async () => {
+  const page = await read('src/features/cases/cases-page.tsx');
+
+  assert.match(page, /type GlassSortOrder = 'arrival_desc' \| 'arrival_asc' \| 'updated_desc'/);
+  assert.match(page, /useState<GlassSortOrder>\('arrival_desc'\)/);
+  assert.match(page, /caseData\.onify_created_at \?\? caseData\.created_at/);
+  assert.match(page, /compareGlassCases\(a, b, sortOrder\)/);
+  assert.match(page, /Arrivée : plus récents/);
+  assert.match(page, /Arrivée : plus anciens/);
+  assert.match(page, /Dernière mise à jour/);
+});
+
 test('la fiche Glass reprend la hierarchie de traitement Onify sans modifier les donnees Onify', async () => {
   const page = await read('src/features/cases/cases-page.tsx');
 
