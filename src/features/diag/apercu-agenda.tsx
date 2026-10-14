@@ -36,6 +36,7 @@ function rdv(
   return {
     id,
     workspace_id: 'apercu',
+    affaire_id: null,
     case_id: null,
     lead_id: null,
     contact_id: null,

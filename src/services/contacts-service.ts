@@ -94,12 +94,17 @@ export interface ResumeClientListe {
   derniereIntervention: string | null;
   estClient: boolean;
   derniereFacture: string | null;
+  nbDossiersGlass: number;
+  dernierDossierGlass: string | null;
+  origineClient: 'onify_glass' | 'facture' | 'onify_glass_et_facture' | null;
 }
 
 export async function fetchResumesClients(): Promise<Map<string, ResumeClientListe>> {
   type LigneResume = {
     id: string; nb_interventions: number; derniere_intervention: string | null;
     est_client: boolean; derniere_facture: string | null;
+    nb_dossiers_glass: number; dernier_dossier_glass: string | null;
+    origine_client: ResumeClientListe['origineClient'];
   };
 
   const resumes = new Map<string, ResumeClientListe>();
@@ -110,7 +115,7 @@ export async function fetchResumesClients(): Promise<Map<string, ResumeClientLis
   while (debut < PLAFOND_LECTURE) {
     const { data, error } = await supabase
       .from('v_clients')
-      .select('id, nb_interventions, derniere_intervention, est_client, derniere_facture')
+      .select('id, nb_interventions, derniere_intervention, est_client, derniere_facture, nb_dossiers_glass, dernier_dossier_glass, origine_client')
       .order('id')
       .range(debut, debut + TAILLE_PAGE - 1);
     if (error) throw new Error(error.message);
@@ -123,6 +128,9 @@ export async function fetchResumesClients(): Promise<Map<string, ResumeClientLis
         derniereIntervention: l.derniere_intervention,
         estClient: Boolean(l.est_client),
         derniereFacture: l.derniere_facture,
+        nbDossiersGlass: Number(l.nb_dossiers_glass),
+        dernierDossierGlass: l.dernier_dossier_glass,
+        origineClient: l.origine_client,
       });
     }
     debut += page.length;
@@ -143,22 +151,23 @@ export interface SyntheseClient {
   premiere_intervention: string | null;
   derniere_intervention: string | null;
   /**
-   * Est client des la premiere facture non annulee.
-   *
-   * Le statut « converti » du lead se saisit a la main, donc il ne se
-   * saisit pas : douze leads le portent pour 136 personnes facturees. La
-   * facture arrive d'Onify toute seule, elle fait foi.
+   * Est client des le premier dossier Glass Onify ou la premiere facture.
    */
   est_client: boolean;
   nb_factures: number;
   premiere_facture: string | null;
   derniere_facture: string | null;
+  nb_dossiers_glass: number;
+  premier_dossier_glass: string | null;
+  dernier_dossier_glass: string | null;
+  client_depuis: string | null;
+  origine_client: ResumeClientListe['origineClient'];
 }
 
 export async function fetchSyntheseClient(id: string): Promise<SyntheseClient | null> {
   const { data, error } = await supabase
     .from('v_clients')
-    .select('nb_interventions, nb_converties, premiere_intervention, derniere_intervention, est_client, nb_factures, premiere_facture, derniere_facture')
+    .select('nb_interventions, nb_converties, premiere_intervention, derniere_intervention, est_client, nb_factures, premiere_facture, derniere_facture, nb_dossiers_glass, premier_dossier_glass, dernier_dossier_glass, client_depuis, origine_client')
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);

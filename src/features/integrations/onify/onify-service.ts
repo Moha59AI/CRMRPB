@@ -3,13 +3,17 @@ import type { IntegrationConnection } from '@/types';
 
 export interface OnifySyncCounts {
   contacts: number;
+  contactsFullRescan: boolean;
   notes: number;
   calls: number;
   invoices: number;
   quotes: number;
   credits: number;
   glassCases: number;
+  glassFullRescan: boolean;
   glassLeads: number;
+  affaires: number;
+  glassTransitions: number;
   leadAddresses: number;
   vehicles: number;
   pdfs: number;
@@ -20,6 +24,8 @@ export interface OnifySettings {
   direction: 'onify_to_crm';
   last_sync_at: string | null;
   glass_last_sync_at: string | null;
+  contact_sync_version: number;
+  glass_sync_version: number;
   notes_page: number;
   notes_remaining: boolean;
   last_counts: OnifySyncCounts | null;
@@ -49,6 +55,8 @@ export function parseOnifySettings(connection: IntegrationConnection | null): On
     glass_last_sync_at: typeof settings.glass_last_sync_at === 'string'
       ? settings.glass_last_sync_at
       : null,
+    contact_sync_version: Number(settings.contact_sync_version ?? 0),
+    glass_sync_version: Number(settings.glass_sync_version ?? 0),
     notes_page: Number(settings.notes_page ?? 1),
     notes_remaining: settings.notes_remaining === true,
     last_counts: settings.last_counts && typeof settings.last_counts === 'object'

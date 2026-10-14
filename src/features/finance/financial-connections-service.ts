@@ -30,6 +30,7 @@ export interface SupplierMatchCandidate {
 export interface SupplierExpenseAllocation {
   id: string;
   workspace_id: string;
+  affaire_id: string | null;
   supplier_expense_id: string;
   supplier_item_index: number;
   invoice_id: string;

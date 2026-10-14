@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle, ArrowRight, CheckCircle2, Database, FileCheck2,
-  FileText, Loader2, MessageSquareText, PhoneCall, RefreshCw, ShieldCheck, Users,
+  FileText, Link2, Loader2, MessageSquareText, PhoneCall, RefreshCw, ShieldCheck, Users,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -27,6 +27,7 @@ const countCards: Array<{
   { key: 'quotes', label: 'Devis', icon: FileCheck2 },
   { key: 'credits', label: 'Avoirs', icon: Database },
   { key: 'glassCases', label: 'Dossiers Glass', icon: ShieldCheck },
+  { key: 'affaires', label: 'Affaires liées', icon: Link2 },
 ];
 
 export function OnifySettingsPage() {

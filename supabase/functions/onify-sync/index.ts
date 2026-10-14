@@ -8,6 +8,10 @@ import {
 const ONIFY_API = 'https://app.onify.fr/api';
 const PAGE_SIZE = 100;
 const NOTES_PAGE_SIZE = 25;
+// Changer la version force une reprise complete une seule fois. Cela permet
+// d'enrichir aussi les anciennes fiches sans effacer le curseur incremental.
+const CONTACT_SYNC_VERSION = 2;
+const GLASS_SYNC_VERSION = 2;
 
 type Json = Record<string, unknown>;
 
@@ -138,8 +142,22 @@ type OnifyGlassCase = Json & {
   finalise_at?: string | null;
 };
 
+type FinancialCaseLink = {
+  caseId: string;
+  affaireId: string;
+  contactId: string;
+};
+
+type FinancialCaseLinks = {
+  /** null signifie que plusieurs dossiers correspondent : aucun choix automatique. */
+  byContact: Map<string, FinancialCaseLink | null>;
+  byVehicle: Map<string, FinancialCaseLink | null>;
+};
+
 type SyncCounts = {
   contacts: number;
+  /** Une reprise complete des clients Onify a ete effectuee pendant ce tour. */
+  contactsFullRescan: boolean;
   /** Leads ayant recu l'adresse de leur contact. */
   leadAddresses: number;
   notes: number;
@@ -149,8 +167,14 @@ type SyncCounts = {
   credits: number;
   /** Dossiers de prise en charge Glass crees ou actualises. */
   glassCases: number;
+  /** Une reprise complete de l'historique Glass a ete effectuee pendant ce tour. */
+  glassFullRescan: boolean;
   /** Fiches leads completees ou rattachees grace a Glass. */
   glassLeads: number;
+  /** Affaires reliees entre les modules apres la synchronisation. */
+  affaires: number;
+  /** Leads convertis, archives puis transferes vers Glass pendant ce tour. */
+  glassTransitions: number;
   /** Leads et rendez-vous enrichis avec le véhicule fourni par Onify. */
   vehicles: number;
   notesRemaining: boolean;
@@ -361,6 +385,7 @@ async function syncContacts(
     .select([
       'id', 'first_name', 'last_name', 'phone', 'email', 'address', 'city', 'postal_code',
       'onify_customer_id', 'onify_external_id', 'onify_source', 'onify_stage', 'onify_tags',
+      'onify_company', 'onify_country', 'onify_phones', 'onify_customer_added_at',
     ].join(','))
     .eq('workspace_id', workspaceId)
     .limit(10000);
@@ -414,6 +439,11 @@ async function syncContacts(
     const match = exactMatch
       ?? (identityMatch && !claimedContactIds.has(identityMatch.id) ? identityMatch : undefined);
     const address = customer.adresse ?? {};
+    const phones = Array.isArray(customer.telephones)
+      ? customer.telephones
+        .map((value) => cleanText(value))
+        .filter((value): value is string => Boolean(value))
+      : [];
     const shared = {
       workspace_id: workspaceId,
       first_name: cleanText(customer.prenom) ?? match?.first_name ?? null,
@@ -428,6 +458,11 @@ async function syncContacts(
       onify_source: cleanText(customer.source),
       onify_stage: cleanText(customer.statut_tunnel?.libelle),
       onify_tags: Array.isArray(customer.tags) ? customer.tags : [],
+      onify_company: cleanText(customer.entreprise),
+      onify_country: cleanText(address.pays),
+      onify_phones: phones,
+      onify_customer_added_at: cleanText(customer.date_ajout),
+      onify_payload: customer,
       onify_synced_at: syncedAt,
     };
     if (match) {
@@ -482,6 +517,44 @@ function normalizedLabel(value: unknown): string {
     .replace(/[^a-zA-Z0-9]+/g, ' ')
     .trim()
     .toLocaleLowerCase('fr-FR');
+}
+
+function normalizedRegistration(value: unknown): string | null {
+  const normalized = String(value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return normalized || null;
+}
+
+function financialVehicleRegistration(vehicle: Json | null | undefined): string | null {
+  if (!vehicle) return null;
+  return normalizedRegistration(
+    vehicle.immatriculation ?? vehicle.registration ?? vehicle.plaque,
+  );
+}
+
+function addUniqueFinancialLink(
+  map: Map<string, FinancialCaseLink | null>,
+  key: string,
+  value: FinancialCaseLink,
+): void {
+  if (!map.has(key)) {
+    map.set(key, value);
+    return;
+  }
+  if (map.get(key)?.caseId !== value.caseId) map.set(key, null);
+}
+
+function resolveFinancialCaseLink(
+  contactId: string | null,
+  vehicle: Json | null | undefined,
+  links: FinancialCaseLinks,
+): FinancialCaseLink | null {
+  if (!contactId) return null;
+  const registration = financialVehicleRegistration(vehicle);
+  if (registration) {
+    const exact = links.byVehicle.get(`${contactId}:${registration}`);
+    if (exact) return exact;
+  }
+  return links.byContact.get(contactId) ?? null;
 }
 
 function glassType(items: string[] | null | undefined): string | null {
@@ -542,14 +615,35 @@ async function syncInvoices(
   workspaceId: string,
   invoices: OnifyInvoice[],
   contactIds: Map<string, string>,
+  caseLinks: FinancialCaseLinks,
 ): Promise<Map<string, string>> {
   const syncedAt = new Date().toISOString();
+  const { data: existingRows, error: existingError } = await adminClient
+    .from('invoices')
+    .select('onify_invoice_id, case_id, affaire_id')
+    .eq('workspace_id', workspaceId)
+    .not('onify_invoice_id', 'is', null)
+    .limit(10000);
+  if (existingError) throw new Error(existingError.message);
+  const existingLinks = new Map(
+    (existingRows ?? []).map((row) => [String(row.onify_invoice_id), {
+      caseId: row.case_id as string | null,
+      affaireId: row.affaire_id as string | null,
+    }]),
+  );
   const rows = invoices.map((invoice) => {
     const totalHt = numeric(invoice.montant_ht);
     const totals = invoice.totaux ?? {};
+    const contactId = invoice.contact_id == null
+      ? null
+      : contactIds.get(String(invoice.contact_id)) ?? null;
+    const caseLink = resolveFinancialCaseLink(contactId, invoice.vehicule, caseLinks);
+    const existingLink = existingLinks.get(String(invoice.invoice_id));
     return {
       workspace_id: workspaceId,
-      contact_id: invoice.contact_id == null ? null : contactIds.get(String(invoice.contact_id)) ?? null,
+      contact_id: contactId,
+      case_id: caseLink?.caseId ?? existingLink?.caseId ?? null,
+      affaire_id: caseLink?.affaireId ?? existingLink?.affaireId ?? null,
       invoice_number: cleanText(invoice.code) ?? `ONIFY-${invoice.invoice_id}`,
       amount_ht: totalHt,
       tva_rate: vatRate(totalHt, numeric(invoice.montant_tva)),
@@ -594,13 +688,34 @@ async function syncQuotes(
   workspaceId: string,
   quotes: OnifyQuote[],
   contactIds: Map<string, string>,
+  caseLinks: FinancialCaseLinks,
 ): Promise<void> {
   const syncedAt = new Date().toISOString();
+  const { data: existingRows, error: existingError } = await adminClient
+    .from('quotes')
+    .select('onify_quote_id, case_id, affaire_id')
+    .eq('workspace_id', workspaceId)
+    .not('onify_quote_id', 'is', null)
+    .limit(10000);
+  if (existingError) throw new Error(existingError.message);
+  const existingLinks = new Map(
+    (existingRows ?? []).map((row) => [String(row.onify_quote_id), {
+      caseId: row.case_id as string | null,
+      affaireId: row.affaire_id as string | null,
+    }]),
+  );
   const rows = quotes.map((quote) => {
     const totalHt = numeric(quote.montant_ht);
+    const contactId = quote.contact_id == null
+      ? null
+      : contactIds.get(String(quote.contact_id)) ?? null;
+    const caseLink = resolveFinancialCaseLink(contactId, quote.vehicule, caseLinks);
+    const existingLink = existingLinks.get(String(quote.quote_id));
     return {
       workspace_id: workspaceId,
-      contact_id: quote.contact_id == null ? null : contactIds.get(String(quote.contact_id)) ?? null,
+      contact_id: contactId,
+      case_id: caseLink?.caseId ?? existingLink?.caseId ?? null,
+      affaire_id: caseLink?.affaireId ?? existingLink?.affaireId ?? null,
       quote_number: cleanText(quote.code) ?? `ONIFY-${quote.quote_id}`,
       amount_ht: totalHt,
       tva_rate: vatRate(totalHt, numeric(quote.montant_tva)),
@@ -652,7 +767,7 @@ async function syncGlassCases(
   workspaceId: string,
   glassCases: OnifyGlassCase[],
   contactIds: Map<string, string>,
-): Promise<{ cases: number; leads: number }> {
+): Promise<{ cases: number; leads: number; transitions: number }> {
   const { data: existing, error } = await adminClient
     .from('windscreen_cases')
     .select('id, case_number, status, onify_glass_case_id')
@@ -727,11 +842,44 @@ async function syncGlassCases(
   const { error: insurerLinkError } = await adminClient
     .rpc('rapprocher_assureurs_glass', { p_workspace_id: workspaceId });
   if (insurerLinkError) throw new Error(`rapprochement assureurs Glass: ${insurerLinkError.message}`);
+  const { data: transitions, error: transitionError } = await adminClient
+    .rpc('avancer_leads_apres_dossier_glass', { p_workspace_id: workspaceId });
+  if (transitionError) throw new Error(`avancement du parcours Glass: ${transitionError.message}`);
   const stats = links && typeof links === 'object' ? links as Json : {};
   return {
     cases: uniqueCases.size,
     leads: numeric(stats.cases_linked_to_leads) + numeric(stats.leads_enriched),
+    transitions: numeric(transitions),
   };
+}
+
+async function loadFinancialCaseLinks(workspaceId: string): Promise<FinancialCaseLinks> {
+  const { data, error } = await adminClient
+    .from('windscreen_cases')
+    .select('id, affaire_id, contact_id, onify_vehicle_registration')
+    .eq('workspace_id', workspaceId)
+    .not('onify_glass_case_id', 'is', null)
+    .limit(10000);
+  if (error) throw new Error(`index affaires Glass: ${error.message}`);
+
+  const links: FinancialCaseLinks = {
+    byContact: new Map(),
+    byVehicle: new Map(),
+  };
+  for (const row of data ?? []) {
+    if (!row.contact_id || !row.affaire_id) continue;
+    const link: FinancialCaseLink = {
+      caseId: row.id,
+      affaireId: row.affaire_id,
+      contactId: row.contact_id,
+    };
+    addUniqueFinancialLink(links.byContact, row.contact_id, link);
+    const registration = normalizedRegistration(row.onify_vehicle_registration);
+    if (registration) {
+      addUniqueFinancialLink(links.byVehicle, `${row.contact_id}:${registration}`, link);
+    }
+  }
+  return links;
 }
 
 async function syncCalls(
@@ -877,15 +1025,18 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   const updatedSince = lastSync
     ? new Date(new Date(lastSync).getTime() - 5 * 60_000).toISOString()
     : undefined;
+  const contactFullRescan = numeric(settings.contact_sync_version) < CONTACT_SYNC_VERSION;
+  const customerUpdatedSince = contactFullRescan ? undefined : updatedSince;
   // Glass possède son propre curseur : lors du premier déploiement, il faut
   // reprendre tout l'historique même si les autres modules sont déjà à jour.
   const glassLastSync = cleanText(settings.glass_last_sync_at);
-  const glassUpdatedSince = glassLastSync
+  const glassFullRescan = numeric(settings.glass_sync_version) < GLASS_SYNC_VERSION;
+  const glassUpdatedSince = !glassFullRescan && glassLastSync
     ? new Date(new Date(glassLastSync).getTime() - 5 * 60_000).toISOString()
     : undefined;
 
   const [customers, invoices, quotes, credits, calls, glassCases] = await Promise.all([
-    listAll<OnifyCustomer>(token, '/crm/customers', updatedSince),
+    listAll<OnifyCustomer>(token, '/crm/customers', customerUpdatedSince),
     listAll<OnifyInvoice>(token, '/billing/invoices', updatedSince),
     listAll<OnifyQuote>(token, '/billing/quotes', updatedSince),
     listAll<OnifyCredit>(token, '/billing/credits', updatedSince),
@@ -915,12 +1066,19 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     if (!contactIds.has(onifyId)) contactIds.set(onifyId, row.id);
   }
   const glass = await syncGlassCases(workspaceId, glassCases, contactIds);
-  const invoiceIds = await syncInvoices(workspaceId, invoices, contactIds);
-  await syncQuotes(workspaceId, quotes, contactIds);
+  const caseLinks = await loadFinancialCaseLinks(workspaceId);
+  const invoiceIds = await syncInvoices(workspaceId, invoices, contactIds, caseLinks);
+  await syncQuotes(workspaceId, quotes, contactIds, caseLinks);
   const { data: vehicles, error: vehicleError } = await adminClient
     .rpc('propager_vehicules_onify', { p_workspace_id: workspaceId });
   if (vehicleError) throw new Error(`propagation véhicules: ${vehicleError.message}`);
   await syncCredits(workspaceId, credits, contactIds, invoiceIds);
+  const { data: affaireStats, error: affaireError } = await adminClient
+    .rpc('synchroniser_affaires_vitrage', { p_workspace_id: workspaceId });
+  if (affaireError) throw new Error(`liaison des affaires vitrage: ${affaireError.message}`);
+  const affaires = affaireStats && typeof affaireStats === 'object'
+    ? affaireStats as Json
+    : {};
   await syncCalls(workspaceId, calls, contactIds);
   const notes = await syncNotesPage(
     workspaceId,
@@ -933,6 +1091,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
 
   const counts: SyncCounts = {
     contacts: customers.length,
+    contactsFullRescan: contactFullRescan,
     pdfs,
     leadAddresses: Number(leadAddresses ?? 0),
     notes: notes.count,
@@ -941,7 +1100,10 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     quotes: quotes.length,
     credits: credits.length,
     glassCases: glass.cases,
+    glassFullRescan,
     glassLeads: glass.leads,
+    affaires: numeric(affaires.affaires),
+    glassTransitions: glass.transitions,
     vehicles: Number(vehicles ?? 0),
     notesRemaining: notes.remaining,
   };
@@ -963,6 +1125,8 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
         api_key_ref: 'stored',
         last_sync_at: new Date().toISOString(),
         glass_last_sync_at: new Date().toISOString(),
+        contact_sync_version: CONTACT_SYNC_VERSION,
+        glass_sync_version: GLASS_SYNC_VERSION,
         notes_page: notes.nextPage,
         notes_remaining: notes.remaining,
         last_counts: counts,

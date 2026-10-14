@@ -16,6 +16,7 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/interventions': ['admin', 'manager', 'advisor', 'technician'],
   '/atelier': ['admin', 'manager', 'advisor', 'technician'],
   '/clients': ['admin', 'manager', 'advisor', 'accountant'],
+  '/glass': ['admin', 'manager', 'advisor', 'accountant'],
   '/cases': ['admin', 'manager', 'advisor', 'accountant', 'technician'],
   '/calendar': ['admin', 'manager', 'advisor', 'technician'],
   '/marketing': ['admin', 'manager', 'advisor'],

@@ -82,6 +82,7 @@ export function colorKeyForStatus(status: string): LeadColorKey | null {
 
 export function colorKeyForStage(stage: LeadJourneyStageKey): LeadColorKey {
   if (stage === 'documents') return 'documents_requested';
+  if (stage === 'onify_ready') return 'documents_received';
   return stage;
 }
 

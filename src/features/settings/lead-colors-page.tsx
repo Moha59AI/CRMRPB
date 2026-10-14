@@ -23,7 +23,7 @@ const ETAPES: Array<{ key: LeadColorKey; label: string; description: string }> =
   { key: 'nrp', label: 'NRP', description: 'Client non joint' },
   { key: 'qualifie', label: 'Qualifié', description: 'Besoin confirmé' },
   { key: 'documents_requested', label: 'Attente documents', description: 'Lien envoyé, pièces attendues' },
-  { key: 'documents_received', label: 'Documents reçus', description: 'Toutes les pièces obligatoires reçues' },
+  { key: 'documents_received', label: 'Prêt Onify', description: 'Toutes les pièces obligatoires reçues' },
   { key: 'rdv', label: 'RDV pris', description: 'Créneau planifié' },
   { key: 'perdu', label: 'Perdu', description: 'Lead sorti du parcours' },
   { key: 'cloture', label: 'Clôturé', description: 'Dossier terminé' },
@@ -99,7 +99,7 @@ export function LeadColorsPage() {
 
           {query.isLoading && (
             <div className="grid gap-3 sm:grid-cols-2">
-              {Array.from({ length: 8 }).map((_, index) => (
+              {Array.from({ length: LEAD_COLOR_KEYS.length }).map((_, index) => (
                 <Skeleton key={index} className="h-28 rounded-xl" />
               ))}
             </div>
@@ -169,7 +169,7 @@ export function LeadColorsPage() {
           {query.data && (
             <p className="text-center text-xs text-muted-foreground">
               {LEAD_COLOR_KEYS.length} situations personnalisables, dont une couleur distincte
-              lorsque tous les documents sont reçus.
+              lorsque toutes les pièces sont reçues.
             </p>
           )}
         </div>

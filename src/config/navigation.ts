@@ -23,6 +23,7 @@ import {
   Wrench,
   Palette,
   Boxes,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -46,13 +47,9 @@ export interface NavSection {
  * « Clients » et non « Contacts », qui laissait croire à un simple carnet
  * d'adresses sans lien avec les affaires.
  *
- * Deux notions seulement : un **client** est une personne, un **lead** est une
- * intervention. Un client peut en avoir plusieurs. « Dossiers » a donc
- * disparu du menu — un dossier n'est rien d'autre qu'une intervention, et
- * deux mots pour la même chose obligeaient a choisir a chaque fois.
- *
- * « Suivi » et « Dossiers » restent accessibles par leur route le temps de
- * verifier que rien ne s'y perd.
+ * Glass est distinct : il reprend les dossiers officiellement crees dans
+ * Onify, apres reception des pieces. Il ne remplace ni le lead commercial ni
+ * l'intervention terrain.
  */
 export const navSections: NavSection[] = [
   {
@@ -100,10 +97,16 @@ export const navSections: NavSection[] = [
         description: 'Les interventions à traiter',
       },
       {
+        label: 'Glass',
+        path: '/glass',
+        icon: ShieldCheck,
+        description: 'Tous les dossiers Glass synchronisés depuis Onify',
+      },
+      {
         label: 'Clients',
         path: '/contacts',
         icon: Users,
-        description: 'Les personnes et leur historique',
+        description: 'Les clients passés dans Glass et leur historique',
       },
     ],
   },

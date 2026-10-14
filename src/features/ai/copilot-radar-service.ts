@@ -315,7 +315,7 @@ export async function fetchCopilotRadar(context: RadarContext): Promise<CopilotR
       domain: 'commercial',
       title: task.title,
       description: `Tâche en retard de ${elapsedLabel(delay)}.`,
-      link: task.lead_id ? openLeadLink(task.lead_id) : task.case_id ? '/cases' : '/follow-up',
+      link: task.lead_id ? openLeadLink(task.lead_id) : task.case_id ? '/glass' : '/follow-up',
       dueAt: task.due_at,
       source: 'rule',
     });
@@ -358,7 +358,7 @@ export async function fetchCopilotRadar(context: RadarContext): Promise<CopilotR
         domain: 'documents',
         title: `Pièces manquantes · ${item.case_number}`,
         description: 'Une intervention approche alors que le dossier documentaire est incomplet.',
-        link: item.lead_id ? openLeadLink(item.lead_id) : '/cases',
+        link: item.lead_id ? openLeadLink(item.lead_id) : '/glass',
         dueAt: item.appointment_date,
         source: 'rule',
       });

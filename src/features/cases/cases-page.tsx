@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import {
   Search, Plus, FileText, Car, Shield, Wrench, Gift as GiftIcon, Calendar,
   Phone, MessageSquare, Receipt, CheckCircle2, Circle, AlertCircle,
-  Loader2, X,
+  ArrowRight, ExternalLink, Loader2, X, RefreshCw,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -13,25 +14,26 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FicheOverlay } from '@/features/fiche/fiche-overlay';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type {
   WindscreenCase, Task, Profile, Lead, Contact,
-  Insurer, Note, Activity, DocumentType, CaseStatus,
+  Insurer, Note, Activity,
 } from '@/types';
 import { createNote, fetchActivities, fetchCommunications, fetchNotes } from '@/services/activity-service';
 import { fetchGifts, fetchInvoices, fetchQuotes } from '@/services/billing-service';
-import { createCase, createCaseDocument, fetchAfterSalesCases, fetchCaseById, fetchCaseDocuments, fetchCases, toggleCaseDocument, updateCase } from '@/services/cases-service';
+import { fetchAfterSalesCases, fetchCaseById, fetchCaseDocuments, fetchGlassCases, toggleCaseDocument } from '@/services/cases-service';
 import { fetchContacts, fetchInsurers } from '@/services/contacts-service';
 import { fetchLeads } from '@/services/leads-service';
 import { createTask, fetchAppointments, fetchTasks } from '@/services/planning-service';
 import { fetchProfiles } from '@/services/profiles-service';
+import { fetchAffaireByCaseId } from '@/services/affaires-service';
 import { useEstMobile } from '@/hooks/use-media-query';
+import { syncOnify } from '@/features/integrations/onify/onify-service';
+import { useAuth } from '@/features/auth/auth-context';
 
 // ============ CONSTANTS ============
 
@@ -77,19 +79,6 @@ function getStatusColor(status: string): string {
   if (problem.includes(status)) return 'bg-urgent-soft text-urgent border-urgent/25';
   return 'bg-muted/50 text-foreground border-border';
 }
-
-const defaultDocuments: { type: DocumentType; label: string }[] = [
-  { type: 'registration', label: "Carte grise" },
-  { type: 'insurance_cert', label: "Attestation d'assurance" },
-  { type: 'photo_before', label: "Photo avant" },
-  { type: 'photo_windscreen', label: "Photo pare-brise" },
-  { type: 'claim_declaration', label: "Déclaration de sinistre" },
-  { type: 'assignment_signed', label: "Cession de créance" },
-  { type: 'quote', label: "Devis" },
-  { type: 'invoice', label: "Facture" },
-  { type: 'payment_proof', label: "Preuve de règlement" },
-  { type: 'gift_proof', label: "Preuve cadeau" },
-];
 
 const commTypeLabels: Record<string, string> = {
   sms_outbound: 'SMS envoyé', sms_inbound: 'SMS reçu',
@@ -148,17 +137,43 @@ function formatDateTime(date: string | null | undefined): string {
 
 // ============ MAIN PAGE ============
 
-export function CasesPage() {
+export function GlassPage() {
   const estMobile = useEstMobile();
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(searchParams.get('id'));
+  const ouvrirDossier = (id: string) => {
+    setSelectedCaseId(id);
+    setSearchParams({ id }, { replace: true });
+  };
+  const fermerDossier = () => {
+    setSelectedCaseId(null);
+    setSearchParams({}, { replace: true });
+  };
 
   const { data: cases, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['cases', search, statusFilter, advisorFilter],
-    queryFn: () => fetchCases({ search, status: statusFilter, assignedUserId: advisorFilter }),
+    queryKey: ['cases', 'glass', search, statusFilter, advisorFilter],
+    queryFn: () => fetchGlassCases({ search, status: statusFilter, assignedUserId: advisorFilter }),
+  });
+
+  const synchroniser = useMutation({
+    mutationFn: syncOnify,
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cases'] }),
+        queryClient.invalidateQueries({ queryKey: ['contacts'] }),
+        queryClient.invalidateQueries({ queryKey: ['resumes-clients'] }),
+        queryClient.invalidateQueries({ queryKey: ['leads'] }),
+      ]);
+      toast.success(
+        `${result.glassCases} dossier${result.glassCases > 1 ? 's' : ''} Glass vérifié${result.glassCases > 1 ? 's' : ''}`,
+      );
+    },
+    onError: (syncError: Error) => toast.error(syncError.message || 'Synchronisation Onify impossible'),
   });
 
   const { data: leads } = useQuery({ queryKey: ['leads-all'], queryFn: () => fetchLeads({}) });
@@ -193,13 +208,31 @@ export function CasesPage() {
   return (
     <>
       <PageHeader
-        title="Dossiers"
-        description="Dossiers de vitrage en cours"
+        title="Glass"
+        description="Tous les dossiers Glass repris depuis Onify, avec leur client, véhicule et suivi"
         action={
-          <Button className="w-full rounded-full sm:w-auto" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nouveau dossier
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            {profile?.role === 'admin' && (
+              <Button
+                variant="outline"
+                className="w-full rounded-full sm:w-auto"
+                onClick={() => synchroniser.mutate()}
+                disabled={synchroniser.isPending}
+              >
+                {synchroniser.isPending
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <RefreshCw className="mr-2 h-4 w-4" />}
+                Synchroniser Onify
+              </Button>
+            )}
+            <Button
+              className="w-full rounded-full sm:w-auto"
+              onClick={() => window.open('https://app.onify.fr/glass/edition', '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Créer dans Onify
+            </Button>
+          </div>
         }
       />
 
@@ -210,7 +243,7 @@ export function CasesPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="N° dossier, notes..."
+              placeholder="Référence, plaque, véhicule, assurance..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="rounded-lg pl-9"
@@ -290,13 +323,16 @@ export function CasesPage() {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
               <FileText className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <h3 className="text-sm font-semibold text-foreground">Aucun dossier pour le moment</h3>
+            <h3 className="text-sm font-semibold text-foreground">Aucun dossier Glass synchronisé</h3>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Créez votre premier dossier de vitrage pour suivre les interventions et le cycle de vie complet.
+              Le contact reste un prospect tant que ses pièces ne sont pas reçues. Après création dans Onify, le dossier apparaît ici et le contact passe automatiquement dans Clients.
             </p>
-            <Button className="mt-4 rounded-full" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau dossier
+            <Button
+              className="mt-4 rounded-full"
+              onClick={() => window.open('https://app.onify.fr/glass/edition', '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Ouvrir Onify
             </Button>
           </div>
         )}
@@ -311,7 +347,7 @@ export function CasesPage() {
                 contactMap={contactMap}
                 profileMap={profileMap}
                 insurerMap={insurerMap}
-                onOpen={() => setSelectedCaseId(c.id)}
+                onOpen={() => ouvrirDossier(c.id)}
               />
             ))}
           </ul>
@@ -340,7 +376,7 @@ export function CasesPage() {
                   contactMap={contactMap}
                   profileMap={profileMap}
                   insurerMap={insurerMap}
-                  onOpen={() => setSelectedCaseId(c.id)}
+                  onOpen={() => ouvrirDossier(c.id)}
                 />
               ))}
             </TableBody>
@@ -352,7 +388,7 @@ export function CasesPage() {
       {selectedCaseId && (
         <CaseDetailSheet
           caseId={selectedCaseId}
-          onClose={() => setSelectedCaseId(null)}
+          onClose={fermerDossier}
           leadMap={leadMap}
           contactMap={contactMap}
           profileMap={profileMap}
@@ -360,16 +396,6 @@ export function CasesPage() {
         />
       )}
 
-      {/* Create dialog */}
-      <CreateCaseDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        caseCount={cases?.length ?? 0}
-        leads={leads ?? []}
-        contacts={contacts ?? []}
-        profiles={profiles ?? []}
-        insurers={insurers ?? []}
-      />
     </>
   );
 }
@@ -392,12 +418,12 @@ function CaseMobileRow({
   }, [caseData.contact_id, caseData.lead_id, contactMap, leadMap]);
 
   const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
-  const vehicleInfo = lead
-    ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ')
-    : '';
-  const insurerName = caseData.insurer_id
-    ? insurerMap.get(caseData.insurer_id)?.name
-    : lead?.insurance;
+  const vehicleInfo = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
+    .filter(Boolean).join(' ')
+    || (lead ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ') : '');
+  const insurerName = caseData.onify_insurer_name
+    ?? (caseData.insurer_id ? insurerMap.get(caseData.insurer_id)?.name : null)
+    ?? lead?.insurance;
   const advisor = caseData.assigned_user_id
     ? profileMap.get(caseData.assigned_user_id)
     : null;
@@ -415,10 +441,16 @@ function CaseMobileRow({
       >
         <span className="flex items-start justify-between gap-3">
           <span className="min-w-0">
-            <span className="block text-xs font-medium text-muted-foreground">{caseData.case_number}</span>
+            <span className="block text-xs font-medium text-muted-foreground">
+              {caseData.onify_reference ?? caseData.case_number}
+            </span>
             <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">{clientName}</span>
           </span>
-          <StatusBadge status={caseData.status} className="shrink-0" />
+          <StatusBadge
+            status={caseData.status}
+            label={caseData.onify_work_status_label ?? caseData.onify_status_label}
+            className="shrink-0"
+          />
         </span>
 
         <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -463,6 +495,9 @@ function CaseRow({
   }, [caseData, leadMap, contactMap]);
 
   const vehicleInfo = useMemo(() => {
+    const onify = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
+      .filter(Boolean).join(' ');
+    if (onify) return onify;
     if (caseData.lead_id) {
       const l = leadMap.get(caseData.lead_id);
       if (l) return [l.vehicle_make, l.vehicle_model].filter(Boolean).join(' ') || null;
@@ -471,6 +506,7 @@ function CaseRow({
   }, [caseData, leadMap]);
 
   const insurerName = useMemo(() => {
+    if (caseData.onify_insurer_name) return caseData.onify_insurer_name;
     if (caseData.insurer_id) {
       const i = insurerMap.get(caseData.insurer_id);
       if (i) return i.name;
@@ -493,13 +529,16 @@ function CaseRow({
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onOpen}>
       <TableCell className="text-sm font-medium text-foreground whitespace-nowrap">
-        {caseData.case_number}
+        {caseData.onify_reference ?? caseData.case_number}
       </TableCell>
       <TableCell className="text-sm text-foreground">{clientName}</TableCell>
       <TableCell className="text-sm text-muted-foreground">{vehicleInfo || '—'}</TableCell>
       <TableCell className="text-sm text-muted-foreground">{insurerName || '—'}</TableCell>
       <TableCell>
-        <StatusBadge status={caseData.status} />
+        <StatusBadge
+          status={caseData.status}
+          label={caseData.onify_work_status_label ?? caseData.onify_status_label}
+        />
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">{advisorName || '—'}</TableCell>
       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
@@ -514,13 +553,15 @@ function CaseRow({
 
 // ============ STATUS BADGE ============
 
-function StatusBadge({ status, className = '' }: { status: string; className?: string }) {
+function StatusBadge({
+  status, label, className = '',
+}: { status: string; label?: string | null; className?: string }) {
   return (
     <Badge
       variant="outline"
       className={`rounded-full text-[10px] font-medium border ${getStatusColor(status)} ${className}`}
     >
-      {caseStatusLabels[status] ?? status}
+      {label ?? caseStatusLabels[status] ?? status}
     </Badge>
   );
 }
@@ -543,6 +584,12 @@ function CaseDetailSheet({
   const { data: caseData, isLoading: caseLoading } = useQuery({
     queryKey: ['case', caseId],
     queryFn: () => fetchCaseById(caseId),
+    enabled: !!caseId,
+  });
+
+  const { data: affaire } = useQuery({
+    queryKey: ['affaire-vitrage', 'case', caseId],
+    queryFn: () => fetchAffaireByCaseId(caseId),
     enabled: !!caseId,
   });
 
@@ -629,17 +676,6 @@ function CaseDetailSheet({
     () => (allActivities ?? []).filter((a) => a.entity_id === caseId),
     [allActivities, caseId],
   );
-
-  // Status quick-change mutation
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: CaseStatus }) => updateCase(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-      queryClient.invalidateQueries({ queryKey: ['case', caseId] });
-      toast.success('Statut mis à jour');
-    },
-    onError: (err) => toast.error((err as Error)?.message || 'Erreur de mise à jour'),
-  });
 
   // Document toggle mutation
   const docToggleMutation = useMutation({
@@ -731,21 +767,13 @@ function CaseDetailSheet({
         {caseData ? `${clientName} — créé le ${formatDate(caseData.created_at)}` : 'Détails du dossier'}
       </p>
       {caseData && (
-        <div className="mt-3 flex items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <Label className="whitespace-nowrap text-xs text-muted-foreground">Statut</Label>
-          <Select
-            value={caseData.status}
-            onValueChange={(v) => statusMutation.mutate({ id: caseData.id, status: v as CaseStatus })}
-            disabled={statusMutation.isPending}
-          >
-            <SelectTrigger className="w-[220px] rounded-lg"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {caseStatusOrder.map((st) => (
-                <SelectItem key={st} value={st}>{caseStatusLabels[st]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <StatusBadge status={caseData.status} />
+          <StatusBadge
+            status={caseData.status}
+            label={caseData.onify_work_status_label ?? caseData.onify_status_label}
+          />
+          <span className="text-xs text-muted-foreground">Synchronisé depuis Onify</span>
         </div>
       )}
     </>
@@ -774,6 +802,15 @@ function CaseDetailSheet({
 
               {/* === RÉSUMÉ === */}
               <TabsContent value="resume" className="space-y-4 mt-4">
+                <AffaireJourney
+                  hasLead={Boolean(leadInfo)}
+                  appointmentCount={appointments.length}
+                  invoiceCount={invoices.length}
+                  supplierDocumentCount={affaire?.supplier_document_count ?? 0}
+                  onAgenda={() => setTab('rdv')}
+                  onFinance={() => setTab('facturation')}
+                />
+
                 <Section title="Informations du dossier">
                   <InfoRow label="N° dossier" value={caseData.case_number} />
                   <InfoRow label="Statut" value={caseStatusLabels[caseData.status] ?? caseData.status} />
@@ -809,17 +846,17 @@ function CaseDetailSheet({
 
                 <Section title="Véhicule">
                   <InfoRow label="Marque / Modèle" value={[
-                    leadInfo?.vehicle_make ?? caseData.onify_vehicle_make,
-                    leadInfo?.vehicle_model ?? caseData.onify_vehicle_model,
+                    caseData.onify_vehicle_make ?? leadInfo?.vehicle_make,
+                    caseData.onify_vehicle_model ?? leadInfo?.vehicle_model,
                   ].filter(Boolean).join(' ') || null} />
-                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? caseData.onify_vehicle_registration} />
+                  <InfoRow label="Immatriculation" value={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration} />
                   <InfoRow label="Type de vitrage" value={caseData.glass_type} />
                   <InfoRow label="Capteurs" value={caseData.has_sensors ? 'Oui' : 'Non'} />
                   <InfoRow label="Caméra ADAS" value={caseData.has_adas_camera ? 'Oui' : 'Non'} />
                 </Section>
 
                 <Section title="Assurance">
-                  <InfoRow label="Compagnie" value={insurerInfo?.name ?? leadInfo?.insurance ?? caseData.onify_insurer_name} />
+                  <InfoRow label="Compagnie" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
                   <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
                   <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
                   <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
@@ -865,9 +902,9 @@ function CaseDetailSheet({
               {/* === VÉHICULE === */}
               <TabsContent value="vehicule" className="space-y-3 mt-4">
                 <Section title="Détails du véhicule">
-                  <InfoRow label="Marque" value={leadInfo?.vehicle_make ?? caseData.onify_vehicle_make} />
-                  <InfoRow label="Modèle" value={leadInfo?.vehicle_model ?? caseData.onify_vehicle_model} />
-                  <InfoRow label="Immatriculation" value={leadInfo?.vehicle_registration ?? caseData.onify_vehicle_registration} />
+                  <InfoRow label="Marque" value={caseData.onify_vehicle_make ?? leadInfo?.vehicle_make} />
+                  <InfoRow label="Modèle" value={caseData.onify_vehicle_model ?? leadInfo?.vehicle_model} />
+                  <InfoRow label="Immatriculation" value={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration} />
                 </Section>
                 <Section title="Vitrage">
                   <InfoRow label="Type de vitrage" value={caseData.glass_type} />
@@ -883,7 +920,7 @@ function CaseDetailSheet({
               {/* === ASSURANCE === */}
               <TabsContent value="assurance" className="space-y-3 mt-4">
                 <Section title="Compagnie d'assurance">
-                  <InfoRow label="Nom" value={insurerInfo?.name ?? leadInfo?.insurance ?? caseData.onify_insurer_name} />
+                  <InfoRow label="Nom" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
                   <InfoRow label="Téléphone" value={insurerInfo?.phone ?? null} />
                   <InfoRow label="Email" value={insurerInfo?.email ?? null} />
                 </Section>
@@ -1144,6 +1181,109 @@ function CaseDetailSheet({
   );
 }
 
+function AffaireJourney({
+  hasLead,
+  appointmentCount,
+  invoiceCount,
+  supplierDocumentCount,
+  onAgenda,
+  onFinance,
+}: {
+  hasLead: boolean;
+  appointmentCount: number;
+  invoiceCount: number;
+  supplierDocumentCount: number;
+  onAgenda: () => void;
+  onFinance: () => void;
+}) {
+  const steps = [
+    {
+      label: 'Leads',
+      detail: hasLead ? 'Origine archivée' : 'Import historique',
+      done: hasLead,
+      active: false,
+      onClick: undefined,
+    },
+    {
+      label: 'Glass',
+      detail: 'Dossier Onify',
+      done: true,
+      active: true,
+      onClick: undefined,
+    },
+    {
+      label: 'Agenda',
+      detail: appointmentCount > 0
+        ? `${appointmentCount} rendez-vous`
+        : 'À planifier',
+      done: appointmentCount > 0,
+      active: false,
+      onClick: onAgenda,
+    },
+    {
+      label: 'Finance',
+      detail: invoiceCount > 0
+        ? `${invoiceCount} facture${invoiceCount > 1 ? 's' : ''}`
+        : supplierDocumentCount > 0
+          ? `${supplierDocumentCount} coût${supplierDocumentCount > 1 ? 's' : ''} fournisseur`
+          : 'À alimenter',
+      done: invoiceCount > 0 || supplierDocumentCount > 0,
+      active: false,
+      onClick: onFinance,
+    },
+  ] as const;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="mb-3">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Affaire vitrage
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Une seule affaire, le même contact, de la demande jusqu’à la marge.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-4">
+        {steps.map((step, index) => {
+          const contenu = (
+            <>
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-foreground">{step.label}</span>
+                {step.done && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+              </span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">{step.detail}</span>
+            </>
+          );
+
+          return (
+            <div key={step.label} className="relative flex min-w-0 items-stretch gap-2">
+              {step.onClick ? (
+                <button
+                  type="button"
+                  onClick={step.onClick}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-primary/35 hover:bg-primary/5"
+                >
+                  {contenu}
+                </button>
+              ) : (
+                <div className={step.active
+                  ? 'w-full rounded-lg border border-primary/30 bg-primary/5 p-3'
+                  : 'w-full rounded-lg border border-border bg-background p-3'}
+                >
+                  {contenu}
+                </div>
+              )}
+              {index < steps.length - 1 && (
+                <ArrowRight className="absolute -right-2.5 top-1/2 z-10 hidden h-3 w-3 -translate-y-1/2 text-muted-foreground sm:block" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ============ SUIVI TAB ============
 
 function SuiviTab({
@@ -1362,271 +1502,6 @@ function HistoriqueTab({
   );
 }
 
-// ============ CREATE CASE DIALOG ============
-
-function CreateCaseDialog({
-  open, onOpenChange, caseCount, leads, contacts, profiles, insurers,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  caseCount: number;
-  leads: Lead[];
-  contacts: Contact[];
-  profiles: Profile[];
-  insurers: Insurer[];
-}) {
-  const queryClient = useQueryClient();
-
-  const caseNumber = useMemo(() => {
-    const year = new Date().getFullYear();
-    return `DOS-${year}-${String(caseCount + 1).padStart(3, '0')}`;
-  }, [caseCount]);
-
-  const [selectedClient, setSelectedClient] = useState<{ id: string; type: 'lead' | 'contact' } | null>(null);
-  const [clientSearch, setClientSearch] = useState('');
-  const [showResults, setShowResults] = useState(false);
-  const [vehicleMake, setVehicleMake] = useState('');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehicleRegistration, setVehicleRegistration] = useState('');
-  const [insurerId, setInsurerId] = useState('');
-  const [glassType, setGlassType] = useState('');
-  const [hasSensors, setHasSensors] = useState(false);
-  const [hasAdasCamera, setHasAdasCamera] = useState(false);
-  const [interventionType, setInterventionType] = useState<'home' | 'workshop'>('workshop');
-  const [assignedUserId, setAssignedUserId] = useState('');
-
-  const clientResults = useMemo(() => {
-    const s = clientSearch.toLowerCase().trim();
-    const leadOpts = leads
-      .filter((l) => !s || `${l.first_name} ${l.last_name}`.toLowerCase().includes(s) || (l.phone ?? '').includes(s))
-      .slice(0, 5)
-      .map((l) => ({ id: l.id, type: 'lead' as const, name: `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim(), sub: l.phone }));
-    const contactOpts = contacts
-      .filter((c) => !s || `${c.first_name} ${c.last_name}`.toLowerCase().includes(s) || (c.phone ?? '').includes(s))
-      .slice(0, 5)
-      .map((c) => ({ id: c.id, type: 'contact' as const, name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(), sub: c.phone }));
-    return [...leadOpts, ...contactOpts];
-  }, [leads, contacts, clientSearch]);
-
-  const resetForm = () => {
-    setSelectedClient(null); setClientSearch(''); setShowResults(false);
-    setVehicleMake(''); setVehicleModel(''); setVehicleRegistration('');
-    setInsurerId(''); setGlassType(''); setHasSensors(false); setHasAdasCamera(false);
-    setInterventionType('workshop'); setAssignedUserId('');
-  };
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedClient) throw new Error('Veuillez sélectionner un client');
-
-      const caseFields: Partial<WindscreenCase> = {
-        case_number: caseNumber,
-        status: 'new',
-        contact_id: selectedClient.type === 'contact' ? selectedClient.id : null,
-        lead_id: selectedClient.type === 'lead' ? selectedClient.id : null,
-        insurer_id: insurerId || null,
-        glass_type: glassType || null,
-        has_sensors: hasSensors,
-        has_adas_camera: hasAdasCamera,
-        intervention_type: interventionType,
-        assigned_user_id: assignedUserId || null,
-        franchise_amount: 0,
-        gift_amount: 0,
-        estimated_margin: 0,
-      };
-
-      const { error, caseData } = await createCase(caseFields);
-      if (error || !caseData) throw new Error(error || 'Erreur de création du dossier');
-
-      // Create default documents checklist
-      await Promise.all(
-        defaultDocuments.map((doc) =>
-          createCaseDocument({
-            case_id: caseData.id,
-            type: doc.type,
-            label: doc.label,
-            uploaded: false,
-          }),
-        ),
-      );
-
-      return caseData;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-      queryClient.invalidateQueries({ queryKey: ['case-documents'] });
-      toast.success('Dossier créé avec documents par défaut');
-      resetForm();
-      onOpenChange(false);
-    },
-    onError: (err) => toast.error((err as Error)?.message || 'Erreur de création'),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) resetForm(); }}>
-      <DialogContent className="max-w-lg sm:rounded-xl">
-        <DialogHeader>
-          <DialogTitle>Nouveau dossier</DialogTitle>
-          <DialogDescription>
-            Créez un dossier de vitrage. La checklist de documents sera générée automatiquement.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="max-h-[60vh] space-y-4 overflow-y-auto scrollbar-thin pr-1">
-          {/* Case number (auto-generated) */}
-          <FormField label="N° dossier (auto-généré)">
-            <Input value={caseNumber} readOnly className="rounded-lg bg-muted/50 font-mono text-sm" />
-          </FormField>
-
-          {/* Client search/select */}
-          <div className="space-y-1.5">
-            <Label className="text-sm text-foreground">Client</Label>
-            {selectedClient ? (
-              <div className="flex items-center justify-between rounded-lg border border-border p-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {selectedClient.type === 'lead'
-                      ? `${leads.find((l) => l.id === selectedClient.id)?.first_name ?? ''} ${leads.find((l) => l.id === selectedClient.id)?.last_name ?? ''}`.trim()
-                      : `${contacts.find((c) => c.id === selectedClient.id)?.first_name ?? ''} ${contacts.find((c) => c.id === selectedClient.id)?.last_name ?? ''}`.trim()
-                    }
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedClient.type === 'lead' ? 'Lead' : 'Contact'}
-                  </p>
-                </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedClient(null)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Rechercher un lead ou contact..."
-                    value={clientSearch}
-                    onChange={(e) => { setClientSearch(e.target.value); setShowResults(true); }}
-                    onFocus={() => setShowResults(true)}
-                    onBlur={() => setTimeout(() => setShowResults(false), 200)}
-                    className="rounded-lg pl-9"
-                  />
-                </div>
-                {showResults && clientResults.length > 0 && (
-                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-md">
-                    {clientResults.map((r) => (
-                      <button
-                        key={`${r.type}-${r.id}`}
-                        type="button"
-                        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
-                        onClick={() => {
-                          setSelectedClient({ id: r.id, type: r.type });
-                          setShowResults(false);
-                          setClientSearch('');
-                        }}
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{r.name}</p>
-                          {r.sub && <p className="text-xs text-muted-foreground">{r.sub}</p>}
-                        </div>
-                        <Badge variant="outline" className="text-[10px]">{r.type === 'lead' ? 'Lead' : 'Contact'}</Badge>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {showResults && clientResults.length === 0 && clientSearch && (
-                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-card p-3 text-center text-xs text-muted-foreground shadow-md">
-                    Aucun résultat
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Vehicle fields */}
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Marque du véhicule">
-              <Input value={vehicleMake} onChange={(e) => setVehicleMake(e.target.value)} className="rounded-lg" />
-            </FormField>
-            <FormField label="Modèle du véhicule">
-              <Input value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} className="rounded-lg" />
-            </FormField>
-          </div>
-          <FormField label="Immatriculation">
-            <Input value={vehicleRegistration} onChange={(e) => setVehicleRegistration(e.target.value)} className="rounded-lg" />
-          </FormField>
-
-          {/* Insurance */}
-          <FormField label="Compagnie d'assurance">
-            <Select value={insurerId} onValueChange={setInsurerId}>
-              <SelectTrigger className="rounded-lg"><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-              <SelectContent>
-                {insurers.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-
-          {/* Glass info */}
-          <FormField label="Type de vitrage">
-            <Input value={glassType} onChange={(e) => setGlassType(e.target.value)} placeholder="Ex: Pare-brise laminé..." className="rounded-lg" />
-          </FormField>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label className="text-sm">Capteurs</Label>
-              <Switch checked={hasSensors} onCheckedChange={setHasSensors} />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <Label className="text-sm">Caméra ADAS</Label>
-              <Switch checked={hasAdasCamera} onCheckedChange={setHasAdasCamera} />
-            </div>
-          </div>
-
-          {/* Intervention type */}
-          <FormField label="Type d'intervention">
-            <Select value={interventionType} onValueChange={(v) => setInterventionType(v as 'home' | 'workshop')}>
-              <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="workshop">Atelier</SelectItem>
-                <SelectItem value="home">À domicile</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormField>
-
-          {/* Advisor */}
-          <FormField label="Conseiller assigné">
-            <Select value={assignedUserId} onValueChange={setAssignedUserId}>
-              <SelectTrigger className="rounded-lg"><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-              <SelectContent>
-                {profiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.first_name} {p.last_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-        </div>
-
-        <DialogFooter>
-          <Button type="button" variant="ghost" className="rounded-full" onClick={() => onOpenChange(false)}>
-            Annuler
-          </Button>
-          <Button className="rounded-full" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {mutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="mr-2 h-4 w-4" />
-            )}
-            Créer le dossier
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ============ SMALL REUSABLE COMPONENTS ============
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -1664,15 +1539,6 @@ function EmptyTab({ icon, title, description }: { icon: React.ReactNode; title: 
       </div>
       <p className="text-sm font-medium text-foreground">{title}</p>
       <p className="mt-1 max-w-xs text-xs text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm text-foreground">{label}</Label>
-      {children}
     </div>
   );
 }

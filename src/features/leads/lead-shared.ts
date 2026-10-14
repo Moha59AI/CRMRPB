@@ -18,7 +18,7 @@ export const statusLabels: Record<string, string> = {
   nrp: 'NRP',
   interested: 'Qualifié',
   documents_requested: 'Attente documents',
-  documents_received: 'Documents reçus',
+  documents_received: 'Prêt Onify',
   appointment_scheduled: 'RDV pris',
   lost: 'Perdu',
   converted: 'Clôturé',
@@ -37,6 +37,7 @@ export type LeadJourneyStageKey =
   | 'nrp'
   | 'qualifie'
   | 'documents'
+  | 'onify_ready'
   | 'rdv'
   | 'perdu'
   | 'cloture';
@@ -48,12 +49,16 @@ export interface LeadJourneyStage {
   statuses: readonly LeadStatus[];
   /** Statut interne applique quand l'utilisateur choisit cette etape. */
   targetStatus: LeadStatus;
+  /** Etape constatee par les donnees, jamais forcee manuellement. */
+  automated?: boolean;
   terminal?: boolean;
 }
 
 /**
- * Les statuts techniques restent inchanges pour proteger les cadences SQL,
- * mais l'equipe ne pilote que ces sept etapes metier dans toute l'interface.
+ * Le pipeline suit maintenant la realite operationnelle : le prospect reste
+ * un lead et devient pret pour Onify apres reception des pieces. Lorsqu'un
+ * vrai dossier Glass est detecte, il quitte ce module et l'affaire continue
+ * dans Glass : il n'existe donc aucune etape post-Onify dans ce pipeline.
  */
 export const leadJourneyStages: readonly LeadJourneyStage[] = [
   {
@@ -81,8 +86,16 @@ export const leadJourneyStages: readonly LeadJourneyStage[] = [
     key: 'documents',
     label: 'Attente documents',
     description: 'Lien envoyé, dossier à compléter',
-    statuses: ['documents_requested', 'documents_received'],
+    statuses: ['documents_requested'],
     targetStatus: 'documents_requested',
+  },
+  {
+    key: 'onify_ready',
+    label: 'Prêt Onify',
+    description: 'Pièces obligatoires reçues, dossier à créer dans Onify',
+    statuses: ['documents_received'],
+    targetStatus: 'documents_received',
+    automated: true,
   },
   {
     key: 'rdv',
@@ -119,10 +132,8 @@ export function leadStageForKey(key: string): LeadJourneyStage | undefined {
 }
 
 /**
- * Les colonnes du pipeline regroupent encore « pièces attendues » et
- * « pièces reçues » dans la même étape métier. Le filtre du tableau doit en
- * revanche rester exact : demander les dossiers en attente ne doit jamais
- * faire remonter ceux dont les documents sont déjà arrivés.
+ * Chaque filtre correspond maintenant a une etape exacte : les pieces recues
+ * ne remontent plus dans l'attente et les dossiers Onify sont dans Glass.
  */
 export interface LeadStatusFilterOption {
   value: string;
@@ -131,25 +142,11 @@ export interface LeadStatusFilterOption {
 }
 
 export const leadStatusFilterOptions: readonly LeadStatusFilterOption[] =
-  leadJourneyStages.reduce<LeadStatusFilterOption[]>((options, stage) => {
-    if (stage.key === 'documents') {
-      options.push(
-        {
-          value: 'documents',
-          label: 'Attente documents',
-          statuses: ['documents_requested'],
-        },
-        {
-          value: 'documents_received',
-          label: 'Documents reçus',
-          statuses: ['documents_received'],
-        },
-      );
-    } else {
-      options.push({ value: stage.key, label: stage.label, statuses: stage.statuses });
-    }
-    return options;
-  }, []);
+  leadJourneyStages.map((stage) => ({
+    value: stage.key,
+    label: stage.label,
+    statuses: stage.statuses,
+  }));
 
 export function leadStatusesForFilter(key: string): readonly LeadStatus[] | undefined {
   return leadStatusFilterOptions.find((option) => option.value === key)?.statuses;
@@ -157,13 +154,13 @@ export function leadStatusesForFilter(key: string): readonly LeadStatus[] | unde
 
 export function leadStageDescription(status: LeadStatus): string {
   if (status === 'calling') return 'Appel en cours — enregistrez son résultat';
-  if (status === 'documents_received') return 'Documents reçus — vérifiez les pièces';
+  if (status === 'documents_received') return 'Pièces reçues — créez le dossier Glass dans Onify';
   return leadStageForStatus(status).description;
 }
 
 /** Choix courts : jamais de doublon « nouveau / à appeler / appel en cours ». */
 export const statusSelectOptions: { value: LeadStatus; label: string }[] =
-  leadJourneyStages.map((stage) => ({
+  leadJourneyStages.filter((stage) => !stage.automated).map((stage) => ({
     value: stage.targetStatus,
     label: stage.label,
   }));

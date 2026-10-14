@@ -15,6 +15,8 @@ export type LeadStatus =
   | 'documents_requested' | 'documents_received' | 'appointment_scheduled'
   | 'lost' | 'converted';
 
+export type AffaireVitragePhase = 'leads' | 'glass' | 'agenda' | 'finance' | 'perdue';
+
 export type CaseStatus =
   | 'new' | 'qualification' | 'documents_pending' | 'insurance_declaration'
   | 'glass_ordered' | 'appointment_scheduled' | 'intervention_done'
@@ -76,6 +78,8 @@ export interface Profile {
 export interface Lead {
   id: string;
   workspace_id: string;
+  /** Identite metier stable, conservee du lead jusqu'a la finance. */
+  affaire_id: string;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
@@ -250,6 +254,14 @@ export interface Contact {
   onify_source?: string | null;
   onify_stage?: string | null;
   onify_tags?: unknown[] | null;
+  /** Entreprise et pays tels qu'ils sont renseignes dans Onify. */
+  onify_company?: string | null;
+  onify_country?: string | null;
+  /** Tous les numeros Onify ; `phone` reste le numero principal. */
+  onify_phones?: string[] | null;
+  onify_customer_added_at?: string | null;
+  /** Copie integrale de la fiche Onify, pour ne perdre aucun champ partenaire. */
+  onify_payload?: Record<string, unknown> | null;
   onify_synced_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -312,6 +324,8 @@ export interface Insurer {
 export interface WindscreenCase {
   id: string;
   workspace_id: string;
+  /** Meme affaire que le lead d'origine, ou affaire propre a un dossier historique. */
+  affaire_id: string;
   case_number: string;
   lead_id: string | null;
   contact_id: string | null;
@@ -375,6 +389,8 @@ export interface CaseDocument {
 export interface Appointment {
   id: string;
   workspace_id: string;
+  /** Affaire rattachee, resolue depuis le dossier ou le lead. */
+  affaire_id: string | null;
   case_id: string | null;
   lead_id: string | null;
   contact_id: string | null;
@@ -582,6 +598,7 @@ export interface Campaign {
 export interface Quote {
   id: string;
   workspace_id: string;
+  affaire_id: string | null;
   case_id: string | null;
   contact_id: string | null;
   quote_number: string;
@@ -600,6 +617,7 @@ export interface Quote {
 export interface Invoice {
   id: string;
   workspace_id: string;
+  affaire_id: string | null;
   case_id: string | null;
   contact_id: string | null;
   invoice_number: string;
@@ -634,6 +652,29 @@ export interface Invoice {
   onify_pdf_synced_at?: string | null;
   onify_pdf_checked_at?: string | null;
   onify_pdf_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Vue transversale d'une intervention, sans dupliquer le contact. */
+export interface AffaireVitrage {
+  id: string;
+  workspace_id: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  lead_id: string | null;
+  lead_status: LeadStatus | null;
+  glass_case_id: string | null;
+  onify_glass_case_id: string | null;
+  glass_reference: string | null;
+  appointment_id: string | null;
+  appointment_start_time: string | null;
+  invoice_count: number;
+  invoiced_amount_ht: number;
+  supplier_document_count: number;
+  supplier_amount_ht: number;
+  phase: AffaireVitragePhase;
   created_at: string;
   updated_at: string;
 }

@@ -1081,7 +1081,7 @@ function AppointmentDetailSheet({
                   <dd>
                     {peutNaviguerHorsPlanning ? (
                       <a
-                        href={`/cases?id=${appointment.case_id}`}
+                        href={`/glass?id=${appointment.case_id}`}
                         className="font-medium text-primary hover:underline"
                       >
                         Ouvrir le dossier

@@ -17,6 +17,7 @@ test('chaque etape utilise la couleur personnalisable de son statut', async () =
   assert.match(colors, /perdu: '#64748b'/);
   assert.match(colors, /status === 'documents_requested'[\s\S]*return 'documents_requested'/);
   assert.match(colors, /status === 'appointment_scheduled'[\s\S]*return 'rdv'/);
+  assert.doesNotMatch(colors, /onify_created/);
 });
 
 test('la couleur couvre le tableau et la liste mobile sans masquer la selection', async () => {

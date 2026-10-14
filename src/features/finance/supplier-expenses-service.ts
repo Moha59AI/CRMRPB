@@ -39,6 +39,7 @@ export type SupplierPaymentStatus = 'unknown' | 'unpaid' | 'scheduled' | 'paid' 
 
 export interface SupplierExpense {
   id: string;
+  affaire_id?: string | null;
   updated_at: string;
   supplier: string;
   document_type: SupplierDocumentType;

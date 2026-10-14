@@ -88,7 +88,7 @@ export function BulkLeadActions({
               <SelectValue placeholder="Déplacer vers…" />
             </SelectTrigger>
             <SelectContent>
-              {leadJourneyStages.map((stage) => (
+              {leadJourneyStages.filter((stage) => !stage.automated).map((stage) => (
                 <SelectItem key={stage.key} value={stage.targetStatus}>
                   {stage.label}
                 </SelectItem>

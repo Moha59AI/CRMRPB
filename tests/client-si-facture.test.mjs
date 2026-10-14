@@ -5,6 +5,7 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 const MIGRATION = 'supabase/migrations/20260930140000_client_quand_il_y_a_facture.sql';
+const GLASS_CLIENT_MIGRATION = 'supabase/migrations/20261013160000_clients_et_module_glass.sql';
 
 test('est client qui a une facture, annulee exclue', async () => {
   const sql = await read(MIGRATION);
@@ -53,4 +54,18 @@ test('la liste separe les clients des prospects', async () => {
   assert.match(service, /estClient: Boolean\(l\.est_client\)/);
   assert.match(page, /type FiltreClient = 'tous' \| 'clients' \| 'prospects'/);
   assert.match(page, /listeFiltree/);
+});
+
+test('un vrai dossier Glass fait passer le prospect dans Clients sans attendre la facture', async () => {
+  const sql = await read(GLASS_CLIENT_MIGRATION);
+  const page = await read('src/features/contacts/contacts-page.tsx');
+  const service = await read('src/services/contacts-service.ts');
+
+  assert.match(sql, /create or replace function public\.dossiers_glass_par_contact/);
+  assert.match(sql, /dossier\.onify_glass_case_id is not null/);
+  assert.match(sql, /g\.nb_dossiers_glass is not null or f\.nb_factures is not null/);
+  assert.match(sql, /onify_payload jsonb/);
+  assert.match(page, /useState<FiltreClient>\('clients'\)/);
+  assert.match(page, /Client dès la création de son dossier Glass Onify/);
+  assert.match(service, /nbDossiersGlass: Number\(l\.nb_dossiers_glass\)/);
 });

@@ -46,7 +46,7 @@ const EXPLICATION: Partial<Record<LeadStatus, string>> = {
   calling: 'Appel entamé puis interrompu.',
   interested: "Le client s'est montré intéressé mais n'a pas conclu.",
   documents_requested: 'Carte grise et attestation demandées, sans retour.',
-  documents_received: 'Documents reçus, dossier à monter.',
+  documents_received: 'Pièces reçues, dossier Glass à créer dans Onify.',
 };
 
 export function CadencesPage() {

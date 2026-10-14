@@ -28,9 +28,9 @@ interface LeadPipelineProps {
 /**
  * Parcours commercial visible par l'equipe.
  *
- * Les dix valeurs stockees en base restent intactes pour les automatismes,
- * mais elles sont reunies en sept decisions comprehensibles. Perdu et Cloture
- * demandent une confirmation parce qu'ils retirent le lead du travail actif.
+ * L'etape "Pret Onify" est pilotee par la reception reelle des pieces. Des
+ * qu'un dossier Glass existe, le lead est archive automatiquement et quitte
+ * cet ecran. Perdu et Cloture demandent une confirmation.
  */
 export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelineProps) {
   const [confirmation, setConfirmation] = useState<LeadJourneyStage | null>(null);
@@ -40,7 +40,7 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
   const indexCourant = parcours.findIndex((e) => e.key === etapeCourante.key);
 
   const demanderChangement = (etape: LeadJourneyStage) => {
-    if (etape.key === etapeCourante.key) return;
+    if (etape.key === etapeCourante.key || etape.automated) return;
     if (etape.terminal) {
       setConfirmation(etape);
       return;
@@ -57,10 +57,8 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
   return (
     <>
       <div className="rounded-xl border border-border bg-card px-3 py-2.5">
-        {/* Les sept etapes etaient sept boites en `flex-1`, etirees sur toute
-            la largeur : sur un grand ecran, 200 px de vide chacune pour un
-            libelle de huit caracteres. Elles prennent desormais la place de
-            leur texte, et le parcours se lit comme un fil. */}
+        {/* Chaque etape prend seulement la largeur de son libelle afin que le
+            parcours reste utilisable sur telephone. */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
           {parcours.map((etape, index) => {
             const active = etape.key === etapeCourante.key;
@@ -78,9 +76,13 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
                 )}
                 <button
                   type="button"
-                  disabled={desactive || active}
+                  disabled={desactive || active || etape.automated}
                   onClick={() => demanderChangement(etape)}
-                  title={active ? `${etape.label} — étape actuelle` : `Passer à « ${etape.label} »`}
+                  title={active
+                    ? `${etape.label} — étape actuelle`
+                    : etape.automated
+                      ? `${etape.label} — étape automatique`
+                      : `Passer à « ${etape.label} »`}
                   aria-current={active ? 'step' : undefined}
                   className={cn(
                     'inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors',
@@ -89,6 +91,7 @@ export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelin
                       : franchie
                         ? 'border-transparent bg-surface text-muted-foreground hover:bg-muted'
                         : 'border-transparent text-faint hover:bg-surface hover:text-muted-foreground',
+                    etape.automated && !active && 'cursor-not-allowed opacity-65',
                     'disabled:cursor-default disabled:opacity-100',
                   )}
                 >

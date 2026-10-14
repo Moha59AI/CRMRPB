@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('le parcours commercial expose exactement les sept etapes metier', async () => {
+test('le parcours commercial distingue le lead, les pieces et le dossier Onify', async () => {
   const shared = await read('src/features/leads/lead-shared.ts');
 
   const labels = [
@@ -12,20 +12,25 @@ test('le parcours commercial expose exactement les sept etapes metier', async ()
     'NRP',
     'Qualifié',
     'Attente documents',
+    'Prêt Onify',
     'RDV pris',
     'Perdu',
     'Clôturé',
   ];
   for (const label of labels) assert.match(shared, new RegExp(`label: '${label}'`));
-  assert.equal((shared.match(/key: '(nouveau|nrp|qualifie|documents|rdv|perdu|cloture)'/g) ?? []).length, 7);
+  assert.equal((shared.match(/key: '(nouveau|nrp|qualifie|documents|onify_ready|rdv|perdu|cloture)'/g) ?? []).length, 8);
+  assert.doesNotMatch(shared, /key: 'onify_created'/);
 });
 
-test('les statuts techniques restent regroupes sans casser les cadences', async () => {
+test('les statuts techniques sont separes pour suivre la creation Onify', async () => {
   const shared = await read('src/features/leads/lead-shared.ts');
   const service = await read('src/services/leads-service.ts');
 
   assert.match(shared, /statuses: \['new', 'to_call', 'calling'\]/);
-  assert.match(shared, /statuses: \['documents_requested', 'documents_received'\]/);
+  assert.match(shared, /key: 'documents',[\s\S]*?statuses: \['documents_requested'\]/);
+  assert.match(shared, /key: 'onify_ready',[\s\S]*?statuses: \['documents_received'\]/);
+  assert.match(shared, /automated: true/);
+  assert.doesNotMatch(shared, /glass_created/);
   assert.match(service, /query\.in\('status', \[\.\.\.params\.statuses\]\)/);
 });
 
@@ -35,11 +40,11 @@ test('le filtre attente documents exclut les dossiers dont les pieces sont recue
 
   assert.match(
     shared,
-    /value: 'documents',[\s\S]*?statuses: \['documents_requested'\]/,
+    /key: 'documents',[\s\S]*?statuses: \['documents_requested'\]/,
   );
   assert.match(
     shared,
-    /value: 'documents_received',[\s\S]*?statuses: \['documents_received'\]/,
+    /key: 'onify_ready',[\s\S]*?statuses: \['documents_received'\]/,
   );
   assert.match(page, /statuses: leadStatusesForFilter\(statusFilter\)/);
   assert.match(page, /leadStatusFilterOptions\.map\(\(option\) =>/);

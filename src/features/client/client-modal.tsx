@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Phone, MessageSquare, Mail, MapPin, Car, History, Wrench,
   BellOff, ChevronRight, Plus, Loader2, CalendarClock, StickyNote,
-  Send, CheckCircle2, Clock3, AlertTriangle,
+  Send, CheckCircle2, Clock3, AlertTriangle, DatabaseZap,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,7 @@ import {
   fetchVehiclesForContact, updateContact, creerInterventionPourClient,
   fetchSuiviClient,
 } from '@/services/contacts-service';
+import { fetchAffairesByContactId } from '@/services/affaires-service';
 import { createNote } from '@/services/activity-service';
 import { etatApresRetour, etatVersFiche } from '@/features/dossier/dossier-constants';
 import { ClientDocumentHistory } from '@/features/client-documents/client-document-history';
@@ -41,7 +42,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { cheminAutorise } from '@/config/permissions';
 import type { EtatOuvertureDossier } from '@/features/dossier/dossier-constants';
 import type { SyntheseClient } from '@/services/contacts-service';
-import type { Lead, Contact, Communication, Note, Task } from '@/types';
+import type { AffaireVitrage, Lead, Contact, Communication, Note, Task } from '@/types';
 
 type OngletClient = 'apercu' | 'suivi' | 'interventions' | 'facturation' | 'documents' | 'vehicules';
 
@@ -90,6 +91,11 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const { data: interventions } = useQuery({
     queryKey: ['client-interventions', contactId],
     queryFn: () => fetchInterventionsClient(contactId as string),
+    enabled: !!contactId,
+  });
+  const { data: affaires, isLoading: affairesChargees } = useQuery({
+    queryKey: ['affaires-vitrage', 'contact', contactId],
+    queryFn: () => fetchAffairesByContactId(contactId as string),
     enabled: !!contactId,
   });
   const { data: vehicules } = useQuery({
@@ -230,6 +236,14 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
   const ouvrirIntervention = (leadId: string) => {
     navigate(`/interventions/${leadId}`, { state: etatVersFiche(location) });
   };
+  const ouvrirAffaire = (affaire: AffaireVitrage) => {
+    if (affaire.phase === 'leads' || affaire.phase === 'perdue') {
+      if (affaire.lead_id) ouvrirIntervention(affaire.lead_id);
+      return;
+    }
+    if (affaire.glass_case_id) navigate(`/glass?id=${affaire.glass_case_id}`);
+    else if (affaire.lead_id) ouvrirIntervention(affaire.lead_id);
+  };
 
   const nom = client
     ? [client.first_name, client.last_name].filter(Boolean).join(' ').trim() || client.phone || 'Client'
@@ -290,9 +304,8 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     <>
       <div className="flex items-center gap-2">
         <h1 className="truncate text-xl font-semibold sm:text-2xl">{nom}</h1>
-        {/* « Client fidele » se declenchait sur deux interventions, meme sans
-            la moindre facture. On est client quand on a ete facture, et
-            fidele quand on l'a ete plusieurs fois. */}
+        {/* Le dossier Glass fait passer la personne en client. La fidelite
+            reste mesuree par plusieurs factures, pas par de simples leads. */}
         {synthese && <BadgeClient estClient={synthese.est_client} />}
         {synthese && synthese.nb_factures > 1 && (
           <Badge variant="outline" className="shrink-0 rounded-full border-done/30 bg-done-soft text-done">
@@ -387,6 +400,11 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
           <div className="min-w-0 space-y-6">
             <PilotageClient interventions={interventions ?? []} onOuvrir={ouvrirIntervention} />
             {synthese && <Synthese synthese={synthese} />}
+            <AffairesVitrageClient
+              affaires={affaires ?? []}
+              chargement={affairesChargees}
+              onOuvrir={ouvrirAffaire}
+            />
             {/* L'assureur du dernier dossier, avec sa procedure : c'est ce
                 qu'on cherche quand le client rappelle. */}
             {assureurHabituel && (
@@ -429,6 +447,7 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
               onSms={sms}
               onEmail={email}
             />
+            {fiche.onify_customer_id && <OnifyClientCard client={fiche} />}
             <CoordonneesClient client={fiche} onModifier={brouillon.modifier} />
             <ConsentementsClient client={fiche} onModifier={brouillon.modifier} />
 
@@ -590,6 +609,48 @@ function ActionsClient({
         </Button>
       </div>
     </section>
+  );
+}
+
+/** Donnees de reference importees depuis la fiche client Onify. */
+function OnifyClientCard({ client }: { client: Contact }) {
+  const phones = (client.onify_phones ?? []).filter(Boolean);
+  const tags = (client.onify_tags ?? [])
+    .map((tag) => (typeof tag === 'string' ? tag : JSON.stringify(tag)))
+    .filter(Boolean);
+
+  return (
+    <section className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+        <DatabaseZap className="h-3.5 w-3.5" />Fiche Onify synchronisée
+      </h3>
+      <dl className="space-y-2 text-sm">
+        <LigneOnify label="Identifiant" value={client.onify_customer_id} />
+        <LigneOnify label="Entreprise" value={client.onify_company} />
+        <LigneOnify label="Étape" value={client.onify_stage} />
+        <LigneOnify label="Source" value={client.onify_source} />
+        <LigneOnify label="Téléphones" value={phones.length ? phones.join(' · ') : null} />
+        <LigneOnify label="Pays" value={client.onify_country} />
+        <LigneOnify label="Tags" value={tags.length ? tags.join(', ') : null} />
+        <LigneOnify
+          label="Synchronisé"
+          value={client.onify_synced_at ? formatDateTime(client.onify_synced_at) : null}
+        />
+      </dl>
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+        Ces informations viennent d’Onify. La copie intégrale reçue par l’API est conservée dans le CRM.
+      </p>
+    </section>
+  );
+}
+
+function LigneOnify({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-xs font-medium text-foreground">{value}</dd>
+    </div>
   );
 }
 
@@ -910,25 +971,134 @@ function LigneConsentement({
   );
 }
 
+const PHASE_AFFAIRE: Record<AffaireVitrage['phase'], { label: string; classe: string }> = {
+  leads: { label: 'Leads', classe: 'border-primary/25 bg-primary/5 text-primary' },
+  glass: { label: 'Glass', classe: 'border-primary/30 bg-primary/10 text-primary' },
+  agenda: { label: 'Agenda', classe: 'border-warning/35 bg-warning/10 text-warning' },
+  finance: { label: 'Finance', classe: 'border-done/30 bg-done-soft text-done' },
+  perdue: { label: 'Perdue', classe: 'border-urgent/30 bg-urgent-soft text-urgent' },
+};
+
+const formatMontantAffaire = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  maximumFractionDigits: 0,
+});
+
+/** Une personne peut revenir : chaque demande garde donc sa propre affaire. */
+function AffairesVitrageClient({
+  affaires,
+  chargement,
+  onOuvrir,
+}: {
+  affaires: AffaireVitrage[];
+  chargement: boolean;
+  onOuvrir: (affaire: AffaireVitrage) => void;
+}) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Affaires vitrage
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Une ligne par demande, du lead jusqu’à la finance.
+          </p>
+        </div>
+        {!chargement && (
+          <Badge variant="outline" className="rounded-full text-[10px]">
+            {affaires.length}
+          </Badge>
+        )}
+      </div>
+
+      {chargement ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+        </div>
+      ) : affaires.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+          Aucune affaire vitrage pour ce contact.
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {affaires.map((affaire) => {
+            const phase = PHASE_AFFAIRE[affaire.phase];
+            const titre = affaire.glass_reference
+              ? `Dossier ${affaire.glass_reference}`
+              : `Demande du ${formatDate(affaire.created_at)}`;
+            const finance = Number(affaire.invoiced_amount_ht || 0);
+            const couts = Number(affaire.supplier_amount_ht || 0);
+            const details = affaire.phase === 'agenda' && affaire.appointment_start_time
+              ? `Rendez-vous le ${formatDateTime(affaire.appointment_start_time)}`
+              : affaire.phase === 'finance'
+                ? `${affaire.invoice_count} facture${affaire.invoice_count > 1 ? 's' : ''}`
+                  + (finance ? ` · ${formatMontantAffaire.format(finance)} HT` : '')
+                  + (couts ? ` · ${formatMontantAffaire.format(couts)} de coûts` : '')
+                : affaire.phase === 'glass'
+                  ? 'Dossier synchronisé depuis Onify'
+                  : affaire.phase === 'perdue'
+                    ? 'Demande classée perdue'
+                    : 'Demande en cours dans Leads';
+            const ouvrable = Boolean(affaire.glass_case_id || affaire.lead_id);
+
+            return (
+              <button
+                key={affaire.id}
+                type="button"
+                disabled={!ouvrable}
+                onClick={() => onOuvrir(affaire)}
+                className="group min-w-0 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/30 hover:bg-primary/[0.03] disabled:cursor-default disabled:hover:border-border disabled:hover:bg-card"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-foreground">{titre}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{details}</span>
+                  </span>
+                  <Badge variant="outline" className={cn('shrink-0 rounded-full text-[10px]', phase.classe)}>
+                    {phase.label}
+                  </Badge>
+                </span>
+                <span className="mt-3 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                  <span>Créée le {formatDate(affaire.created_at)}</span>
+                  {ouvrable && (
+                    <span className="flex items-center gap-1 font-medium text-primary">
+                      Ouvrir <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * Ce que cette personne represente, mesure sur des faits.
  *
- * Le taux de conversion affiche ici se calculait sur le statut « converti »
- * du lead, qui se saisit a la main : douze leads le portent, pour 136
- * personnes facturees. Il annoncait donc 0 % a presque tout le monde, y
- * compris aux clients de longue date. La facture remplace le statut.
+ * Le dossier Glass Onify est maintenant le passage normal de prospect a
+ * client. La facture reste utile pour les anciens imports et la fidelite.
  */
 function Synthese({ synthese }: { synthese: SyntheseClient }) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Chiffre valeur={synthese.nb_interventions} label="Interventions" />
+      <Chiffre
+        valeur={synthese.nb_dossiers_glass}
+        label={synthese.nb_dossiers_glass > 1 ? 'Dossiers Glass' : 'Dossier Glass'}
+        accent={synthese.nb_dossiers_glass > 0}
+      />
       <Chiffre
         valeur={synthese.nb_factures}
         label={synthese.nb_factures > 1 ? 'Factures' : 'Facture'}
-        accent={synthese.est_client}
       />
       <Chiffre
-        valeur={synthese.est_client ? formatDate(synthese.premiere_facture) : '—'}
+        valeur={synthese.est_client ? formatDate(synthese.client_depuis) : '—'}
         label="Client depuis"
       />
     </div>
@@ -938,8 +1108,8 @@ function Synthese({ synthese }: { synthese: SyntheseClient }) {
 /**
  * Client ou prospect.
  *
- * La regle est celle du metier : on est client a partir de la premiere
- * facture. Un devis, un rendez-vous ou dix appels ne suffisent pas.
+ * La regle est celle du metier : on est client des qu'un vrai dossier Glass
+ * existe dans Onify. Une facture importe aussi les clients historiques.
  */
 function BadgeClient({ estClient }: { estClient: boolean }) {
   return (

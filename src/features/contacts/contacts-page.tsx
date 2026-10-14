@@ -78,8 +78,8 @@ const FILTRES: { cle: FiltreClient; label: string }[] = [
 ];
 
 /**
- * Client ou prospect, selon la regle du metier : on est client a partir de la
- * premiere facture. Un devis, un rendez-vous ou dix appels ne suffisent pas.
+ * Client ou prospect, selon la regle du metier : le passage dans Glass Onify
+ * suffit. Une facture reste une seconde preuve pour l'historique importe.
  */
 function BadgeClient({ estClient }: { estClient: boolean }) {
   if (!estClient) return null;
@@ -120,9 +120,9 @@ export function ContactsPage() {
     queryFn: fetchResumesClients,
   });
 
-  // On est client quand on a une facture. Sur 682 fiches, 136 le sont : sans
-  // ce filtre, la page annonce « Clients » et montre surtout des prospects.
-  const [filtre, setFiltre] = useState<FiltreClient>('tous');
+  // Le module s'ouvre sur les vrais clients. Les contacts crees au stade lead
+  // restent disponibles dans Prospects, sans polluer la liste quotidienne.
+  const [filtre, setFiltre] = useState<FiltreClient>('clients');
   const listeFiltree = useMemo(() => {
     if (!contacts) return contacts;
     if (filtre === 'tous') return contacts;
@@ -136,11 +136,11 @@ export function ContactsPage() {
     <>
       <PageHeader
         title="Clients"
-        description="Client dès la première facture ; avant, c'est un prospect"
+        description="Client dès la création de son dossier Glass Onify"
         action={
           <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Nouveau client
+            Nouveau contact
           </Button>
         }
       />
@@ -210,13 +210,13 @@ export function ContactsPage() {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
               <MessageSquare className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <h3 className="text-sm font-semibold text-foreground">Aucun client pour le moment</h3>
+            <h3 className="text-sm font-semibold text-foreground">Aucun contact pour le moment</h3>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Ajoutez votre premier client pour commencer à suivre ses interventions et ses véhicules.
+              Ajoutez un contact pour commencer à suivre ses demandes et ses véhicules.
             </p>
             <Button className="mt-4 rounded-full" onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Nouveau client
+              Nouveau contact
             </Button>
           </div>
         )}
@@ -298,6 +298,14 @@ function ListeMobileContacts({
                   {nom}
                 </span>
                 <BadgeClient estClient={Boolean(resume?.estClient)} />
+                {resume && resume.nbDossiersGlass > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-primary/25 bg-primary/5 text-[10px] text-primary"
+                  >
+                    Glass
+                  </Badge>
+                )}
                 {/* Un client qui revient est le renseignement le plus utile
                     de la ligne : il se voit sans etre cherche. */}
                 {interventions > 0 && (
@@ -342,7 +350,17 @@ function ContactRow({ contact, resume, onOpen }: {
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onOpen}>
       <TableCell className="text-sm font-medium text-foreground">
-        {contact.first_name} {contact.last_name}
+        <span className="flex items-center gap-2">
+          <span>{contact.first_name} {contact.last_name}</span>
+          {resume && resume.nbDossiersGlass > 0 && (
+            <Badge
+              variant="outline"
+              className="rounded-full border-primary/25 bg-primary/5 text-[10px] text-primary"
+            >
+              Glass
+            </Badge>
+          )}
+        </span>
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">{contact.phone || '—'}</TableCell>
       <TableCell className="text-sm text-muted-foreground">{contact.email || '—'}</TableCell>
@@ -425,7 +443,7 @@ function CreateContactDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      toast.success('Contact créé');
+      toast.success('Contact créé comme prospect');
       reinitialiser();
       onOpenChange(false);
     },
@@ -438,9 +456,9 @@ function CreateContactDialog({
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reinitialiser(); }}>
       <DialogContent className="max-w-lg sm:rounded-xl">
         <DialogHeader>
-          <DialogTitle>Nouveau client</DialogTitle>
+          <DialogTitle>Nouveau contact</DialogTitle>
           <DialogDescription>
-            Créez sa fiche. Une intervention pourra ensuite lui être rattachée.
+            Il restera prospect jusqu’à la création de son dossier Glass Onify.
           </DialogDescription>
         </DialogHeader>
 
@@ -520,7 +538,7 @@ function CreateContactDialog({
               ) : (
                 <Plus className="mr-2 h-4 w-4" />
               )}
-              Créer le client
+              Créer le contact
             </Button>
           </DialogFooter>
         </form>

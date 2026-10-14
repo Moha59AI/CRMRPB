@@ -26,6 +26,7 @@ import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
 import { LeadOverviewSummary } from './lead-overview-summary';
+import { OnifyGlassHandoff } from './onify-glass-handoff';
 
 interface EvenementTimeline {
   cle: string;
@@ -226,6 +227,8 @@ export function DossierContenu({
       {/* Colonne laterale : historique et metadonnees stables, consultables
           sans interrompre la saisie de la colonne principale. */}
       <div className="space-y-4">
+        <OnifyGlassHandoff lead={lead} />
+
         <Bloc titre="Derniers échanges">
           <Timeline evenements={timeline.slice(0, 5)} chargement={chargeComms} />
           {timeline.length > 0 && (
@@ -456,9 +459,8 @@ function SansClient() {
 }
 
 /**
- * L'onglet Assurance s'appuie sur `windscreen_cases`, qui n'est alimente
- * qu'une fois le dossier cree. Il est annonce comme tel plutot que
- * d'afficher un vide sans explication.
+ * L'onglet Assurance s'appuie sur le dossier Glass importe depuis Onify. Il
+ * est annonce comme tel plutot que d'afficher un vide sans explication.
  */
 function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
   const libelle = ONGLETS.find((o) => o.cle === onglet)?.label ?? onglet;
@@ -469,8 +471,8 @@ function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
       </div>
       <h3 className="text-base font-semibold">{libelle}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Cette section s’active à la création du dossier vitrage. Tant que le lead
-        n’est pas converti, il n’y a ni déclaration, ni facture à afficher.
+        Cette section s’active dès qu’un dossier Glass Onify est détecté et rattaché
+        à ce lead. La clôture reste réservée à la fin réelle de l’intervention.
       </p>
     </div>
   );
