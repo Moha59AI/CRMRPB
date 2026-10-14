@@ -42,7 +42,7 @@ test('les statuts Glass restent pilotes par Onify et la synchro manuelle reste a
   const page = await read('src/features/cases/cases-page.tsx');
 
   assert.match(page, /profile\?\.role === 'admin'/);
-  assert.match(page, /Synchronisé depuis Onify/);
+  assert.match(page, /synchronis[ée]s? depuis Onify/i);
   assert.doesNotMatch(page, /statusMutation/);
   assert.doesNotMatch(page, /updateCase\(id, \{ status \}\)/);
 });
@@ -50,16 +50,38 @@ test('les statuts Glass restent pilotes par Onify et la synchro manuelle reste a
 test('Glass est un cockpit operationnel avant la liste detaillee', async () => {
   const page = await read('src/features/cases/cases-page.tsx');
 
-  assert.match(page, /Pilotage Glass/);
-  assert.match(page, /Parcours des dossiers/);
+  assert.match(page, /Glass · dossiers/);
   assert.match(page, /À traiter en priorité/);
   assert.match(page, /Prochains rendez-vous/);
-  assert.match(page, /Tous les dossiers/);
-  assert.match(page, /glassStageDefinitions/);
-  assert.match(page, /setStageFilter/);
+  assert.match(page, /Mes dossiers Glass/);
+  assert.match(page, /glassProcessDefinitions/);
+  assert.match(page, /À déclarer/);
+  assert.match(page, /À signer/);
+  assert.match(page, /LRE à envoyer/);
+  assert.match(page, /En relance/);
+  assert.match(page, /Payés/);
+  assert.match(page, /setProcessFilter/);
+  assert.match(page, /Vue cartes/);
+  assert.match(page, /Vue liste/);
+  assert.match(page, /Filtres avancés/);
   assert.match(page, /fetchAppointments\(\{ startDate: dashboardRange\.start, endDate: dashboardRange\.end \}\)/);
   assert.match(page, /clientNameForCase\(caseData, contactMap, leadMap\)/);
-  assert.match(page, />Franchise<\/TableHead>/);
+  assert.match(page, /Assurance \/ intervention/);
+  assert.match(page, /Montants \/ règlement/);
+  assert.match(page, /GlassProgressTrack/);
+});
+
+test('la fiche Glass reprend la hierarchie de traitement Onify sans modifier les donnees Onify', async () => {
+  const page = await read('src/features/cases/cases-page.tsx');
+
+  assert.match(page, /Préparer le dossier/);
+  assert.match(page, /Transmettre/);
+  assert.match(page, /Clôturer le dossier/);
+  assert.match(page, /Client & véhicule/);
+  assert.match(page, /Sinistre & assurance/);
+  assert.match(page, /Documents & règlement/);
+  assert.match(page, /Ouvrir le dossier Onify/);
+  assert.doesNotMatch(page, /updateCase\(id, \{ status \}\)/);
 });
 
 test('la fiche client conserve et expose la copie Onify', async () => {

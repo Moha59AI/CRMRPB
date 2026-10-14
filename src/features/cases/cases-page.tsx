@@ -6,6 +6,7 @@ import {
   Phone, MessageSquare, Receipt, CheckCircle2, Circle, AlertCircle,
   ArrowRight, ExternalLink, Loader2, X, RefreshCw, CalendarClock,
   ClipboardCheck, Banknote, ChevronRight, Clock3, LayoutDashboard,
+  LayoutGrid, List, SlidersHorizontal, Send,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type {
   WindscreenCase, Task, Profile, Lead, Contact,
-  Insurer, Note, Activity,
+  Insurer, Note, Activity, Invoice,
 } from '@/types';
 import { createNote, fetchActivities, fetchCommunications, fetchNotes } from '@/services/activity-service';
 import { fetchGifts, fetchInvoices, fetchQuotes } from '@/services/billing-service';
@@ -65,7 +66,10 @@ const caseStatusOrder: string[] = [
 ];
 
 type GlassStage = 'preparation' | 'planning' | 'intervention' | 'finance' | 'done' | 'sav';
-type GlassStageFilter = 'all' | GlassStage;
+type GlassProcessStep = 'declare' | 'sign' | 'lre' | 'followup' | 'paid';
+type GlassProcessFilter = 'all' | GlassProcessStep;
+type GlassViewMode = 'list' | 'cards';
+type GlassInsightPanel = 'priorities' | 'appointments' | null;
 
 const glassStageDefinitions: Array<{
   key: GlassStage;
@@ -115,6 +119,99 @@ function glassStageOf(caseData: WindscreenCase): GlassStage {
   if (caseData.status === 'sav') return 'sav';
   if (caseData.onify_archived) return 'done';
   return glassStageDefinitions.find((stage) => stage.statuses.includes(caseData.status))?.key ?? 'preparation';
+}
+
+const glassProcessDefinitions: Array<{
+  key: GlassProcessStep;
+  label: string;
+  shortLabel: string;
+  description: string;
+}> = [
+  { key: 'declare', label: 'À déclarer', shortLabel: 'Décl.', description: 'Dossier à contrôler' },
+  { key: 'sign', label: 'À signer', shortLabel: 'Sign.', description: 'Signature et intervention' },
+  { key: 'lre', label: 'LRE à envoyer', shortLabel: 'LRE', description: 'Dossier à transmettre' },
+  { key: 'followup', label: 'En relance', shortLabel: 'Rel.', description: 'Règlement à suivre' },
+  { key: 'paid', label: 'Payés', shortLabel: 'Payé', description: 'Règlement terminé' },
+];
+
+function normalizeGlassSignal(...values: Array<string | null | undefined>): string {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr-FR');
+}
+
+/**
+ * La barre suit les cinq jalons visibles dans Onify. Les libellés Onify font
+ * foi quand ils existent ; le statut CRM ne sert que de repli pour les
+ * anciens dossiers. Un dossier finalisé mais non réglé reste en relance.
+ */
+function glassProcessStepOf(caseData: WindscreenCase): GlassProcessStep {
+  const signal = normalizeGlassSignal(
+    caseData.onify_stage,
+    caseData.onify_status_code,
+    caseData.onify_status_label,
+    caseData.onify_work_status_code,
+    caseData.onify_work_status_label,
+    caseData.onify_payment_status,
+  );
+
+  if (
+    caseData.status === 'payment_received'
+    || caseData.status === 'gift_given'
+    || caseData.onify_payment_status === 'complete'
+    || /\b(paye|reglement complet|solde)\b/.test(signal)
+  ) return 'paid';
+
+  if (
+    caseData.status === 'payment_pending'
+    || caseData.status === 'completed'
+    || ['tva_only', 'insurance_only', 'partial'].includes(caseData.onify_payment_status ?? '')
+    || /(relance|attente reglement|partiellement paye|finalise)/.test(signal)
+  ) return 'followup';
+
+  if (
+    caseData.status === 'invoice_sent'
+    || caseData.status === 'intervention_done'
+    || /(lre|lettre recommandee|a transmettre|a envoyer)/.test(signal)
+  ) return 'lre';
+
+  if (
+    ['insurance_declaration', 'glass_ordered', 'appointment_scheduled'].includes(caseData.status)
+    || /(sign|travaux autorises|travaux en attente|intervention)/.test(signal)
+  ) return 'sign';
+
+  return 'declare';
+}
+
+function glassProcessIndex(caseData: WindscreenCase): number {
+  return glassProcessDefinitions.findIndex((step) => step.key === glassProcessStepOf(caseData));
+}
+
+type GlassInvoiceSummary = {
+  hasInvoice: boolean;
+  total: number;
+  paid: number;
+  due: number;
+};
+
+function summarizeInvoices(invoices: Invoice[]): GlassInvoiceSummary {
+  if (invoices.length === 0) return { hasInvoice: false, total: 0, paid: 0, due: 0 };
+  return invoices.reduce<GlassInvoiceSummary>((summary, invoice) => ({
+    hasInvoice: true,
+    total: summary.total + Number(invoice.amount_ttc || 0),
+    paid: summary.paid + Number(invoice.amount_paid || 0),
+    due: summary.due + Number(invoice.remaining_amount || 0),
+  }), { hasInvoice: true, total: 0, paid: 0, due: 0 });
+}
+
+function daysSince(date: string | null | undefined): number | null {
+  if (!date) return null;
+  const timestamp = new Date(date).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((Date.now() - timestamp) / (24 * 60 * 60 * 1000)));
 }
 
 const onifyPaymentLabels: Record<string, string> = {
@@ -183,6 +280,10 @@ function formatEuro(amount: number | null | undefined): string {
   if (amount == null || amount === 0) return '—';
   return euroFormat.format(amount);
 }
+function formatEuroExact(amount: number | null | undefined): string {
+  if (amount == null) return '—';
+  return euroFormat.format(amount);
+}
 function formatDate(date: string | null | undefined): string {
   if (!date) return '—';
   return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -241,7 +342,12 @@ export function GlassPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
-  const [stageFilter, setStageFilter] = useState<GlassStageFilter>('all');
+  const [insurerFilter, setInsurerFilter] = useState('all');
+  const [billingFilter, setBillingFilter] = useState('all');
+  const [processFilter, setProcessFilter] = useState<GlassProcessFilter>('all');
+  const [viewMode, setViewMode] = useState<GlassViewMode>('list');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [insightPanel, setInsightPanel] = useState<GlassInsightPanel>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(searchParams.get('id'));
   const ouvrirDossier = (id: string) => {
     setSelectedCaseId(id);
@@ -277,6 +383,10 @@ export function GlassPage() {
   const { data: contacts } = useQuery({ queryKey: ['contacts-all'], queryFn: () => fetchContacts({}) });
   const { data: profiles } = useQuery({ queryKey: ['profiles-all'], queryFn: fetchProfiles });
   const { data: insurers } = useQuery({ queryKey: ['insurers-all'], queryFn: () => fetchInsurers() });
+  const { data: allInvoices } = useQuery({
+    queryKey: ['invoices-all'],
+    queryFn: () => fetchInvoices({}),
+  });
   const [dashboardRange] = useState(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -315,18 +425,41 @@ export function GlassPage() {
 
   const allCases = useMemo(() => glassCases ?? [], [glassCases]);
 
-  const stageCounts = useMemo(() => {
-    const counts: Record<GlassStage, number> = {
-      preparation: 0,
-      planning: 0,
-      intervention: 0,
-      finance: 0,
-      done: 0,
-      sav: 0,
+  const processCounts = useMemo(() => {
+    const counts: Record<GlassProcessStep, number> = {
+      declare: 0,
+      sign: 0,
+      lre: 0,
+      followup: 0,
+      paid: 0,
     };
-    allCases.forEach((caseData) => { counts[glassStageOf(caseData)] += 1; });
+    allCases.forEach((caseData) => { counts[glassProcessStepOf(caseData)] += 1; });
     return counts;
   }, [allCases]);
+
+  const invoicesByCase = useMemo(() => {
+    const byCase = new Map<string, Invoice[]>();
+    const caseByAffaire = new Map(
+      allCases
+        .filter((caseData) => Boolean(caseData.affaire_id))
+        .map((caseData) => [caseData.affaire_id, caseData.id]),
+    );
+
+    (allInvoices ?? []).forEach((invoice) => {
+      const caseId = invoice.case_id
+        ?? (invoice.affaire_id ? caseByAffaire.get(invoice.affaire_id) : null);
+      if (!caseId) return;
+      byCase.set(caseId, [...(byCase.get(caseId) ?? []), invoice]);
+    });
+    return byCase;
+  }, [allCases, allInvoices]);
+
+  const availableInsurers = useMemo(() => (
+    Array.from(new Set(allCases
+      .map((caseData) => insurerForCase(caseData, insurerMap, leadMap))
+      .filter((name): name is string => Boolean(name))))
+      .sort((a, b) => a.localeCompare(b, 'fr'))
+  ), [allCases, insurerMap, leadMap]);
 
   const linkedGlassAppointments = useMemo(() => {
     const byId = new Map(allCases.map((caseData) => [caseData.id, caseData]));
@@ -407,9 +540,16 @@ export function GlassPage() {
   const visibleCases = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('fr-FR');
     return allCases.filter((caseData) => {
-      if (stageFilter !== 'all' && glassStageOf(caseData) !== stageFilter) return false;
+      if (processFilter !== 'all' && glassProcessStepOf(caseData) !== processFilter) return false;
       if (statusFilter !== 'all' && caseData.status !== statusFilter) return false;
       if (advisorFilter !== 'all' && caseData.assigned_user_id !== advisorFilter) return false;
+      if (insurerFilter !== 'all' && insurerForCase(caseData, insurerMap, leadMap) !== insurerFilter) return false;
+
+      const invoiceSummary = summarizeInvoices(invoicesByCase.get(caseData.id) ?? []);
+      if (billingFilter === 'no_invoice' && invoiceSummary.hasInvoice) return false;
+      if (billingFilter === 'due' && (!invoiceSummary.hasInvoice || invoiceSummary.due <= 0)) return false;
+      if (billingFilter === 'paid' && (!invoiceSummary.hasInvoice || invoiceSummary.due > 0)) return false;
+
       if (!needle) return true;
       const searchable = [
         caseData.case_number,
@@ -423,14 +563,23 @@ export function GlassPage() {
       ].filter(Boolean).join(' ').toLocaleLowerCase('fr-FR');
       return searchable.includes(needle);
     });
-  }, [advisorFilter, allCases, contactMap, insurerMap, leadMap, search, stageFilter, statusFilter]);
+  }, [
+    advisorFilter, allCases, billingFilter, contactMap, insurerFilter, insurerMap,
+    invoicesByCase, leadMap, processFilter, search, statusFilter,
+  ]);
 
-  const activeCount = allCases.length - stageCounts.done;
+  const activeCount = allCases.length - processCounts.paid;
   const lastSyncAt = allCases
     .map((caseData) => caseData.onify_synced_at)
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
+  const activeFilterCount = [
+    statusFilter !== 'all',
+    advisorFilter !== 'all',
+    insurerFilter !== 'all',
+    billingFilter !== 'all',
+  ].filter(Boolean).length;
 
   return (
     <>
@@ -513,26 +662,32 @@ export function GlassPage() {
               active={activeCount}
               priorities={allPriorities.length}
               appointments={linkedGlassAppointments.length}
-              done={stageCounts.done}
+              paid={processCounts.paid}
               lastSyncAt={lastSyncAt}
+              activePanel={insightPanel}
+              onTogglePanel={(panel) => setInsightPanel((current) => current === panel ? null : panel)}
             />
 
             <GlassWorkflow
-              counts={stageCounts}
-              activeStage={stageFilter}
-              onStageChange={(stage) => {
-                setStageFilter((current) => current === stage ? 'all' : stage);
+              total={allCases.length}
+              counts={processCounts}
+              activeStep={processFilter}
+              onStepChange={(step) => {
+                setProcessFilter((current) => current === step ? 'all' : step);
                 setStatusFilter('all');
               }}
             />
 
-            <div className="grid gap-5 xl:grid-cols-[1.25fr_0.9fr]">
+            {insightPanel === 'priorities' && (
               <GlassPriorities
-                priorities={allPriorities.slice(0, 6)}
+                priorities={allPriorities.slice(0, 8)}
                 leadMap={leadMap}
                 contactMap={contactMap}
                 onOpen={ouvrirDossier}
               />
+            )}
+
+            {insightPanel === 'appointments' && (
               <GlassUpcomingAppointments
                 appointments={dashboardAppointments}
                 loading={appointmentsLoading}
@@ -540,82 +695,96 @@ export function GlassPage() {
                 contactMap={contactMap}
                 onOpen={ouvrirDossier}
               />
-            </div>
+            )}
 
             <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-              <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
                   <div className="flex items-center gap-2">
                     <LayoutDashboard className="h-4 w-4 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">Tous les dossiers</h2>
+                    <h2 className="text-sm font-semibold text-foreground">Mes dossiers Glass</h2>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {visibleCases.length} dossier{visibleCases.length > 1 ? 's' : ''} affiché{visibleCases.length > 1 ? 's' : ''} sur {allCases.length}
                   </p>
                 </div>
-                {stageFilter !== 'all' && (
-                  <Badge variant="outline" className="w-fit rounded-full border-primary/30 bg-primary/5 text-primary">
-                    Étape : {glassStageDefinitions.find((stage) => stage.key === stageFilter)?.label}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {processFilter !== 'all' && (
+                    <Badge variant="outline" className="hidden rounded-full border-primary/30 bg-primary/5 text-primary sm:inline-flex">
+                      {glassProcessDefinitions.find((step) => step.key === processFilter)?.label}
+                    </Badge>
+                  )}
+                  {!estMobile && (
+                    <div className="flex rounded-xl border border-border bg-muted/30 p-1" aria-label="Choisir l'affichage">
+                      <button
+                        type="button"
+                        aria-label="Vue cartes"
+                        aria-pressed={viewMode === 'cards'}
+                        onClick={() => setViewMode('cards')}
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+                          viewMode === 'cards' && 'bg-card text-foreground shadow-sm',
+                        )}
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Vue liste"
+                        aria-pressed={viewMode === 'list'}
+                        onClick={() => setViewMode('list')}
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+                          viewMode === 'list' && 'bg-card text-foreground shadow-sm',
+                        )}
+                      >
+                        <List className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/20 px-4 py-4 sm:px-5">
-                <div className="w-full min-w-0 space-y-1.5 sm:min-w-[240px] sm:flex-1">
-                  <Label className="text-xs text-muted-foreground">Recherche</Label>
+              <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-4 py-3 sm:px-5">
+                <div className="min-w-0 flex-1 sm:min-w-[320px]">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Client, référence, plaque, véhicule, assurance..."
+                      placeholder="Rechercher un dossier, un client, une plaque..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="rounded-lg bg-card pl-9"
+                      className="rounded-xl bg-card pl-9"
                     />
                   </div>
                 </div>
 
-                <div className="w-full space-y-1.5 sm:w-auto">
-                  <Label className="text-xs text-muted-foreground">Statut</Label>
-                  <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setStageFilter('all'); }}>
-                    <SelectTrigger className="w-full rounded-lg bg-card sm:w-[190px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tous les statuts</SelectItem>
-                      {caseStatusOrder.map((status) => (
-                        <SelectItem key={status} value={status}>{caseStatusLabels[status]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Button
+                  type="button"
+                  variant={filtersOpen || activeFilterCount > 0 ? 'secondary' : 'outline'}
+                  className="rounded-xl"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />
+                  Filtres avancés
+                  {activeFilterCount > 0 && (
+                    <span className="ml-2 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </Button>
 
-                <div className="w-full space-y-1.5 sm:w-auto">
-                  <Label className="text-xs text-muted-foreground">Conseiller</Label>
-                  <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
-                    <SelectTrigger className="w-full rounded-lg bg-card sm:w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tous</SelectItem>
-                      {(profiles ?? []).map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id}>
-                          {profile.first_name} {profile.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {(search || statusFilter !== 'all' || advisorFilter !== 'all' || stageFilter !== 'all') && (
+                {(search || activeFilterCount > 0 || processFilter !== 'all') && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="rounded-lg"
+                    className="rounded-xl"
                     onClick={() => {
                       setSearch('');
                       setStatusFilter('all');
                       setAdvisorFilter('all');
-                      setStageFilter('all');
+                      setInsurerFilter('all');
+                      setBillingFilter('all');
+                      setProcessFilter('all');
                     }}
                   >
                     <X className="mr-1 h-3.5 w-3.5" />
@@ -623,6 +792,61 @@ export function GlassPage() {
                   </Button>
                 )}
               </div>
+
+              {filtersOpen && (
+                <div className="grid gap-3 border-b border-border bg-card px-4 py-4 sm:grid-cols-2 sm:px-5 xl:grid-cols-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Statut du dossier</Label>
+                    <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setProcessFilter('all'); }}>
+                      <SelectTrigger className="w-full rounded-lg bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tous les statuts</SelectItem>
+                        {caseStatusOrder.map((status) => (
+                          <SelectItem key={status} value={status}>{caseStatusLabels[status]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Assurance</Label>
+                    <Select value={insurerFilter} onValueChange={setInsurerFilter}>
+                      <SelectTrigger className="w-full rounded-lg bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Toutes les assurances</SelectItem>
+                        {availableInsurers.map((insurer) => (
+                          <SelectItem key={insurer} value={insurer}>{insurer}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Règlement</Label>
+                    <Select value={billingFilter} onValueChange={setBillingFilter}>
+                      <SelectTrigger className="w-full rounded-lg bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tous les règlements</SelectItem>
+                        <SelectItem value="no_invoice">Sans facture</SelectItem>
+                        <SelectItem value="due">Montant restant dû</SelectItem>
+                        <SelectItem value="paid">Facture soldée</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Conseiller</Label>
+                    <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
+                      <SelectTrigger className="w-full rounded-lg bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tous les conseillers</SelectItem>
+                        {(profiles ?? []).map((advisor) => (
+                          <SelectItem key={advisor.id} value={advisor.id}>
+                            {advisor.first_name} {advisor.last_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               {visibleCases.length === 0 ? (
                 <div className="flex min-h-48 flex-col items-center justify-center p-8 text-center">
@@ -640,23 +864,37 @@ export function GlassPage() {
                       contactMap={contactMap}
                       profileMap={profileMap}
                       insurerMap={insurerMap}
+                      invoices={invoicesByCase.get(caseData.id) ?? []}
                       onOpen={() => ouvrirDossier(caseData.id)}
                     />
                   ))}
                 </ul>
+              ) : viewMode === 'cards' ? (
+                <div className="grid gap-4 bg-muted/10 p-4 md:grid-cols-2 2xl:grid-cols-3">
+                  {visibleCases.map((caseData) => (
+                    <GlassCaseCard
+                      key={caseData.id}
+                      caseData={caseData}
+                      leadMap={leadMap}
+                      contactMap={contactMap}
+                      insurerMap={insurerMap}
+                      invoices={invoicesByCase.get(caseData.id) ?? []}
+                      onOpen={() => ouvrirDossier(caseData.id)}
+                    />
+                  ))}
+                </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-[1180px]">
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="text-xs">N° dossier</TableHead>
-                        <TableHead className="text-xs">Client</TableHead>
+                        <TableHead className="w-[18%] text-xs">Client / dépôt</TableHead>
                         <TableHead className="text-xs">Véhicule</TableHead>
-                        <TableHead className="text-xs">Assurance</TableHead>
-                        <TableHead className="text-xs">Statut</TableHead>
-                        <TableHead className="text-xs">Conseiller</TableHead>
-                        <TableHead className="text-xs">Date RDV</TableHead>
-                        <TableHead className="text-xs text-right">Franchise</TableHead>
+                        <TableHead className="w-[18%] text-xs">Assurance / intervention</TableHead>
+                        <TableHead className="text-xs">Statut du dossier</TableHead>
+                        <TableHead className="w-[230px] text-xs">Avancement</TableHead>
+                        <TableHead className="text-xs">Montants / règlement</TableHead>
+                        <TableHead className="text-right text-xs">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -668,6 +906,7 @@ export function GlassPage() {
                           contactMap={contactMap}
                           profileMap={profileMap}
                           insurerMap={insurerMap}
+                          invoices={invoicesByCase.get(caseData.id) ?? []}
                           onOpen={() => ouvrirDossier(caseData.id)}
                         />
                       ))}
@@ -698,165 +937,146 @@ export function GlassPage() {
 }
 
 function GlassDashboardSummary({
-  total, active, priorities, appointments, done, lastSyncAt,
+  total, active, priorities, appointments, paid, lastSyncAt, activePanel, onTogglePanel,
 }: {
   total: number;
   active: number;
   priorities: number;
   appointments: number;
-  done: number;
+  paid: number;
   lastSyncAt?: string;
+  activePanel: GlassInsightPanel;
+  onTogglePanel: (panel: Exclude<GlassInsightPanel, null>) => void;
 }) {
-  const metrics = [
-    {
-      icon: ClipboardCheck,
-      label: 'Dossiers actifs',
-      value: active,
-      detail: 'Encore dans le parcours',
-      tone: 'primary',
-    },
-    {
-      icon: AlertCircle,
-      label: 'À traiter',
-      value: priorities,
-      detail: 'Actions détectées',
-      tone: priorities > 0 ? 'warning' : 'done',
-    },
-    {
-      icon: CalendarClock,
-      label: 'RDV à venir',
-      value: appointments,
-      detail: 'Sur les 90 prochains jours',
-      tone: 'upcoming',
-    },
-    {
-      icon: CheckCircle2,
-      label: 'Clôturés',
-      value: done,
-      detail: 'Réglés ou terminés',
-      tone: 'done',
-    },
-  ] as const;
-
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-4 bg-gradient-to-br from-primary/10 via-card to-done-soft/60 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <section className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
             <Wrench className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Vue opérationnelle</p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">Pilotage Glass</h2>
-              <span className="text-sm font-medium text-muted-foreground">{total} dossiers Onify</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Voyez immédiatement ce qui avance, ce qui bloque et les prochains rendez-vous.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Glass · dossiers</p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">{total} dossiers synchronisés depuis Onify</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          <RefreshCw className="h-3.5 w-3.5 text-primary" />
-          <span>Dernière synchro : {lastSyncAt ? formatDateTime(lastSyncAt) : 'non disponible'}</span>
+
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="flex min-w-[130px] items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+            <ClipboardCheck className="h-4 w-4 text-primary" />
+            <span>
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Actifs</span>
+              <span className="block text-sm font-semibold tabular-nums text-foreground">{active}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-pressed={activePanel === 'priorities'}
+            onClick={() => onTogglePanel('priorities')}
+            className={cn(
+              'flex min-w-[130px] items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+              activePanel === 'priorities' ? 'border-due/40 bg-due-soft' : 'border-border hover:bg-muted/30',
+            )}
+          >
+            <AlertCircle className="h-4 w-4 text-due" />
+            <span>
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">À traiter</span>
+              <span className="block text-sm font-semibold tabular-nums text-foreground">{priorities}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={activePanel === 'appointments'}
+            onClick={() => onTogglePanel('appointments')}
+            className={cn(
+              'flex min-w-[130px] items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+              activePanel === 'appointments' ? 'border-upcoming/40 bg-upcoming-soft' : 'border-border hover:bg-muted/30',
+            )}
+          >
+            <CalendarClock className="h-4 w-4 text-upcoming" />
+            <span>
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">RDV à venir</span>
+              <span className="block text-sm font-semibold tabular-nums text-foreground">{appointments}</span>
+            </span>
+          </button>
+          <div className="flex min-w-[130px] items-center gap-3 rounded-xl border border-border bg-done-soft/60 px-3 py-2.5">
+            <CheckCircle2 className="h-4 w-4 text-done" />
+            <span>
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Payés</span>
+              <span className="block text-sm font-semibold tabular-nums text-foreground">{paid}</span>
+            </span>
+          </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
-        {metrics.map(({ icon: Icon, label, value, detail, tone }) => (
-          <div key={label} className="relative min-w-0 px-4 py-4 sm:px-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg',
-                tone === 'warning' && 'bg-due-soft text-due',
-                tone === 'upcoming' && 'bg-upcoming-soft text-upcoming',
-                tone === 'done' && 'bg-done-soft text-done',
-                tone === 'primary' && 'bg-primary/10 text-primary',
-              )}>
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">{value}</span>
-            </div>
-            <p className="mt-3 truncate text-xs font-medium text-foreground">{label}</p>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{detail}</p>
-          </div>
-        ))}
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <RefreshCw className="h-3.5 w-3.5 text-primary" />
+        <span>Dernière synchro : {lastSyncAt ? formatDateTime(lastSyncAt) : 'non disponible'}</span>
       </div>
     </section>
   );
 }
 
 function GlassWorkflow({
-  counts, activeStage, onStageChange,
+  total, counts, activeStep, onStepChange,
 }: {
-  counts: Record<GlassStage, number>;
-  activeStage: GlassStageFilter;
-  onStageChange: (stage: GlassStage) => void;
+  total: number;
+  counts: Record<GlassProcessStep, number>;
+  activeStep: GlassProcessFilter;
+  onStepChange: (step: GlassProcessStep) => void;
 }) {
-  const icons: Record<GlassStage, typeof FileText> = {
-    preparation: FileText,
-    planning: CalendarClock,
-    intervention: Wrench,
-    finance: Banknote,
-    done: CheckCircle2,
-    sav: AlertCircle,
+  const icons: Record<GlassProcessStep, typeof FileText> = {
+    declare: Shield,
+    sign: ClipboardCheck,
+    lre: Send,
+    followup: Phone,
+    paid: Banknote,
   };
-  const maximum = Math.max(1, ...Object.values(counts));
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Parcours des dossiers</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Cliquez sur une étape pour afficher uniquement les dossiers concernés.</p>
-        </div>
-        {activeStage !== 'all' && <span className="text-xs font-medium text-primary">Filtre actif</span>}
-      </div>
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="overflow-x-auto px-3 py-4 scrollbar-thin sm:px-5">
+        <div className="relative grid min-w-[720px] grid-cols-6 gap-2">
+          <span className="pointer-events-none absolute left-[8.5%] right-[8.5%] top-[19px] h-px bg-border" />
+          <button
+            type="button"
+            aria-pressed={activeStep === 'all'}
+            onClick={() => activeStep !== 'all' && onStepChange(activeStep)}
+            className="group relative z-10 flex flex-col items-center text-center"
+          >
+            <span className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm transition-colors',
+              activeStep === 'all' && 'border-primary bg-primary text-primary-foreground',
+            )}>
+              <LayoutDashboard className="h-4 w-4" />
+            </span>
+            <span className="mt-2 text-xs font-semibold text-foreground">Tous</span>
+            <span className="mt-0.5 text-[11px] font-semibold tabular-nums text-primary">{total}</span>
+          </button>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {glassStageDefinitions.map((stage) => {
-          const Icon = icons[stage.key];
-          const selected = activeStage === stage.key;
-          const percentage = Math.max(5, (counts[stage.key] / maximum) * 100);
+          {glassProcessDefinitions.map((step) => {
+          const Icon = icons[step.key];
+          const selected = activeStep === step.key;
           return (
             <button
-              key={stage.key}
+              key={step.key}
               type="button"
               aria-pressed={selected}
-              onClick={() => onStageChange(stage.key)}
-              className={cn(
-                'group rounded-xl border px-3 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm',
-                selected ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-surface/60',
-              )}
+              onClick={() => onStepChange(step.key)}
+              className="group relative z-10 flex flex-col items-center text-center"
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg bg-card text-muted-foreground shadow-sm transition-colors group-hover:text-primary',
-                  selected && 'bg-primary text-primary-foreground',
-                  stage.key === 'sav' && !selected && 'bg-urgent-soft text-urgent',
-                  stage.key === 'done' && !selected && 'bg-done-soft text-done',
-                )}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className={cn(
-                  'text-xl font-semibold tabular-nums',
-                  stage.key === 'sav' && counts[stage.key] > 0 ? 'text-urgent' : 'text-foreground',
-                )}>{counts[stage.key]}</span>
+              <span className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm transition-all group-hover:border-primary/40 group-hover:text-primary',
+                selected && 'border-primary bg-primary text-primary-foreground ring-4 ring-primary/10',
+                step.key === 'paid' && !selected && 'border-done/35 bg-done-soft text-done',
+              )}>
+                <Icon className="h-4 w-4" />
               </span>
-              <span className="mt-3 block text-xs font-semibold text-foreground">{stage.label}</span>
-              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{stage.description}</span>
-              <span className="mt-3 block h-1 overflow-hidden rounded-full bg-muted">
-                <span
-                  className={cn(
-                    'block h-full rounded-full transition-[width] duration-500',
-                    stage.key === 'sav' ? 'bg-urgent' : stage.key === 'done' ? 'bg-done' : 'bg-primary',
-                  )}
-                  style={{ width: `${percentage}%` }}
-                />
-              </span>
+              <span className="mt-2 text-xs font-semibold text-foreground">{step.label}</span>
+              <span className="mt-0.5 text-[11px] font-semibold tabular-nums text-primary">{counts[step.key]}</span>
             </button>
           );
         })}
+        </div>
       </div>
     </section>
   );
@@ -990,50 +1210,42 @@ function GlassUpcomingAppointments({
 }
 
 function CaseMobileRow({
-  caseData, leadMap, contactMap, profileMap, insurerMap, onOpen,
+  caseData, leadMap, contactMap, profileMap, insurerMap, invoices, onOpen,
 }: {
   caseData: WindscreenCase;
   leadMap: Map<string, Lead>;
   contactMap: Map<string, Contact>;
   profileMap: Map<string, Profile>;
   insurerMap: Map<string, Insurer>;
+  invoices: Invoice[];
   onOpen: () => void;
 }) {
-  const clientName = useMemo(() => {
-    const contact = caseData.contact_id ? contactMap.get(caseData.contact_id) : null;
-    if (contact) return `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim();
-    const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
-    return lead ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'Client non renseigné';
-  }, [caseData.contact_id, caseData.lead_id, contactMap, leadMap]);
-
-  const lead = caseData.lead_id ? leadMap.get(caseData.lead_id) : null;
-  const vehicleInfo = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
-    .filter(Boolean).join(' ')
-    || (lead ? [lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ') : '');
-  const insurerName = caseData.onify_insurer_name
-    ?? (caseData.insurer_id ? insurerMap.get(caseData.insurer_id)?.name : null)
-    ?? lead?.insurance;
+  const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicleInfo = vehicleForCase(caseData, leadMap);
+  const insurerName = insurerForCase(caseData, insurerMap, leadMap);
   const advisor = caseData.assigned_user_id
     ? profileMap.get(caseData.assigned_user_id)
     : null;
   const advisorName = advisor
     ? `${advisor.first_name ?? ''} ${advisor.last_name ?? ''}`.trim()
     : '';
+  const invoiceSummary = summarizeInvoices(invoices);
+  const currentStep = glassProcessDefinitions.find((step) => step.key === glassProcessStepOf(caseData));
 
   return (
-    <li>
+    <li className="p-3">
       <button
         type="button"
         onClick={onOpen}
-        className="w-full px-4 py-3 text-left transition-colors active:bg-muted/50"
+        className="w-full rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-colors active:bg-muted/40"
         aria-label={`Ouvrir le dossier ${caseData.case_number}`}
       >
         <span className="flex items-start justify-between gap-3">
           <span className="min-w-0">
-            <span className="block text-xs font-medium text-muted-foreground">
-              {caseData.onify_reference ?? caseData.case_number}
+            <span className="block truncate text-sm font-semibold text-foreground">{clientName}</span>
+            <span className="mt-1 block text-[11px] font-medium text-muted-foreground">
+              {caseData.onify_reference ?? caseData.case_number} · déposé le {formatDate(caseData.onify_created_at ?? caseData.created_at)}
             </span>
-            <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">{clientName}</span>
           </span>
           <StatusBadge
             status={caseData.status}
@@ -1042,101 +1254,293 @@ function CaseMobileRow({
           />
         </span>
 
-        <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="truncate">{vehicleInfo || 'Véhicule non renseigné'}</span>
-          <span className="truncate text-right">{insurerName || 'Assurance non renseignée'}</span>
-          <span className="truncate">{advisorName || 'Non attribué'}</span>
-          <span className="text-right tabular">RDV {formatDate(caseData.appointment_date)}</span>
+        <span className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+          <Car className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+          <span className="min-w-0 text-foreground">
+            <span className="block truncate font-medium">{vehicleInfo || 'Véhicule non renseigné'}</span>
+            <span className="text-[11px] text-muted-foreground">{caseData.onify_vehicle_registration || 'Plaque non renseignée'}</span>
+          </span>
+          <Shield className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+          <span className="min-w-0 truncate text-muted-foreground">{insurerName || 'Assurance non renseignée'}</span>
         </span>
 
-        {caseData.franchise_amount != null && caseData.franchise_amount !== 0 && (
-          <span className="mt-2 block text-right text-sm font-semibold text-foreground tabular">
-            {formatEuro(caseData.franchise_amount)}
+        <span className="mt-4 block">
+          <GlassProgressTrack caseData={caseData} compact />
+        </span>
+
+        <span className="mt-4 flex items-end justify-between gap-3 border-t border-border pt-3">
+          <span className="min-w-0 text-[11px] text-muted-foreground">
+            <span className="block truncate">{advisorName || 'Non attribué'} · RDV {formatDate(caseData.appointment_date)}</span>
+            <span className="mt-0.5 block font-semibold text-foreground">
+              {invoiceSummary.hasInvoice
+                ? `${formatEuroExact(invoiceSummary.due)} restant dû`
+                : 'Pas de facture'}
+            </span>
           </span>
-        )}
+          <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+            {currentStep?.key === 'paid' ? 'Consulter' : currentStep?.label}
+          </span>
+        </span>
       </button>
     </li>
+  );
+}
+
+function GlassCaseCard({
+  caseData, leadMap, contactMap, insurerMap, invoices, onOpen,
+}: {
+  caseData: WindscreenCase;
+  leadMap: Map<string, Lead>;
+  contactMap: Map<string, Contact>;
+  insurerMap: Map<string, Insurer>;
+  invoices: Invoice[];
+  onOpen: () => void;
+}) {
+  const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicle = vehicleForCase(caseData, leadMap);
+  const insurer = insurerForCase(caseData, insurerMap, leadMap);
+  const invoiceSummary = summarizeInvoices(invoices);
+  const process = glassProcessDefinitions.find((step) => step.key === glassProcessStepOf(caseData));
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+      <button type="button" className="block w-full text-left" onClick={onOpen}>
+        <span className="flex items-start justify-between gap-3 border-b border-border px-4 py-4">
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-foreground">{clientName}</span>
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              {caseData.onify_reference ?? caseData.case_number} · déposé le {formatDate(caseData.onify_created_at ?? caseData.created_at)}
+            </span>
+          </span>
+          <StatusBadge status={caseData.status} label={caseData.onify_work_status_label ?? caseData.onify_status_label} className="shrink-0" />
+        </span>
+
+        <span className="block p-4">
+          <span className="flex items-center gap-3 rounded-xl bg-muted/25 p-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-sm">
+              <Car className="h-6 w-6" strokeWidth={1.6} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-foreground">{vehicle || 'Véhicule à compléter'}</span>
+              <span className="mt-0.5 block text-xs font-medium tracking-wide text-muted-foreground">
+                {caseData.onify_vehicle_registration || 'Immatriculation non renseignée'}
+              </span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">{caseData.glass_type || 'Vitrage à préciser'}</span>
+            </span>
+          </span>
+
+          <span className="mt-4 block"><GlassProgressTrack caseData={caseData} compact /></span>
+
+          <span className="mt-4 grid grid-cols-2 gap-3">
+            <span className="rounded-xl border border-border p-3">
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Assurance</span>
+              <span className="mt-1 block truncate text-xs font-semibold text-foreground">{insurer || 'À compléter'}</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">Franchise {formatEuro(caseData.franchise_amount)}</span>
+            </span>
+            <span className="rounded-xl border border-border p-3">
+              <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Règlement</span>
+              <span className="mt-1 block text-xs font-semibold text-foreground">
+                {invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.total) : 'Pas de facture'}
+              </span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                {invoiceSummary.hasInvoice ? `${formatEuroExact(invoiceSummary.due)} restant dû` : 'Montant indisponible'}
+              </span>
+            </span>
+          </span>
+        </span>
+
+        <span className="flex items-center justify-between border-t border-border bg-muted/15 px-4 py-3">
+          <span className="text-[11px] text-muted-foreground">
+            {caseData.appointment_date ? `RDV ${formatDateTime(caseData.appointment_date)}` : 'Aucun rendez-vous planifié'}
+          </span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+            {process?.key === 'paid' ? 'Consulter' : process?.label}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </span>
+        </span>
+      </button>
+    </article>
   );
 }
 
 // ============ CASE ROW ============
 
 function CaseRow({
-  caseData, leadMap, contactMap, profileMap, insurerMap, onOpen,
+  caseData, leadMap, contactMap, profileMap, insurerMap, invoices, onOpen,
 }: {
   caseData: WindscreenCase;
   leadMap: Map<string, Lead>;
   contactMap: Map<string, Contact>;
   profileMap: Map<string, Profile>;
   insurerMap: Map<string, Insurer>;
+  invoices: Invoice[];
   onOpen: () => void;
 }) {
-  const clientName = useMemo(() => {
-    if (caseData.contact_id) {
-      const c = contactMap.get(caseData.contact_id);
-      if (c) return `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim();
-    }
-    if (caseData.lead_id) {
-      const l = leadMap.get(caseData.lead_id);
-      if (l) return `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
-    }
-    return '—';
-  }, [caseData, leadMap, contactMap]);
-
-  const vehicleInfo = useMemo(() => {
-    const onify = [caseData.onify_vehicle_make, caseData.onify_vehicle_model]
-      .filter(Boolean).join(' ');
-    if (onify) return onify;
-    if (caseData.lead_id) {
-      const l = leadMap.get(caseData.lead_id);
-      if (l) return [l.vehicle_make, l.vehicle_model].filter(Boolean).join(' ') || null;
-    }
-    return null;
-  }, [caseData, leadMap]);
-
-  const insurerName = useMemo(() => {
-    if (caseData.onify_insurer_name) return caseData.onify_insurer_name;
-    if (caseData.insurer_id) {
-      const i = insurerMap.get(caseData.insurer_id);
-      if (i) return i.name;
-    }
-    if (caseData.lead_id) {
-      const l = leadMap.get(caseData.lead_id);
-      if (l?.insurance) return l.insurance;
-    }
-    return null;
-  }, [caseData, insurerMap, leadMap]);
-
-  const advisorName = useMemo(() => {
-    if (caseData.assigned_user_id) {
-      const p = profileMap.get(caseData.assigned_user_id);
-      if (p) return `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim();
-    }
-    return null;
-  }, [caseData, profileMap]);
+  const clientName = clientNameForCase(caseData, contactMap, leadMap);
+  const vehicleInfo = vehicleForCase(caseData, leadMap);
+  const insurerName = insurerForCase(caseData, insurerMap, leadMap);
+  const advisor = caseData.assigned_user_id ? profileMap.get(caseData.assigned_user_id) : null;
+  const advisorName = advisor ? `${advisor.first_name ?? ''} ${advisor.last_name ?? ''}`.trim() : null;
+  const invoiceSummary = summarizeInvoices(invoices);
+  const currentStep = glassProcessDefinitions.find((step) => step.key === glassProcessStepOf(caseData));
+  const age = daysSince(caseData.onify_updated_at ?? caseData.updated_at);
 
   return (
-    <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onOpen}>
-      <TableCell className="text-sm font-medium text-foreground whitespace-nowrap">
-        {caseData.onify_reference ?? caseData.case_number}
+    <TableRow className="cursor-pointer align-top hover:bg-muted/35" onClick={onOpen}>
+      <TableCell className="py-4">
+        <p className="max-w-[220px] truncate text-sm font-semibold text-foreground">{clientName}</p>
+        <p className="mt-1 text-[11px] font-medium text-muted-foreground">{caseData.onify_reference ?? caseData.case_number}</p>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">Déposé le {formatDate(caseData.onify_created_at ?? caseData.created_at)}</p>
+        {caseData.appointment_date && (
+          <p className="mt-1 text-[10px] font-medium text-primary">RDV {formatDateTime(caseData.appointment_date)}</p>
+        )}
       </TableCell>
-      <TableCell className="text-sm text-foreground">{clientName}</TableCell>
-      <TableCell className="text-sm text-muted-foreground">{vehicleInfo || '—'}</TableCell>
-      <TableCell className="text-sm text-muted-foreground">{insurerName || '—'}</TableCell>
-      <TableCell>
+      <TableCell className="py-4">
+        <p className="max-w-[180px] truncate text-sm font-medium text-foreground">{vehicleInfo || 'À compléter'}</p>
+        <p className="mt-1 text-xs font-medium tracking-wide text-muted-foreground">{caseData.onify_vehicle_registration || '—'}</p>
+      </TableCell>
+      <TableCell className="py-4">
+        <p className="max-w-[200px] truncate text-sm font-medium text-foreground">{insurerName || 'Assurance à compléter'}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Franchise · {formatEuro(caseData.franchise_amount)}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{caseData.glass_type || 'Vitrage à préciser'}</p>
+      </TableCell>
+      <TableCell className="py-4">
         <StatusBadge
           status={caseData.status}
           label={caseData.onify_work_status_label ?? caseData.onify_status_label}
         />
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          {age == null ? 'Mise à jour inconnue' : `Mis à jour il y a ${age} j`}
+        </p>
+        {advisorName && <p className="mt-0.5 max-w-[150px] truncate text-[10px] text-muted-foreground">{advisorName}</p>}
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">{advisorName || '—'}</TableCell>
-      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-        {formatDate(caseData.appointment_date)}
+      <TableCell className="py-4">
+        <GlassProgressTrack caseData={caseData} compact />
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground text-right whitespace-nowrap">
-        {formatEuro(caseData.franchise_amount)}
+      <TableCell className="py-4">
+        {invoiceSummary.hasInvoice ? (
+          <>
+            <p className="text-sm font-semibold text-foreground">{formatEuroExact(invoiceSummary.total)}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">TTC facturé</p>
+            <p className={cn('mt-1 text-xs font-medium', invoiceSummary.due > 0 ? 'text-due' : 'text-done')}>
+              {invoiceSummary.due > 0 ? `${formatEuroExact(invoiceSummary.due)} restant dû` : 'Soldé'}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-medium text-due">Pas de facture</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Montant indisponible</p>
+          </>
+        )}
+      </TableCell>
+      <TableCell className="py-4 text-right">
+        <Button
+          type="button"
+          size="sm"
+          variant={currentStep?.key === 'paid' ? 'outline' : 'secondary'}
+          className="rounded-full whitespace-nowrap"
+          onClick={(event) => { event.stopPropagation(); onOpen(); }}
+        >
+          {currentStep?.key === 'paid' ? 'Consulter' : currentStep?.label}
+          <ChevronRight className="ml-1 h-3.5 w-3.5" />
+        </Button>
       </TableCell>
     </TableRow>
+  );
+}
+
+function GlassProgressTrack({ caseData, compact = false }: { caseData: WindscreenCase; compact?: boolean }) {
+  const activeIndex = glassProcessIndex(caseData);
+
+  return (
+    <div className="relative grid grid-cols-5 gap-1" aria-label={`Avancement : ${glassProcessDefinitions[activeIndex]?.label ?? 'À déclarer'}`}>
+      <span className="pointer-events-none absolute left-[10%] right-[10%] top-[9px] h-px bg-border" />
+      {glassProcessDefinitions.map((step, index) => {
+        const completed = index < activeIndex;
+        const active = index === activeIndex;
+        return (
+          <span key={step.key} className="relative z-10 flex min-w-0 flex-col items-center text-center">
+            <span className={cn(
+              'flex h-[19px] w-[19px] items-center justify-center rounded-full border bg-card text-[9px] font-semibold',
+              completed && 'border-done bg-done text-white',
+              active && 'border-primary bg-primary text-primary-foreground ring-2 ring-primary/10',
+              !completed && !active && 'border-border text-muted-foreground',
+            )}>
+              {completed ? <CheckCircle2 className="h-3 w-3" /> : index + 1}
+            </span>
+            <span className={cn(
+              'mt-1 block max-w-full truncate text-[9px] font-medium',
+              active ? 'text-primary' : completed ? 'text-done' : 'text-muted-foreground',
+              compact && 'tracking-tight',
+            )}>{step.shortLabel}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function GlassHeaderAmount({
+  label, value, alert = false,
+}: {
+  label: string;
+  value: string;
+  alert?: boolean;
+}) {
+  return (
+    <div className="min-w-[82px] px-2 py-1">
+      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn(
+        'mt-0.5 truncate text-xs font-semibold tabular-nums text-foreground',
+        alert && 'text-due',
+      )}>{value}</p>
+    </div>
+  );
+}
+
+function GlassCaseActionBar({
+  onDocuments, onAppointment, onFinance,
+}: {
+  onDocuments: () => void;
+  onAppointment: () => void;
+  onFinance: () => void;
+}) {
+  return (
+    <section className="grid overflow-hidden rounded-xl border border-border bg-card md:grid-cols-3 md:divide-x md:divide-border">
+      <div className="border-b border-border p-4 md:border-b-0">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Préparer le dossier</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="secondary" className="rounded-full" onClick={onDocuments}>
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            Documents
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={onAppointment}>
+            <Calendar className="mr-1.5 h-3.5 w-3.5" />
+            Rendez-vous
+          </Button>
+        </div>
+      </div>
+      <div className="border-b border-border p-4 md:border-b-0">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Transmettre</p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2 rounded-full"
+          onClick={() => window.open('https://app.onify.fr/glass', '_blank', 'noopener,noreferrer')}
+        >
+          <Send className="mr-1.5 h-3.5 w-3.5" />
+          Ouvrir le dossier Onify
+        </Button>
+      </div>
+      <div className="p-4">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Clôturer le dossier</p>
+        <Button type="button" size="sm" variant="outline" className="mt-2 rounded-full" onClick={onFinance}>
+          <Banknote className="mr-1.5 h-3.5 w-3.5" />
+          Suivre le règlement
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -1219,6 +1623,7 @@ function CaseDetailSheet({
     () => (allInvoices ?? []).filter((i) => i.case_id === caseId),
     [allInvoices, caseId],
   );
+  const invoiceSummary = useMemo(() => summarizeInvoices(invoices), [invoices]);
 
   const { data: allQuotes, isLoading: quotesLoading } = useQuery({
     queryKey: ['quotes-all'],
@@ -1349,21 +1754,50 @@ function CaseDetailSheet({
 
   const entete = (
     <>
-      <h1 className="truncate text-xl font-semibold sm:text-2xl">
-        {caseLoading ? <Skeleton className="h-7 w-48 rounded-lg" /> : (caseData?.case_number ?? 'Dossier')}
-      </h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {caseData ? `${clientName} — créé le ${formatDate(caseData.created_at)}` : 'Détails du dossier'}
-      </p>
-      {caseData && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Label className="whitespace-nowrap text-xs text-muted-foreground">Statut</Label>
-          <StatusBadge
-            status={caseData.status}
-            label={caseData.onify_work_status_label ?? caseData.onify_status_label}
-          />
-          <span className="text-xs text-muted-foreground">Synchronisé depuis Onify</span>
+      {caseLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48 rounded-lg" />
+          <Skeleton className="h-4 w-72 rounded-lg" />
         </div>
+      ) : caseData ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold sm:text-2xl">{clientName}</h1>
+              <StatusBadge
+                status={caseData.status}
+                label={caseData.onify_work_status_label ?? caseData.onify_status_label}
+              />
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {caseData.onify_reference ?? caseData.case_number} · déposé le {formatDate(caseData.onify_created_at ?? caseData.created_at)}
+            </p>
+            <div className="mt-3 max-w-xl">
+              <GlassProgressTrack caseData={caseData} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 rounded-xl border border-border bg-muted/20 p-2.5">
+            <GlassHeaderAmount
+              label="Facturé"
+              value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.total) : '—'}
+            />
+            <GlassHeaderAmount
+              label="Encaissé"
+              value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.paid) : '—'}
+            />
+            <GlassHeaderAmount
+              label="Reste"
+              value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.due) : 'Pas de facture'}
+              alert={invoiceSummary.hasInvoice && invoiceSummary.due > 0}
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          <h1 className="text-xl font-semibold sm:text-2xl">Dossier</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Détails du dossier</p>
+        </>
       )}
     </>
   );
@@ -1391,6 +1825,86 @@ function CaseDetailSheet({
 
               {/* === RÉSUMÉ === */}
               <TabsContent value="resume" className="space-y-4 mt-4">
+                <GlassCaseActionBar
+                  onDocuments={() => setTab('documents')}
+                  onAppointment={() => setTab('rdv')}
+                  onFinance={() => setTab('facturation')}
+                />
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-4">
+                    <Section title="Client & véhicule">
+                      <InfoRow label="Client" value={clientName} />
+                      <InfoRow label="Téléphone" value={clientInfo?.phone ?? null} />
+                      <InfoRow label="Email" value={clientInfo?.email ?? null} />
+                      <InfoRow label="Adresse" value={[
+                        (clientInfo as Contact)?.address ?? (clientInfo as Lead)?.address,
+                        (clientInfo as Contact)?.postal_code ?? (clientInfo as Lead)?.postal_code,
+                        (clientInfo as Contact)?.city ?? (clientInfo as Lead)?.city,
+                      ].filter(Boolean).join(', ') || null} />
+                      <div className="my-2 border-t border-border" />
+                      <InfoRow label="Marque / Modèle" value={[
+                        caseData.onify_vehicle_make ?? leadInfo?.vehicle_make,
+                        caseData.onify_vehicle_model ?? leadInfo?.vehicle_model,
+                      ].filter(Boolean).join(' ') || null} />
+                      <InfoRow label="Immatriculation" value={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration} />
+                      <InfoRow label="Vitrage" value={caseData.glass_type} />
+                      <InfoRow label="ADAS" value={caseData.has_adas_camera ? 'Caméra présente' : 'Non renseigné'} />
+                    </Section>
+
+                    <Section title="Intervention">
+                      <InfoRow label="Statut des travaux" value={caseData.onify_work_status_label ?? caseData.onify_work_status_code} />
+                      <InfoRow label="Technicien / conseiller" value={advisorName} />
+                      <InfoRow label="Type" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
+                      <InfoRow label="Rendez-vous" value={formatDateTime(caseData.appointment_date)} />
+                      <InfoRow label="Adresse" value={caseData.intervention_address} />
+                    </Section>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Section title="Sinistre & assurance">
+                      <InfoRow label="Compagnie" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
+                      <InfoRow label="Franchise" value={formatEuro(caseData.franchise_amount)} />
+                      <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
+                      <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
+                      <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
+                    </Section>
+
+                    <Section title="Documents & règlement">
+                      <InfoRow
+                        label="Documents client"
+                        value={documents && documents.length > 0
+                          ? `${documents.filter((document) => document.uploaded).length} / ${documents.length} reçus`
+                          : 'Aucun document demandé'}
+                      />
+                      <InfoRow label="Factures" value={invoices.length > 0 ? `${invoices.length}` : 'Aucune facture'} />
+                      <InfoRow label="Total facturé" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.total) : null} />
+                      <InfoRow label="Encaissé" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.paid) : null} />
+                      <InfoRow label="Reste dû" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.due) : null} />
+                      <InfoRow label="Marge estimée" value={formatEuro(caseData.estimated_margin)} />
+                    </Section>
+                  </div>
+                </div>
+
+                {caseData.onify_glass_case_id && (
+                  <Section title="Suivi Glass Onify">
+                    <div className="grid gap-x-8 md:grid-cols-2">
+                      <InfoRow label="Référence Glass" value={caseData.onify_reference ?? caseData.case_number} />
+                      <InfoRow label="Type de dossier" value={caseData.onify_type} />
+                      <InfoRow label="Statut du dossier" value={caseData.onify_status_label ?? caseData.onify_status_code} />
+                      <InfoRow label="Étape Onify" value={caseData.onify_stage} />
+                      <InfoRow label="Vitrages" value={caseData.onify_glass_items?.join(', ') || null} />
+                      <InfoRow
+                        label="Règlement"
+                        value={caseData.onify_payment_status
+                          ? onifyPaymentLabels[caseData.onify_payment_status] ?? caseData.onify_payment_status
+                          : null}
+                      />
+                      <InfoRow label="Dernière mise à jour" value={formatDateTime(caseData.onify_updated_at ?? caseData.onify_synced_at)} />
+                    </div>
+                  </Section>
+                )}
+
                 <AffaireJourney
                   hasLead={Boolean(leadInfo)}
                   appointmentCount={appointments.length}
@@ -1399,88 +1913,6 @@ function CaseDetailSheet({
                   onAgenda={() => setTab('rdv')}
                   onFinance={() => setTab('facturation')}
                 />
-
-                <Section title="Informations du dossier">
-                  <InfoRow label="N° dossier" value={caseData.case_number} />
-                  <InfoRow label="Statut" value={caseStatusLabels[caseData.status] ?? caseData.status} />
-                  <InfoRow label="Conseiller" value={advisorName} />
-                  <InfoRow label="Date de création" value={formatDate(caseData.created_at)} />
-                  <InfoRow label="Type d'intervention" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
-                </Section>
-
-                {caseData.onify_glass_case_id && (
-                  <Section title="Suivi Glass Onify">
-                    <InfoRow label="Référence Glass" value={caseData.onify_reference ?? caseData.case_number} />
-                    <InfoRow label="Type de dossier" value={caseData.onify_type} />
-                    <InfoRow label="Statut du dossier" value={caseData.onify_status_label ?? caseData.onify_status_code} />
-                    <InfoRow label="Statut des travaux" value={caseData.onify_work_status_label ?? caseData.onify_work_status_code} />
-                    <InfoRow label="Étape Onify" value={caseData.onify_stage} />
-                    <InfoRow
-                      label="Règlement"
-                      value={caseData.onify_payment_status
-                        ? onifyPaymentLabels[caseData.onify_payment_status] ?? caseData.onify_payment_status
-                        : null}
-                    />
-                    <InfoRow label="Vitrages" value={caseData.onify_glass_items?.join(', ') || null} />
-                    <InfoRow label="Dernière mise à jour" value={formatDateTime(caseData.onify_updated_at ?? caseData.onify_synced_at)} />
-                  </Section>
-                )}
-
-                <Section title="Client">
-                  <InfoRow label="Nom" value={clientName} />
-                  <InfoRow label="Téléphone" value={clientInfo?.phone ?? null} />
-                  <InfoRow label="Email" value={clientInfo?.email ?? null} />
-                  <InfoRow label="Ville" value={(clientInfo as Contact)?.city ?? (clientInfo as Lead)?.city ?? null} />
-                </Section>
-
-                <Section title="Véhicule">
-                  <InfoRow label="Marque / Modèle" value={[
-                    caseData.onify_vehicle_make ?? leadInfo?.vehicle_make,
-                    caseData.onify_vehicle_model ?? leadInfo?.vehicle_model,
-                  ].filter(Boolean).join(' ') || null} />
-                  <InfoRow label="Immatriculation" value={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration} />
-                  <InfoRow label="Type de vitrage" value={caseData.glass_type} />
-                  <InfoRow label="Capteurs" value={caseData.has_sensors ? 'Oui' : 'Non'} />
-                  <InfoRow label="Caméra ADAS" value={caseData.has_adas_camera ? 'Oui' : 'Non'} />
-                </Section>
-
-                <Section title="Assurance">
-                  <InfoRow label="Compagnie" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
-                  <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
-                  <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
-                  <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
-                </Section>
-
-                <Section title="Rendez-vous">
-                  <InfoRow label="Date RDV" value={formatDateTime(caseData.appointment_date)} />
-                  <InfoRow label="Adresse" value={caseData.intervention_address} />
-                </Section>
-
-                {/* Financial summary */}
-                <div className="rounded-xl border border-border p-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Synthèse financière
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FinanceItem label="Franchise" value={formatEuro(caseData.franchise_amount)} />
-                    <FinanceItem label="Cadeau" value={formatEuro(caseData.gift_amount)} />
-                    <FinanceItem label="Marge estimée" value={formatEuro(caseData.estimated_margin)} />
-                    <FinanceItem
-                      label="Total factures"
-                      value={invoices.length > 0 ? formatEuro(invoices.reduce((s, i) => s + i.amount_ttc, 0)) : '—'}
-                    />
-                  </div>
-                  {invoices.length > 0 && (
-                    <div className="mt-3 space-y-1.5 border-t border-border pt-3">
-                      {invoices.map((inv) => (
-                        <div key={inv.id} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{inv.invoice_number}</span>
-                          <span className="font-medium text-foreground">{formatEuro(inv.amount_ttc)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </TabsContent>
 
               {/* === SUIVI === */}
@@ -2107,15 +2539,6 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
     <div className="flex items-start justify-between gap-4 py-1.5">
       <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>
       <span className="text-sm text-foreground text-right break-words">{value || '—'}</span>
-    </div>
-  );
-}
-
-function FinanceItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
 }

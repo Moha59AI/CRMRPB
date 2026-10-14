@@ -21,7 +21,7 @@ test('les dossiers utilisent une vraie liste mobile sans doubler le rendu', asyn
   assert.match(page, /const estMobile = useEstMobile\(\)/);
   assert.match(page, /visibleCases\.length === 0[\s\S]*: estMobile \?/);
   assert.match(page, /<CaseMobileRow/);
-  assert.match(page, /<div className="overflow-x-auto">[\s\S]*<Table>/);
+  assert.match(page, /overflow-x-auto[\s\S]*<Table/);
 });
 
 test('agenda et relances restent exploitables sur un ecran etroit', async () => {
