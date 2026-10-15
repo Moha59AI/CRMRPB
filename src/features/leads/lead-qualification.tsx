@@ -198,7 +198,10 @@ export function LeadQualification({ lead, onUpdate, desactive }: LeadQualificati
                 className="rounded-lg pr-7 tabular"
                 onChange={(e) => {
                   const brut = e.target.value;
-                  onUpdate({ franchise_amount: brut === '' ? null : Number(brut) });
+                  onUpdate({
+                    franchise_amount: brut === '' ? null : Number(brut),
+                    franchise_type: brut === '' ? null : 'euro',
+                  });
                 }}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">

@@ -345,7 +345,10 @@ function AssuranceEditor({ lead, onUpdate, disabled }: LeadOverviewSummaryProps)
             placeholder="Non su"
             onChange={(event) => {
               const value = event.target.value;
-              onUpdate({ franchise_amount: value === '' ? null : Number(value) });
+              onUpdate({
+                franchise_amount: value === '' ? null : Number(value),
+                franchise_type: value === '' ? null : 'euro',
+              });
             }}
           />
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>

@@ -115,6 +115,8 @@ export interface Lead {
   has_adas_camera: boolean | null;
   /** Reste a charge annonce au client. null = pas encore su, 0 = pris en charge. */
   franchise_amount: number | null;
+  /** Unite explicite de la franchise. */
+  franchise_type: 'euro' | 'percent' | null;
   score: number;
   source: LeadSource;
   status: LeadStatus;
@@ -335,6 +337,12 @@ export interface WindscreenCase {
   technician_id: string | null;
   status: CaseStatus;
   intervention_address: string | null;
+  intervention_postal_code: string | null;
+  intervention_city: string | null;
+  intervention_citycode: string | null;
+  intervention_latitude: number | null;
+  intervention_longitude: number | null;
+  intervention_geo_precision: 'exact' | 'approximatif' | null;
   intervention_type: 'home' | 'workshop' | null;
   appointment_date: string | null;
   glass_type: string | null;
@@ -343,7 +351,10 @@ export interface WindscreenCase {
   insurance_contract_number: string | null;
   insurance_claim_number: string | null;
   insurance_claim_date: string | null;
-  franchise_amount: number;
+  insurance_name: string | null;
+  franchise_amount: number | null;
+  franchise_type: 'euro' | 'percent' | null;
+  franchise_source: 'lead' | 'onify' | 'manual' | null;
   offer: string | null;
   gift_type: string | null;
   gift_amount: number;

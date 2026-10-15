@@ -4,6 +4,22 @@ import { supabase } from '@/lib/supabase';
 import type { WindscreenCase, CaseDocument, AfterSalesCase } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
+export type GlassOperationalDetails = {
+  intervention_address: string | null;
+  intervention_postal_code: string | null;
+  intervention_city: string | null;
+  intervention_type: 'home' | 'workshop' | null;
+  insurance_name: string | null;
+  franchise_amount: number | null;
+  franchise_type: 'euro' | 'percent' | null;
+  offer: string | null;
+  gift_type: string | null;
+  gift_amount: number | null;
+  insurance_contract_number: string | null;
+  insurance_claim_number: string | null;
+  insurance_claim_date: string | null;
+};
+
 export async function fetchCases(params: {
   search?: string;
   status?: string;
@@ -126,6 +142,22 @@ export async function createCase(c: Partial<WindscreenCase>): Promise<{ error: s
 export async function updateCase(id: string, updates: Partial<WindscreenCase>): Promise<{ error: string | null }> {
   const { error } = await supabase.from('windscreen_cases').update(updates).eq('id', id);
   return { error: error?.message ?? null };
+}
+
+/**
+ * Enregistre les donnees modifiables de Glass et les repercute sur le lead
+ * historique dans une seule transaction. Les champs de statut Onify ne sont
+ * volontairement pas exposes ici.
+ */
+export async function updateGlassOperationalDetails(
+  caseId: string,
+  details: GlassOperationalDetails,
+): Promise<void> {
+  const { error } = await supabase.rpc('mettre_a_jour_dossier_glass', {
+    p_case_id: caseId,
+    p_details: details,
+  });
+  if (error) throw new Error(error.message);
 }
 
 // ============ CASE_DOCUMENTS ============

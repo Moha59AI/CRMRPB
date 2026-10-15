@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import {
@@ -27,9 +27,17 @@ import type {
 } from '@/types';
 import { createNote, fetchActivities, fetchCommunications, fetchNotes } from '@/services/activity-service';
 import { fetchGifts, fetchInvoices, fetchQuotes } from '@/services/billing-service';
-import { fetchAfterSalesCases, fetchCaseById, fetchCaseDocuments, fetchGlassCases, toggleCaseDocument } from '@/services/cases-service';
+import {
+  fetchAfterSalesCases,
+  fetchCaseById,
+  fetchCaseDocuments,
+  fetchGlassCases,
+  toggleCaseDocument,
+  updateGlassOperationalDetails,
+  type GlassOperationalDetails,
+} from '@/services/cases-service';
 import { fetchContacts, fetchInsurers } from '@/services/contacts-service';
-import { fetchLeads } from '@/services/leads-service';
+import { fetchLeadById, fetchLeads } from '@/services/leads-service';
 import {
   createTask, fetchAppointments, fetchTasks, type AppointmentAvecClient,
 } from '@/services/planning-service';
@@ -319,6 +327,14 @@ function formatEuroExact(amount: number | null | undefined): string {
   if (amount == null) return '—';
   return euroFormat.format(amount);
 }
+function formatFranchise(
+  amount: number | null | undefined,
+  type: 'euro' | 'percent' | null | undefined,
+): string {
+  if (amount == null) return 'Non renseignée';
+  if (type === 'percent') return `${new Intl.NumberFormat('fr-FR').format(amount)} %`;
+  return euroFormat.format(amount);
+}
 function formatDate(date: string | null | undefined): string {
   if (!date) return '—';
   return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -357,6 +373,7 @@ function insurerForCase(
   insurerMap: Map<string, Insurer>,
   leadMap: Map<string, Lead>,
 ): string {
+  if (caseData.insurance_name) return caseData.insurance_name;
   if (caseData.onify_insurer_name) return caseData.onify_insurer_name;
   const insurer = caseData.insurer_id ? insurerMap.get(caseData.insurer_id) : null;
   if (insurer?.name) return insurer.name;
@@ -558,6 +575,7 @@ export function GlassPage() {
           return { caseData, title: 'Véhicule à compléter', detail: `${reference} · plaque et modèle absents`, tone: 'warning', score: 76 };
         }
         if (glassStageOf(caseData) === 'preparation'
+          && !caseData.insurance_name
           && !caseData.onify_insurer_name
           && !caseData.insurer_id
           && !insurerForCase(caseData, insurerMap, leadMap)) {
@@ -1398,7 +1416,7 @@ function GlassCaseCard({
             <span className="rounded-xl border border-border p-3">
               <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Assurance</span>
               <span className="mt-1 block truncate text-xs font-semibold text-foreground">{insurer || 'À compléter'}</span>
-              <span className="mt-1 block text-[11px] text-muted-foreground">Franchise {formatEuro(caseData.franchise_amount)}</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">Franchise {formatFranchise(caseData.franchise_amount, caseData.franchise_type)}</span>
             </span>
             <span className="rounded-xl border border-border p-3">
               <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Règlement</span>
@@ -1474,7 +1492,7 @@ function CaseRow({
       </TableCell>
       <TableCell className="py-4">
         <p className="max-w-[200px] truncate text-sm font-medium text-foreground">{insurerName || 'Assurance à compléter'}</p>
-        <p className="mt-1 text-[11px] text-muted-foreground">Franchise · {formatEuro(caseData.franchise_amount)}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Franchise · {formatFranchise(caseData.franchise_amount, caseData.franchise_type)}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">{caseData.glass_type || 'Vitrage à préciser'}</p>
       </TableCell>
       <TableCell className="py-4">
@@ -1653,6 +1671,14 @@ function CaseDetailSheet({
     enabled: !!caseId,
   });
 
+  // Le lead est archive des que le dossier existe dans Onify. Il faut donc le
+  // charger directement : la liste active des leads ne le contient plus.
+  const { data: linkedLead } = useQuery({
+    queryKey: ['lead', caseData?.lead_id],
+    queryFn: () => fetchLeadById(caseData!.lead_id!),
+    enabled: Boolean(caseData?.lead_id),
+  });
+
   const { data: affaire } = useQuery({
     queryKey: ['affaire-vitrage', 'case', caseId],
     queryFn: () => fetchAffaireByCaseId(caseId),
@@ -1782,23 +1808,23 @@ function CaseDetailSheet({
       if (c) return `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim();
     }
     if (caseData.lead_id) {
-      const l = leadMap.get(caseData.lead_id);
+      const l = linkedLead ?? leadMap.get(caseData.lead_id);
       if (l) return `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
     }
     return '—';
-  }, [caseData, contactMap, leadMap]);
+  }, [caseData, contactMap, leadMap, linkedLead]);
 
   const clientInfo = useMemo(() => {
     if (!caseData) return null;
     if (caseData.contact_id) return contactMap.get(caseData.contact_id) ?? null;
-    if (caseData.lead_id) return leadMap.get(caseData.lead_id) ?? null;
+    if (caseData.lead_id) return linkedLead ?? leadMap.get(caseData.lead_id) ?? null;
     return null;
-  }, [caseData, contactMap, leadMap]);
+  }, [caseData, contactMap, leadMap, linkedLead]);
 
   const leadInfo = useMemo(() => {
     if (!caseData?.lead_id) return null;
-    return leadMap.get(caseData.lead_id) ?? null;
-  }, [caseData, leadMap]);
+    return linkedLead ?? leadMap.get(caseData.lead_id) ?? null;
+  }, [caseData, leadMap, linkedLead]);
 
   const insurerInfo = useMemo(() => {
     if (!caseData?.insurer_id) return null;
@@ -1904,6 +1930,8 @@ function CaseDetailSheet({
                   onFinance={() => setTab('facturation')}
                 />
 
+                <GlassOperationalEditor caseData={caseData} lead={leadInfo} />
+
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="space-y-4">
                     <Section title="Client & véhicule">
@@ -1930,14 +1958,18 @@ function CaseDetailSheet({
                       <InfoRow label="Technicien / conseiller" value={advisorName} />
                       <InfoRow label="Type" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
                       <InfoRow label="Rendez-vous" value={formatDateTime(caseData.appointment_date)} />
-                      <InfoRow label="Adresse" value={caseData.intervention_address} />
+                      <InfoRow label="Adresse" value={[
+                        caseData.intervention_address,
+                        caseData.intervention_postal_code,
+                        caseData.intervention_city,
+                      ].filter(Boolean).join(', ') || null} />
                     </Section>
                   </div>
 
                   <div className="space-y-4">
                     <Section title="Sinistre & assurance">
-                      <InfoRow label="Compagnie" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
-                      <InfoRow label="Franchise" value={formatEuro(caseData.franchise_amount)} />
+                      <InfoRow label="Compagnie" value={caseData.insurance_name ?? caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
+                      <InfoRow label="Franchise" value={formatFranchise(caseData.franchise_amount, caseData.franchise_type)} />
                       <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
                       <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
                       <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
@@ -2012,14 +2044,18 @@ function CaseDetailSheet({
                 </Section>
                 <Section title="Intervention">
                   <InfoRow label="Type" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
-                  <InfoRow label="Adresse" value={caseData.intervention_address} />
+                  <InfoRow label="Adresse" value={[
+                    caseData.intervention_address,
+                    caseData.intervention_postal_code,
+                    caseData.intervention_city,
+                  ].filter(Boolean).join(', ') || null} />
                 </Section>
               </TabsContent>
 
               {/* === ASSURANCE === */}
               <TabsContent value="assurance" className="space-y-3 mt-4">
                 <Section title="Compagnie d'assurance">
-                  <InfoRow label="Nom" value={caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
+                  <InfoRow label="Nom" value={caseData.insurance_name ?? caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
                   <InfoRow label="Téléphone" value={insurerInfo?.phone ?? null} />
                   <InfoRow label="Email" value={insurerInfo?.email ?? null} />
                 </Section>
@@ -2027,7 +2063,7 @@ function CaseDetailSheet({
                   <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
                   <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
                   <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
-                  <InfoRow label="Franchise" value={formatEuro(caseData.franchise_amount)} />
+                  <InfoRow label="Franchise" value={formatFranchise(caseData.franchise_amount, caseData.franchise_type)} />
                 </Section>
               </TabsContent>
 
@@ -2277,6 +2313,280 @@ function CaseDetailSheet({
           </div>
         )}
     </FicheOverlay>
+  );
+}
+
+type GlassOperationalFormState = {
+  interventionAddress: string;
+  interventionPostalCode: string;
+  interventionCity: string;
+  interventionType: 'none' | 'home' | 'workshop';
+  insuranceName: string;
+  franchiseAmount: string;
+  franchiseType: 'euro' | 'percent';
+  gift: string;
+  giftAmount: string;
+  contractNumber: string;
+  claimNumber: string;
+  claimDate: string;
+};
+
+function optionalText(value: string): string | null {
+  const clean = value.trim();
+  return clean || null;
+}
+
+function optionalAmount(value: string): number | null {
+  if (!value.trim()) return null;
+  const amount = Number(value.replace(',', '.'));
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function GlassOperationalEditor({ caseData, lead }: { caseData: WindscreenCase; lead: Lead | null }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<GlassOperationalFormState>({
+    interventionAddress: '',
+    interventionPostalCode: '',
+    interventionCity: '',
+    interventionType: 'none',
+    insuranceName: '',
+    franchiseAmount: '',
+    franchiseType: 'euro',
+    gift: '',
+    giftAmount: '',
+    contractNumber: '',
+    claimNumber: '',
+    claimDate: '',
+  });
+
+  useEffect(() => {
+    setForm({
+      interventionAddress: caseData.intervention_address
+        ?? lead?.intervention_address
+        ?? lead?.address
+        ?? '',
+      interventionPostalCode: caseData.intervention_postal_code
+        ?? lead?.intervention_postal_code
+        ?? lead?.postal_code
+        ?? '',
+      interventionCity: caseData.intervention_city
+        ?? lead?.intervention_city
+        ?? lead?.city
+        ?? '',
+      interventionType: caseData.intervention_type ?? 'none',
+      insuranceName: caseData.insurance_name
+        ?? caseData.onify_insurer_name
+        ?? lead?.insurance
+        ?? '',
+      franchiseAmount: caseData.franchise_amount == null ? '' : String(caseData.franchise_amount),
+      franchiseType: caseData.franchise_type ?? lead?.franchise_type ?? 'euro',
+      gift: caseData.gift_type ?? caseData.offer ?? lead?.offer ?? '',
+      giftAmount: caseData.gift_amount ? String(caseData.gift_amount) : '',
+      contractNumber: caseData.insurance_contract_number ?? '',
+      claimNumber: caseData.insurance_claim_number ?? '',
+      claimDate: caseData.insurance_claim_date?.slice(0, 10) ?? '',
+    });
+  }, [caseData, lead]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const gift = optionalText(form.gift);
+      const franchiseAmount = optionalAmount(form.franchiseAmount);
+      const details: GlassOperationalDetails = {
+        intervention_address: optionalText(form.interventionAddress),
+        intervention_postal_code: optionalText(form.interventionPostalCode),
+        intervention_city: optionalText(form.interventionCity),
+        intervention_type: form.interventionType === 'none' ? null : form.interventionType,
+        insurance_name: optionalText(form.insuranceName),
+        franchise_amount: franchiseAmount,
+        franchise_type: franchiseAmount == null ? null : form.franchiseType,
+        offer: gift,
+        gift_type: gift,
+        gift_amount: optionalAmount(form.giftAmount),
+        insurance_contract_number: optionalText(form.contractNumber),
+        insurance_claim_number: optionalText(form.claimNumber),
+        insurance_claim_date: optionalText(form.claimDate),
+      };
+      return updateGlassOperationalDetails(caseData.id, details);
+    },
+    onSuccess: () => {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['case', caseData.id] }),
+        queryClient.invalidateQueries({ queryKey: ['cases'] }),
+        queryClient.invalidateQueries({ queryKey: ['leads-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['lead', caseData.lead_id] }),
+      ]);
+      toast.success('Informations du dossier enregistrées');
+    },
+    onError: (error) => toast.error((error as Error)?.message || 'Enregistrement impossible'),
+  });
+
+  return (
+    <section data-operational-editor className="rounded-xl border border-primary/25 bg-primary/[0.025] p-4 sm:p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Informations opérationnelles</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Toujours modifiables dans Glass. Les données du lead sont conservées et Onify complète ce qui manque.
+          </p>
+        </div>
+        {caseData.franchise_source && (
+          <Badge variant="outline" className="w-fit rounded-full text-[10px]">
+            Franchise · {caseData.franchise_source === 'onify'
+              ? 'Onify'
+              : caseData.franchise_source === 'lead' ? 'Lead' : 'Modifiée dans le CRM'}
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-1.5 md:col-span-2 xl:col-span-1">
+          <Label htmlFor={`glass-${caseData.id}-address`}>Adresse d’intervention</Label>
+          <Input
+            id={`glass-${caseData.id}-address`}
+            value={form.interventionAddress}
+            onChange={(event) => setForm((current) => ({ ...current, interventionAddress: event.target.value }))}
+            placeholder="Rue et numéro"
+          />
+        </div>
+        <div className="grid grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)] gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`glass-${caseData.id}-postal-code`}>Code postal</Label>
+            <Input
+              id={`glass-${caseData.id}-postal-code`}
+              value={form.interventionPostalCode}
+              inputMode="numeric"
+              onChange={(event) => setForm((current) => ({ ...current, interventionPostalCode: event.target.value }))}
+              placeholder="59100"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`glass-${caseData.id}-city`}>Ville</Label>
+            <Input
+              id={`glass-${caseData.id}-city`}
+              value={form.interventionCity}
+              onChange={(event) => setForm((current) => ({ ...current, interventionCity: event.target.value }))}
+              placeholder="Ville"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Type d’intervention</Label>
+          <Select
+            value={form.interventionType}
+            onValueChange={(value: GlassOperationalFormState['interventionType']) => (
+              setForm((current) => ({ ...current, interventionType: value }))
+            )}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Non renseigné</SelectItem>
+              <SelectItem value="home">À domicile</SelectItem>
+              <SelectItem value="workshop">À l’atelier</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-insurance`}>Assurance</Label>
+          <Input
+            id={`glass-${caseData.id}-insurance`}
+            value={form.insuranceName}
+            onChange={(event) => setForm((current) => ({ ...current, insuranceName: event.target.value }))}
+            placeholder="Compagnie d’assurance"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-franchise`}>Franchise</Label>
+          <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
+            <Input
+              id={`glass-${caseData.id}-franchise`}
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={form.franchiseAmount}
+              onChange={(event) => setForm((current) => ({ ...current, franchiseAmount: event.target.value }))}
+              placeholder="Non connue"
+            />
+            <Select
+              value={form.franchiseType}
+              onValueChange={(value: GlassOperationalFormState['franchiseType']) => (
+                setForm((current) => ({ ...current, franchiseType: value }))
+              )}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="euro">€</SelectItem>
+                <SelectItem value="percent">%</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-gift`}>Cadeau / offre</Label>
+          <Input
+            id={`glass-${caseData.id}-gift`}
+            value={form.gift}
+            onChange={(event) => setForm((current) => ({ ...current, gift: event.target.value }))}
+            placeholder="Ex. iPhone 14, carte cadeau…"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-gift-amount`}>Montant du cadeau</Label>
+          <Input
+            id={`glass-${caseData.id}-gift-amount`}
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            value={form.giftAmount}
+            onChange={(event) => setForm((current) => ({ ...current, giftAmount: event.target.value }))}
+            placeholder="Montant en euros"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-contract`}>N° de contrat</Label>
+          <Input
+            id={`glass-${caseData.id}-contract`}
+            value={form.contractNumber}
+            onChange={(event) => setForm((current) => ({ ...current, contractNumber: event.target.value }))}
+            placeholder="Numéro de contrat"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-claim`}>N° de sinistre</Label>
+          <Input
+            id={`glass-${caseData.id}-claim`}
+            value={form.claimNumber}
+            onChange={(event) => setForm((current) => ({ ...current, claimNumber: event.target.value }))}
+            placeholder="Numéro de sinistre"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`glass-${caseData.id}-claim-date`}>Date du sinistre</Label>
+          <Input
+            id={`glass-${caseData.id}-claim-date`}
+            type="date"
+            value={form.claimDate}
+            onChange={(event) => setForm((current) => ({ ...current, claimDate: event.target.value }))}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button
+          type="button"
+          className="rounded-full"
+          disabled={saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Enregistrer les informations
+        </Button>
+      </div>
+    </section>
   );
 }
 

@@ -33,7 +33,7 @@ test('le module charge tous les vrais dossiers Onify sans plafond de 200', async
   assert.match(service, /while \(true\)/);
   assert.doesNotMatch(service, /const limit = 20_000/);
   assert.match(service, /onify_vehicle_registration\.ilike/);
-  assert.match(sync, /const GLASS_SYNC_VERSION = 2/);
+  assert.match(sync, /const GLASS_SYNC_VERSION = 3/);
   assert.match(sync, /!glassFullRescan && glassLastSync/);
   assert.match(sync, /glass_sync_version: GLASS_SYNC_VERSION/);
 });

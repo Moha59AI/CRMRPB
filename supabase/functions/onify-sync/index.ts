@@ -11,7 +11,7 @@ const NOTES_PAGE_SIZE = 25;
 // Changer la version force une reprise complete une seule fois. Cela permet
 // d'enrichir aussi les anciennes fiches sans effacer le curseur incremental.
 const CONTACT_SYNC_VERSION = 2;
-const GLASS_SYNC_VERSION = 2;
+const GLASS_SYNC_VERSION = 3;
 
 type Json = Record<string, unknown>;
 
@@ -191,6 +191,31 @@ function cleanText(value: unknown): string | null {
 function numeric(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+type OnifyFranchise = {
+  amount: number;
+  type: 'euro' | 'percent';
+};
+
+function onifyFranchise(vehicle: Json | null | undefined): OnifyFranchise | null {
+  if (!vehicle) return null;
+  const rawAmount = vehicle.franchise;
+  const normalizedAmount = typeof rawAmount === 'string'
+    ? rawAmount.trim().replace(',', '.')
+    : rawAmount;
+  if (normalizedAmount === '' || normalizedAmount == null) return null;
+  const amount = Number(normalizedAmount);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+
+  const rawType = cleanText(vehicle.franchise_type)?.toLocaleLowerCase('fr-FR');
+  if (rawType && ['percent', 'percentage', 'pourcentage', '%'].includes(rawType)) {
+    return { amount, type: 'percent' };
+  }
+  if (rawType && ['euro', 'euros', 'eur', '€'].includes(rawType)) {
+    return { amount, type: 'euro' };
+  }
+  return null;
 }
 
 function normalizePhone(value: unknown): string {
@@ -634,6 +659,14 @@ async function syncInvoices(
   const rows = invoices.map((invoice) => {
     const totalHt = numeric(invoice.montant_ht);
     const totals = invoice.totaux ?? {};
+    const vehicleFranchise = onifyFranchise(invoice.vehicule);
+    const totalsFranchiseRaw = totals.franchise_amount;
+    const totalsFranchise = totalsFranchiseRaw == null || totalsFranchiseRaw === ''
+      ? null
+      : Number(totalsFranchiseRaw);
+    const franchiseAmount = totalsFranchise != null && Number.isFinite(totalsFranchise)
+      ? totalsFranchise
+      : vehicleFranchise?.type === 'euro' ? vehicleFranchise.amount : 0;
     const contactId = invoice.contact_id == null
       ? null
       : contactIds.get(String(invoice.contact_id)) ?? null;
@@ -648,7 +681,7 @@ async function syncInvoices(
       amount_ht: totalHt,
       tva_rate: vatRate(totalHt, numeric(invoice.montant_tva)),
       amount_ttc: numeric(invoice.montant_ttc),
-      franchise_amount: numeric(totals.franchise_amount),
+      franchise_amount: franchiseAmount,
       insurance_amount: numeric(totals.du_assurance),
       estimated_margin: numeric(totals.margin_amount),
       amount_paid: numeric(invoice.montant_regle),
@@ -706,6 +739,7 @@ async function syncQuotes(
   );
   const rows = quotes.map((quote) => {
     const totalHt = numeric(quote.montant_ht);
+    const vehicleFranchise = onifyFranchise(quote.vehicule);
     const contactId = quote.contact_id == null
       ? null
       : contactIds.get(String(quote.contact_id)) ?? null;
@@ -720,6 +754,7 @@ async function syncQuotes(
       amount_ht: totalHt,
       tva_rate: vatRate(totalHt, numeric(quote.montant_tva)),
       amount_ttc: numeric(quote.montant_ttc),
+      franchise_amount: vehicleFranchise?.type === 'euro' ? vehicleFranchise.amount : 0,
       status: quoteStatus(quote.statut, quote.signe),
       onify_quote_id: String(quote.quote_id),
       onify_payload: {
@@ -825,8 +860,22 @@ async function syncGlassCases(
       onify_finalized_at: cleanText(item.finalise_at),
       onify_synced_at: syncedAt,
     };
-    if (match) updateRows.push({ ...shared, id: match.id });
-    else insertRows.push({ ...shared, created_at: item.created_at ?? syncedAt });
+    if (match) {
+      // Une reponse Onify partielle ne doit pas effacer une information deja
+      // qualifiee dans le CRM. Les statuts Onify restent, eux, autoritaires.
+      const update = { ...shared, id: match.id };
+      if (!update.contact_id) delete update.contact_id;
+      if (!update.glass_type) delete update.glass_type;
+      if (!update.insurance_claim_number) delete update.insurance_claim_number;
+      if (!update.insurance_claim_date) delete update.insurance_claim_date;
+      updateRows.push(update);
+    } else {
+      insertRows.push({
+        ...shared,
+        insurance_name: cleanText(item.assureur),
+        created_at: item.created_at ?? syncedAt,
+      });
+    }
   }
 
   await upsertBatches('windscreen_cases', updateRows, 'id');
@@ -842,13 +891,19 @@ async function syncGlassCases(
   const { error: insurerLinkError } = await adminClient
     .rpc('rapprocher_assureurs_glass', { p_workspace_id: workspaceId });
   if (insurerLinkError) throw new Error(`rapprochement assureurs Glass: ${insurerLinkError.message}`);
+  const { data: completed, error: completionError } = await adminClient
+    .rpc('completer_dossiers_glass_operationnels', { p_workspace_id: workspaceId });
+  if (completionError) throw new Error(`complement des dossiers Glass: ${completionError.message}`);
   const { data: transitions, error: transitionError } = await adminClient
     .rpc('avancer_leads_apres_dossier_glass', { p_workspace_id: workspaceId });
   if (transitionError) throw new Error(`avancement du parcours Glass: ${transitionError.message}`);
   const stats = links && typeof links === 'object' ? links as Json : {};
+  const completionStats = completed && typeof completed === 'object' ? completed as Json : {};
   return {
     cases: uniqueCases.size,
-    leads: numeric(stats.cases_linked_to_leads) + numeric(stats.leads_enriched),
+    leads: numeric(stats.cases_linked_to_leads)
+      + numeric(stats.leads_enriched)
+      + numeric(completionStats.cases_completed_from_leads),
     transitions: numeric(transitions),
   };
 }
@@ -1069,6 +1124,11 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   const caseLinks = await loadFinancialCaseLinks(workspaceId);
   const invoiceIds = await syncInvoices(workspaceId, invoices, contactIds, caseLinks);
   await syncQuotes(workspaceId, quotes, contactIds, caseLinks);
+  const { error: financialCompletionError } = await adminClient
+    .rpc('completer_dossiers_glass_operationnels', { p_workspace_id: workspaceId });
+  if (financialCompletionError) {
+    throw new Error(`franchise des dossiers Glass: ${financialCompletionError.message}`);
+  }
   const { data: vehicles, error: vehicleError } = await adminClient
     .rpc('propager_vehicules_onify', { p_workspace_id: workspaceId });
   if (vehicleError) throw new Error(`propagation véhicules: ${vehicleError.message}`);
