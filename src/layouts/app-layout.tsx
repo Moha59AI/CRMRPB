@@ -73,13 +73,13 @@ export function AppLayout() {
           de la largeur pour des icones qu'on ne vise pas au pouce. */}
       <aside
         className={cn(
-          'hidden flex-col border-r border-border bg-card transition-all duration-200 md:flex',
+          'crm-sidebar hidden flex-col border-r border-border bg-card/95 transition-all duration-200 md:flex',
           expanded ? 'w-56' : 'w-16'
         )}
       >
         <div className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-            <Car className="h-4 w-4 text-primary-foreground" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary shadow-sm ring-1 ring-primary/20">
+            <Car className="h-4 w-4 text-primary" />
           </div>
           {expanded && (
             <span className="animate-fade-in truncate text-sm font-semibold text-foreground">
@@ -115,8 +115,8 @@ export function AppLayout() {
                               'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                               !expanded && 'justify-center',
                               active
-                                ? 'bg-secondary text-secondary-foreground'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                ? 'bg-primary/10 text-primary shadow-sm ring-1 ring-primary/10'
+                                : 'text-muted-foreground hover:bg-surface hover:text-foreground'
                             )}
                           >
                             <Icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.75} />
@@ -223,8 +223,8 @@ export function AppLayout() {
           </Sheet>
 
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary">
-              <Car className="h-3.5 w-3.5 text-primary-foreground" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary shadow-sm ring-1 ring-primary/20">
+              <Car className="h-3.5 w-3.5 text-primary" />
             </div>
             <span className="truncate text-sm font-semibold text-foreground">
               {titreCourant}
@@ -259,6 +259,7 @@ export function AppLayout() {
           <div
             key={location.pathname}
             className="app-route-transition flex min-h-0 flex-1 flex-col overflow-hidden"
+            data-crm-module-shell
           >
             <Outlet />
           </div>
@@ -291,8 +292,8 @@ function TiroirNavigation({
   return (
     <div className="flex h-full flex-col">
       <div className="safe-haut flex items-center gap-3 border-b border-border px-4 pb-3 pt-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-          <Car className="h-4 w-4 text-primary-foreground" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary shadow-sm ring-1 ring-primary/20">
+          <Car className="h-4 w-4 text-primary" />
         </div>
         <span className="truncate text-sm font-semibold text-foreground">{APP_NAME}</span>
       </div>
@@ -315,8 +316,8 @@ function TiroirNavigation({
                       // au pouce.
                       'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium',
                       estActif(item.path)
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'text-muted-foreground',
+                        ? 'bg-primary/10 text-primary shadow-sm ring-1 ring-primary/10'
+                        : 'text-muted-foreground hover:bg-surface hover:text-foreground',
                     )}
                   >
                     <Icon className="h-4.5 w-4.5 shrink-0" strokeWidth={1.75} />

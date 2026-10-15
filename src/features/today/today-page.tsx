@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, BadgeEuro, Calendar as CalendarIcon, Car, CheckSquare, ChevronLeft,
-  ChevronRight, ClipboardList, FileText, Landmark, LineChart, PiggyBank, Plus, Receipt,
+  ChevronRight, ClipboardList, FileText, Landmark, LayoutDashboard, LineChart, PiggyBank, Plus, Receipt,
   ShieldCheck, Target, ThumbsDown, ThumbsUp, Timer, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModuleHero } from '@/components/ModuleHero';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -804,18 +805,20 @@ export function TodayPage() {
 
   return (
     <div className="gutter-x gutter-y space-y-5">
-      {/* En-tete */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[28px]">
-            Bonjour{prenom ? `, ${prenom}` : ''}.
-          </h1>
-          <p className="mt-0.5 text-sm capitalize text-muted-foreground">{dateLongue}</p>
-        </div>
-        <p className="text-sm tabular-nums text-muted-foreground">
-          {maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-        </p>
-      </div>
+      <ModuleHero
+        icon={LayoutDashboard}
+        eyebrow="Quotidien · Vue d’ensemble"
+        title={<>Bonjour{prenom ? `, ${prenom}` : ''}.</>}
+        description={<span className="capitalize">{dateLongue}</span>}
+        action={(
+          <div className="flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-secondary-foreground">
+            <CalendarIcon className="h-4 w-4 text-primary" aria-hidden />
+            <span className="text-sm font-semibold tabular-nums">
+              {maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        )}
+      />
 
       {donnees.isError && (
         <div className="rounded-2xl border border-urgent/30 bg-urgent-soft px-4 py-3 text-sm text-urgent">

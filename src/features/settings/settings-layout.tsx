@@ -35,7 +35,7 @@ export function SettingsLayout() {
       <nav
         aria-label="Réglages"
         className={cn(
-          'shrink-0 border-b border-border md:w-56 md:border-b-0 md:border-r',
+          'crm-settings-nav shrink-0 border-b border-border bg-card/75 md:w-60 md:border-b-0 md:border-r',
           'px-3 py-3 md:py-4',
         )}
       >
@@ -60,11 +60,11 @@ export function SettingsLayout() {
                     title={item.description}
                     className={({ isActive }) =>
                       cn(
-                        'flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5',
-                        'text-sm transition-colors',
+                        'flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 py-2',
+                        'text-sm transition-all',
                         isActive
-                          ? 'bg-primary/10 font-medium text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          ? 'bg-primary/10 font-semibold text-primary shadow-sm ring-1 ring-primary/10'
+                          : 'text-muted-foreground hover:bg-surface hover:text-foreground',
                       )
                     }
                   >

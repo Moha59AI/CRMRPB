@@ -17,6 +17,7 @@ import {
   Boxes, CalendarDays, CarFront, CheckCircle2, ClipboardList, LayoutList,
   Loader2, Plus, RefreshCw, ScanLine, ShieldCheck, Wrench, type LucideIcon,
 } from 'lucide-react';
+import { ModuleHero } from '@/components/ModuleHero';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EtatErreur } from '@/components/EtatErreur';
@@ -272,84 +273,89 @@ function EnteteAtelier({
     weekday: 'short', day: 'numeric', month: 'short',
   }).format(new Date());
 
-  const indicateurs: { label: string; valeur: number; icone: LucideIcon; couleur: string }[] = [
-    { label: 'véhicules', valeur: total, icone: CarFront, couleur: 'text-slate-700 bg-slate-100' },
-    { label: 'en intervention', valeur: compte.en_cours, icone: Wrench, couleur: 'text-emerald-700 bg-emerald-100' },
-    { label: 'terminés', valeur: compte.termine, icone: CheckCircle2, couleur: 'text-sky-700 bg-sky-100' },
+  const indicateurs: { label: string; valeur: number; icone: LucideIcon }[] = [
+    { label: 'véhicules', valeur: total, icone: CarFront },
+    { label: 'en intervention', valeur: compte.en_cours, icone: Wrench },
+    { label: 'terminés', valeur: compte.termine, icone: CheckCircle2 },
   ];
 
   return (
-    <header className="border-b border-border bg-card">
-      <div className="gutter-x flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold tracking-tight text-foreground">Atelier interactif</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Suivez les véhicules et ouvrez leur dossier depuis leur poste.
-          </p>
-        </div>
+    <header className="gutter-x shrink-0 py-3 sm:py-4">
+      <ModuleHero
+        icon={Boxes}
+        eyebrow="Quotidien · Atelier"
+        title="Atelier interactif"
+        description="Suivez les véhicules et ouvrez leur dossier depuis leur poste."
+        action={(
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto">
+            <span className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-medium capitalize text-foreground shadow-sm">
+              <CalendarDays className="h-3.5 w-3.5 text-primary" aria-hidden />
+              {aujourdHui}
+            </span>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-medium capitalize text-foreground shadow-sm">
-            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-            {aujourdHui}
-          </span>
+            <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-white/[0.08] p-0.5">
+              {(['atelier', 'liste'] as Vue[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onChangerVue(v)}
+                  aria-pressed={vue === v}
+                  className={cn(
+                    'flex min-h-9 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-xs font-semibold transition-colors',
+                    vue === v
+                      ? 'bg-white text-secondary shadow-sm'
+                      : 'text-secondary-foreground/70 hover:text-secondary-foreground',
+                  )}
+                >
+                  {v === 'atelier'
+                    ? <><Boxes className="h-3.5 w-3.5" aria-hidden />Vue atelier</>
+                    : <><LayoutList className="h-3.5 w-3.5" aria-hidden />Liste</>}
+                </button>
+              ))}
+            </div>
 
-          <div className="grid grid-cols-2 rounded-xl border border-border bg-muted/50 p-0.5">
-            {(['atelier', 'liste'] as Vue[]).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onChangerVue(v)}
-                aria-pressed={vue === v}
-                className={cn(
-                  'flex min-h-9 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-xs font-semibold transition-colors',
-                  vue === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl border-white/15 bg-white text-secondary hover:bg-white/90 hover:text-secondary"
+              onClick={onActualiser}
+              disabled={actualisation}
+              aria-label="Actualiser l’atelier"
+            >
+              <RefreshCw className={cn('h-4 w-4', actualisation && 'animate-spin')} />
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-9 rounded-xl bg-emerald-600 px-3 font-semibold hover:bg-emerald-700"
+              onClick={onNouveauDossier}
+            >
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+              Nouveau dossier
+            </Button>
+          </div>
+        )}
+        footer={(
+          <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+            {indicateurs.map(({ label, valeur, icone: Icone }) => (
+              <div
+                key={label}
+                className="flex min-w-[132px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2"
               >
-                {v === 'atelier'
-                  ? <><Boxes className="h-3.5 w-3.5" aria-hidden />Vue atelier</>
-                  : <><LayoutList className="h-3.5 w-3.5" aria-hidden />Liste</>}
-              </button>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-primary">
+                  <Icone className="h-4 w-4" aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <strong className="block text-sm font-bold tabular-nums text-secondary-foreground">{valeur}</strong>
+                  <span className="block truncate text-[10px] text-secondary-foreground/55">{label}</span>
+                </span>
+              </div>
             ))}
           </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-xl border border-border bg-background"
-            onClick={onActualiser}
-            disabled={actualisation}
-            aria-label="Actualiser l’atelier"
-          >
-            <RefreshCw className={cn('h-4 w-4', actualisation && 'animate-spin')} />
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            className="min-h-9 rounded-xl bg-emerald-600 px-3 font-semibold hover:bg-emerald-700"
-            onClick={onNouveauDossier}
-          >
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden />
-            Nouveau dossier
-          </Button>
-        </div>
-      </div>
-
-      <div className="gutter-x flex gap-2 overflow-x-auto pb-3 scrollbar-thin">
-        {indicateurs.map(({ label, valeur, icone: Icone, couleur }) => (
-          <div key={label} className="flex min-w-[132px] items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 shadow-sm">
-            <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', couleur)}>
-              <Icone className="h-4 w-4" aria-hidden />
-            </span>
-            <span className="min-w-0">
-              <strong className="block text-sm font-bold tabular-nums text-foreground">{valeur}</strong>
-              <span className="block truncate text-[10px] text-muted-foreground">{label}</span>
-            </span>
-          </div>
-        ))}
-      </div>
+        )}
+      />
     </header>
   );
 }
