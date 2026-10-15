@@ -12,7 +12,7 @@ import {
   z,
 } from 'zod';
 import {
-  Search, Plus, MessageSquare, AlertTriangle, Loader2, Phone,
+  Plus, MessageSquare, Loader2, Phone,
 } from 'lucide-react';
 import {
   useNavigate, useLocation,
@@ -23,8 +23,11 @@ import {
 import {
   ChampAdresse,
 } from '@/components/ChampAdresse';
+import { ModuleToolbar } from '@/components/ModuleToolbar';
+import { ModuleEmptyState } from '@/components/ModuleEmptyState';
+import { ModuleErrorState } from '@/components/ModuleErrorState';
+import { ResponsiveDataView } from '@/components/ResponsiveDataView';
 import { fondDepuis } from '@/features/dossier/dossier-constants';
-import { useEstMobile } from '@/hooks/use-media-query';
 import {
   Input,
 } from '@/components/ui/input';
@@ -95,8 +98,6 @@ function BadgeClient({ estClient }: { estClient: boolean }) {
 
 export function ContactsPage() {
   const navigate = useNavigate();
-  // Le tableau a sept colonnes : sur telephone, la liste le remplace.
-  const estMobile = useEstMobile();
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -115,7 +116,13 @@ export function ContactsPage() {
 
   // Un client est une personne, un lead une intervention : ce compteur rend le
   // modele lisible sans ouvrir chaque fiche.
-  const { data: resumes } = useQuery({
+  const {
+    data: resumes,
+    isLoading: resumesLoading,
+    isError: resumesIsError,
+    error: resumesError,
+    refetch: refetchResumes,
+  } = useQuery({
     queryKey: ['resumes-clients'],
     queryFn: fetchResumesClients,
   });
@@ -131,6 +138,9 @@ export function ContactsPage() {
       (c) => Boolean(resumes?.get(c.id)?.estClient) === veutClient,
     );
   }, [contacts, resumes, filtre]);
+  const chargement = isLoading || (filtre !== 'tous' && resumesLoading);
+  const erreurChargement = isError || (filtre !== 'tous' && resumesIsError);
+  const erreurAffichee = isError ? error : resumesError;
 
   return (
     <>
@@ -145,20 +155,12 @@ export function ContactsPage() {
         }
       />
 
-      {/* Search bar */}
       <div className="gutter-x border-b border-border py-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher par nom, téléphone, email, ville..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg pl-9"
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {FILTRES.map((f) => {
+        <ModuleToolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Rechercher par nom, téléphone, email, ville..."
+          filters={FILTRES.map((f) => {
             const nombre = f.cle === 'tous'
               ? contacts?.length
               : contacts?.filter(
@@ -180,12 +182,12 @@ export function ContactsPage() {
               </Button>
             );
           })}
-        </div>
+        />
       </div>
 
       {/* Table */}
       <div className="defilement-contenu flex-1 overflow-y-auto scrollbar-thin">
-        {isLoading && (
+        {chargement && !erreurChargement && (
           <div className="p-6">
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -195,64 +197,65 @@ export function ContactsPage() {
           </div>
         )}
 
-        {isError && (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
-            <AlertTriangle className="mb-3 h-8 w-8 text-destructive" />
-            <p className="text-sm text-muted-foreground">{(error as Error)?.message || 'Erreur de chargement'}</p>
-            <Button variant="outline" className="mt-4 rounded-full" onClick={() => refetch()}>
-              Réessayer
-            </Button>
-          </div>
-        )}
-
-        {!isLoading && !isError && contacts && contacts.length === 0 && (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
-              <MessageSquare className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
-            </div>
-            <h3 className="text-sm font-semibold text-foreground">Aucun contact pour le moment</h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Ajoutez un contact pour commencer à suivre ses demandes et ses véhicules.
-            </p>
-            <Button className="mt-4 rounded-full" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau contact
-            </Button>
-          </div>
-        )}
-
-        {!isLoading && !isError && listeFiltree && listeFiltree.length > 0 && estMobile && (
-          <ListeMobileContacts
-            contacts={listeFiltree}
-            resumes={resumes}
-            onOuvrir={(contact) => ouvrirClient(contact.id)}
+        {erreurChargement && (
+          <ModuleErrorState
+            title="Clients indisponibles"
+            description={(erreurAffichee as Error)?.message || 'Erreur de chargement'}
+            onRetry={() => { void Promise.all([refetch(), refetchResumes()]); }}
           />
         )}
 
-        {!isLoading && !isError && listeFiltree && listeFiltree.length > 0 && !estMobile && (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs">Nom</TableHead>
-                <TableHead className="text-xs">Téléphone</TableHead>
-                <TableHead className="text-xs">Email</TableHead>
-                <TableHead className="text-xs">Ville</TableHead>
-                <TableHead className="text-xs">Interventions</TableHead>
-                <TableHead className="text-xs">Dernière intervention</TableHead>
-                <TableHead className="text-xs">Date de création</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {listeFiltree.map((contact) => (
-                <ContactRow
-                  key={contact.id}
-                  contact={contact}
-                  resume={resumes?.get(contact.id)}
-                  onOpen={() => ouvrirClient(contact.id)}
-                />
-              ))}
-            </TableBody>
-          </Table>
+        {!chargement && !erreurChargement && listeFiltree && listeFiltree.length === 0 && (
+          <ModuleEmptyState
+            icon={MessageSquare}
+            title={search ? 'Aucun résultat' : `Aucun ${filtre === 'clients' ? 'client' : filtre === 'prospects' ? 'prospect' : 'contact'} pour le moment`}
+            description={search
+              ? 'Essayez un autre nom, numéro de téléphone, email ou une autre ville.'
+              : 'Ajoutez un contact pour commencer à suivre ses demandes et ses véhicules.'}
+            action={
+              <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nouveau contact
+              </Button>
+            }
+          />
+        )}
+
+        {!chargement && !erreurChargement && listeFiltree && listeFiltree.length > 0 && (
+          <ResponsiveDataView
+            mobile={
+              <ListeMobileContacts
+                contacts={listeFiltree}
+                resumes={resumes}
+                onOuvrir={(contact) => ouvrirClient(contact.id)}
+              />
+            }
+            desktop={
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-xs">Nom</TableHead>
+                    <TableHead className="text-xs">Téléphone</TableHead>
+                    <TableHead className="text-xs">Email</TableHead>
+                    <TableHead className="text-xs">Ville</TableHead>
+                    <TableHead className="text-xs">Interventions</TableHead>
+                    <TableHead className="text-xs">Dernière intervention</TableHead>
+                    <TableHead className="text-xs">Date de création</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {listeFiltree.map((contact) => (
+                    <ContactRow
+                      key={contact.id}
+                      contact={contact}
+                      resume={resumes?.get(contact.id)}
+                      onOpen={() => ouvrirClient(contact.id)}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
         )}
       </div>
 

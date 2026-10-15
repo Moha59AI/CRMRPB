@@ -7,6 +7,8 @@ import {
   Archive, ArchiveRestore, Trash2, Clock3, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleEmptyState } from '@/components/ModuleEmptyState';
+import { ModuleErrorState } from '@/components/ModuleErrorState';
 import { useAuth } from '@/features/auth/auth-context';
 import { peutSupprimer } from '@/config/permissions';
 import { DialogueSuppressionArchives } from './dialogue-suppression-archives';
@@ -1619,37 +1621,29 @@ function LoadingState({ view }: { view: ViewMode }) {
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-urgent-soft">
-        <AlertTriangle className="h-6 w-6 text-urgent" />
-      </div>
-      <p className="text-sm text-muted-foreground">{message || 'Erreur de chargement'}</p>
-      <Button variant="outline" className="mt-4 rounded-full" onClick={onRetry}>
-        Réessayer
-      </Button>
-    </div>
+    <ModuleErrorState
+      title="Leads indisponibles"
+      description={message || 'Erreur de chargement'}
+      onRetry={onRetry}
+      className="h-full"
+    />
   );
 }
 
 function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
-        <Search className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
-      </div>
-      <h3 className="text-sm font-semibold text-foreground">
-        {hasFilters ? 'Aucun résultat' : 'Aucun lead pour le moment'}
-      </h3>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        {hasFilters
-          ? 'Essayez de modifier vos filtres de recherche.'
-          : 'Les leads reçus depuis Meta Lead Ads et les webhooks apparaîtront ici.'}
-      </p>
-      {hasFilters && (
-        <Button variant="outline" className="mt-4 rounded-full" onClick={onClear}>
+    <ModuleEmptyState
+      icon={Search}
+      title={hasFilters ? 'Aucun résultat' : 'Aucun lead pour le moment'}
+      description={hasFilters
+        ? 'Essayez de modifier vos filtres de recherche.'
+        : 'Les leads reçus depuis Meta Lead Ads et les webhooks apparaîtront ici.'}
+      action={hasFilters ? (
+        <Button variant="outline" className="rounded-full" onClick={onClear}>
           Effacer les filtres
         </Button>
-      )}
-    </div>
+      ) : undefined}
+      className="h-full"
+    />
   );
 }

@@ -8,6 +8,8 @@ import {
   CheckCircle2, Loader2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleEmptyState } from '@/components/ModuleEmptyState';
+import { ModuleErrorState } from '@/components/ModuleErrorState';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -888,33 +890,31 @@ function TableSkeleton({ rows, cols }: { rows: number; cols: number }) {
 
 function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center">
-      <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
-      <p className="text-sm text-muted-foreground">{message || 'Erreur de chargement'}</p>
-      <Button variant="outline" className="mt-4 rounded-full" onClick={onRetry}>
-        Réessayer
-      </Button>
-    </div>
+    <ModuleErrorState
+      title="Facturation indisponible"
+      description={message || 'Erreur de chargement'}
+      onRetry={onRetry}
+      className="p-12"
+    />
   );
 }
 
 function EmptyState({
   icon, title, description, action,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/50">
-        {icon}
-      </div>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
-      {action}
-    </div>
+    <ModuleEmptyState
+      iconNode={icon}
+      title={title}
+      description={description}
+      action={action}
+      className="p-12"
+    />
   );
 }
 

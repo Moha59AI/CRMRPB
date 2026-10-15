@@ -11,6 +11,8 @@ import { resultatParCle } from './resultat-appel';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { EtatErreur } from '@/components/EtatErreur';
+import { ModuleEmptyState } from '@/components/ModuleEmptyState';
+import { ModuleKpi, ModuleKpiGrid, type KpiTone } from '@/components/ModuleKpi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -516,15 +518,12 @@ function EtatVide({ filtre, recherche }: { filtre: CleFiltre; recherche: string 
       : 'Rien dans cette catégorie pour le moment.';
 
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-done-soft">
-        <CheckCircle2 className="h-6 w-6 text-done" />
-      </div>
-      <h2 className="text-base font-semibold text-foreground">
-        {recherche ? 'Aucun résultat' : 'Rien à relancer'}
-      </h2>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{message}</p>
-    </div>
+    <ModuleEmptyState
+      icon={CheckCircle2}
+      title={recherche ? 'Aucun résultat' : 'Rien à relancer'}
+      description={message}
+      className="py-24"
+    />
   );
 }
 
@@ -537,52 +536,45 @@ function ResumeRelances({
 }) {
   const cartes: {
     cle: CleFiltre; label: string; valeur: number; aide: string;
-    icone: typeof AlertTriangle; style: string;
+    icone: typeof AlertTriangle; tone: KpiTone;
   }[] = [
     {
       cle: 'urgent', label: 'En retard', valeur: compteurs?.urgent ?? 0,
       aide: 'À résorber en premier', icone: AlertTriangle,
-      style: 'text-urgent bg-urgent-soft',
+      tone: 'urgent',
     },
     {
       cle: 'due', label: "Aujourd’hui", valeur: compteurs?.due ?? 0,
       aide: 'Échéances du jour', icone: CalendarClock,
-      style: 'text-due bg-due-soft',
+      tone: 'due',
     },
     {
       cle: 'nouveau', label: 'Jamais appelés', valeur: compteurs?.nouveau ?? 0,
       aide: 'À contacter sans attendre', icone: UserRoundSearch,
-      style: 'text-primary bg-primary/10',
+      tone: 'primary',
     },
     {
       cle: 'documents', label: 'Documents', valeur: compteurs?.documents ?? 0,
       aide: 'Dossiers à débloquer', icone: FileText,
-      style: 'text-muted-foreground bg-muted',
+      tone: 'neutral',
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 border-b border-border px-4 py-3 lg:grid-cols-4">
-      {cartes.map(({ cle, label, valeur, aide, icone: Icone, style }) => (
-        <button
+    <ModuleKpiGrid className="gap-2 border-b border-border px-4 py-3">
+      {cartes.map(({ cle, label, valeur, aide, icone, tone }) => (
+        <ModuleKpi
           key={cle}
-          type="button"
+          label={label}
+          value={valeur}
+          hint={aide}
+          icon={icone}
+          tone={tone}
+          active={filtre === cle}
           onClick={() => onFiltrer(cle)}
-          className={cn(
-            'flex min-h-[116px] min-w-0 items-start gap-2 rounded-xl border px-3 py-3 text-left transition-colors sm:min-h-0 sm:items-center sm:gap-3 sm:py-2.5',
-            filtre === cle ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40',
-          )}
-        >
-          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', style)}>
-            <Icone className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-xl font-semibold tabular text-foreground">{valeur}</span>
-            <span className="block text-sm font-medium leading-tight text-foreground">{label}</span>
-            <span className="mt-1 hidden text-xs leading-tight text-muted-foreground sm:block">{aide}</span>
-          </span>
-        </button>
+          className="min-h-[112px] items-start px-3 py-3 sm:min-h-0 sm:items-center"
+        />
       ))}
-    </div>
+    </ModuleKpiGrid>
   );
 }
