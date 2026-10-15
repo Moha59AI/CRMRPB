@@ -56,13 +56,17 @@ test('Glass complète les fiches sans écraser les saisies du CRM', async () => 
 });
 
 test('la fiche dossier affiche le suivi Glass compréhensible', async () => {
-  const page = await read('src/features/cases/cases-page.tsx');
+  const [page, cockpit] = await Promise.all([
+    read('src/features/cases/cases-page.tsx'),
+    read('src/features/cases/glass-case-cockpit.tsx'),
+  ]);
+  const fiche = `${page}\n${cockpit}`;
   const types = await read('src/types/index.ts');
 
-  assert.match(page, /Suivi Glass Onify/);
-  assert.match(page, /Statut des travaux/);
-  assert.match(page, /Part assureur réglée/);
-  assert.match(page, /caseData\.onify_glass_items/);
+  assert.match(fiche, /Suivi Glass Onify/);
+  assert.match(fiche, /Statut des travaux/);
+  assert.match(fiche, /Part assureur réglée/);
+  assert.match(fiche, /caseData\.onify_glass_items/);
   assert.match(types, /onify_glass_case_id: string \| null/);
 });
 

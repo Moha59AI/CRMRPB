@@ -84,14 +84,19 @@ test('les dossiers Glass sont tries par date d arrivee du plus recent au plus an
 });
 
 test('la fiche Glass reprend la hierarchie de traitement Onify sans modifier les donnees Onify', async () => {
-  const page = await read('src/features/cases/cases-page.tsx');
+  const [page, cockpit] = await Promise.all([
+    read('src/features/cases/cases-page.tsx'),
+    read('src/features/cases/glass-case-cockpit.tsx'),
+  ]);
+  const fiche = `${page}\n${cockpit}`;
 
   assert.match(page, /Préparer le dossier/);
   assert.match(page, /Transmettre/);
   assert.match(page, /Clôturer le dossier/);
-  assert.match(page, /Client & véhicule/);
-  assert.match(page, /Sinistre & assurance/);
-  assert.match(page, /Documents & règlement/);
+  assert.match(fiche, /Client & véhicule/);
+  assert.match(fiche, /Sinistre & assurance/);
+  assert.match(fiche, /Documents & règlement/);
+  assert.match(cockpit, /xl:grid-cols-\[minmax\(0,7fr\)_minmax\(300px,3fr\)\]/);
   assert.match(page, /Ouvrir le dossier Onify/);
   assert.doesNotMatch(page, /updateCase\(id, \{ status \}\)/);
 });

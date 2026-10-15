@@ -6,7 +6,7 @@ import {
   Phone, MessageSquare, Receipt, CheckCircle2, Circle, AlertCircle,
   ArrowRight, ExternalLink, Loader2, X, RefreshCw, CalendarClock,
   ClipboardCheck, Banknote, ChevronRight, Clock3, LayoutDashboard,
-  LayoutGrid, List, SlidersHorizontal, Send, ArrowUpDown,
+  LayoutGrid, List, SlidersHorizontal, Send, ArrowUpDown, MapPin, Navigation,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Input } from '@/components/ui/input';
@@ -46,7 +46,9 @@ import { fetchAffaireByCaseId } from '@/services/affaires-service';
 import { useEstMobile } from '@/hooks/use-media-query';
 import { syncOnify } from '@/features/integrations/onify/onify-service';
 import { useAuth } from '@/features/auth/auth-context';
+import { LogoAssureur } from '@/features/insurers/insurer-logo';
 import { cn } from '@/lib/utils';
+import { GlassCaseCockpit } from './glass-case-cockpit';
 import { Vehicle3DViewer } from './vehicle-3d-viewer';
 import { VehicleThumbnail } from './vehicle-thumbnail';
 
@@ -256,14 +258,6 @@ function compareGlassCases(a: WindscreenCase, b: WindscreenCase, sortOrder: Glas
     { numeric: true },
   );
 }
-
-const onifyPaymentLabels: Record<string, string> = {
-  pending: 'Aucun règlement reçu',
-  tva_only: 'TVA réglée',
-  insurance_only: 'Part assureur réglée',
-  partial: 'Règlement partiel',
-  complete: 'Règlement complet',
-};
 
 function getStatusColor(status: string): string {
   const early = ['new', 'qualification'];
@@ -1930,85 +1924,32 @@ function CaseDetailSheet({
                   onFinance={() => setTab('facturation')}
                 />
 
-                <GlassOperationalEditor caseData={caseData} lead={leadInfo} />
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-4">
-                    <Section title="Client & véhicule">
-                      <InfoRow label="Client" value={clientName} />
-                      <InfoRow label="Téléphone" value={clientInfo?.phone ?? null} />
-                      <InfoRow label="Email" value={clientInfo?.email ?? null} />
-                      <InfoRow label="Adresse" value={[
-                        (clientInfo as Contact)?.address ?? (clientInfo as Lead)?.address,
-                        (clientInfo as Contact)?.postal_code ?? (clientInfo as Lead)?.postal_code,
-                        (clientInfo as Contact)?.city ?? (clientInfo as Lead)?.city,
-                      ].filter(Boolean).join(', ') || null} />
-                      <div className="my-2 border-t border-border" />
-                      <InfoRow label="Marque / Modèle" value={[
-                        caseData.onify_vehicle_make ?? leadInfo?.vehicle_make,
-                        caseData.onify_vehicle_model ?? leadInfo?.vehicle_model,
-                      ].filter(Boolean).join(' ') || null} />
-                      <InfoRow label="Immatriculation" value={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration} />
-                      <InfoRow label="Vitrage" value={caseData.glass_type} />
-                      <InfoRow label="ADAS" value={caseData.has_adas_camera ? 'Caméra présente' : 'Non renseigné'} />
-                    </Section>
-
-                    <Section title="Intervention">
-                      <InfoRow label="Statut des travaux" value={caseData.onify_work_status_label ?? caseData.onify_work_status_code} />
-                      <InfoRow label="Technicien / conseiller" value={advisorName} />
-                      <InfoRow label="Type" value={caseData.intervention_type ? interventionTypeLabels[caseData.intervention_type] : null} />
-                      <InfoRow label="Rendez-vous" value={formatDateTime(caseData.appointment_date)} />
-                      <InfoRow label="Adresse" value={[
-                        caseData.intervention_address,
-                        caseData.intervention_postal_code,
-                        caseData.intervention_city,
-                      ].filter(Boolean).join(', ') || null} />
-                    </Section>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Section title="Sinistre & assurance">
-                      <InfoRow label="Compagnie" value={caseData.insurance_name ?? caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance} />
-                      <InfoRow label="Franchise" value={formatFranchise(caseData.franchise_amount, caseData.franchise_type)} />
-                      <InfoRow label="N° contrat" value={caseData.insurance_contract_number} />
-                      <InfoRow label="N° sinistre" value={caseData.insurance_claim_number} />
-                      <InfoRow label="Date du sinistre" value={formatDate(caseData.insurance_claim_date)} />
-                    </Section>
-
-                    <Section title="Documents & règlement">
-                      <InfoRow
-                        label="Documents client"
-                        value={documents && documents.length > 0
-                          ? `${documents.filter((document) => document.uploaded).length} / ${documents.length} reçus`
-                          : 'Aucun document demandé'}
-                      />
-                      <InfoRow label="Factures" value={invoices.length > 0 ? `${invoices.length}` : 'Aucune facture'} />
-                      <InfoRow label="Total facturé" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.total) : null} />
-                      <InfoRow label="Encaissé" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.paid) : null} />
-                      <InfoRow label="Reste dû" value={invoiceSummary.hasInvoice ? formatEuroExact(invoiceSummary.due) : null} />
-                      <InfoRow label="Marge estimée" value={formatEuro(caseData.estimated_margin)} />
-                    </Section>
-                  </div>
-                </div>
-
-                {caseData.onify_glass_case_id && (
-                  <Section title="Suivi Glass Onify">
-                    <div className="grid gap-x-8 md:grid-cols-2">
-                      <InfoRow label="Référence Glass" value={caseData.onify_reference ?? caseData.case_number} />
-                      <InfoRow label="Type de dossier" value={caseData.onify_type} />
-                      <InfoRow label="Statut du dossier" value={caseData.onify_status_label ?? caseData.onify_status_code} />
-                      <InfoRow label="Étape Onify" value={caseData.onify_stage} />
-                      <InfoRow label="Vitrages" value={caseData.onify_glass_items?.join(', ') || null} />
-                      <InfoRow
-                        label="Règlement"
-                        value={caseData.onify_payment_status
-                          ? onifyPaymentLabels[caseData.onify_payment_status] ?? caseData.onify_payment_status
-                          : null}
-                      />
-                      <InfoRow label="Dernière mise à jour" value={formatDateTime(caseData.onify_updated_at ?? caseData.onify_synced_at)} />
-                    </div>
-                  </Section>
-                )}
+                <GlassCaseCockpit
+                  caseData={caseData}
+                  client={clientInfo}
+                  lead={leadInfo}
+                  clientName={clientName}
+                  insurerName={caseData.insurance_name ?? caseData.onify_insurer_name ?? insurerInfo?.name ?? leadInfo?.insurance ?? null}
+                  advisorName={advisorName}
+                  documents={documents ?? []}
+                  appointments={appointments}
+                  activities={activities}
+                  invoiceCount={invoices.length}
+                  finance={invoiceSummary}
+                  supplierDocumentCount={affaire?.supplier_document_count ?? 0}
+                  vehicleVisual={(
+                    <Vehicle3DViewer
+                      make={caseData.onify_vehicle_make ?? leadInfo?.vehicle_make}
+                      model={caseData.onify_vehicle_model ?? leadInfo?.vehicle_model}
+                      registration={caseData.onify_vehicle_registration ?? leadInfo?.vehicle_registration}
+                    />
+                  )}
+                  operationalEditor={<GlassOperationalEditor caseData={caseData} lead={leadInfo} />}
+                  onDocuments={() => setTab('documents')}
+                  onAppointment={() => setTab('rdv')}
+                  onFinance={() => setTab('facturation')}
+                  onHistory={() => setTab('historique')}
+                />
 
                 <AffaireJourney
                   hasLead={Boolean(leadInfo)}
@@ -2421,164 +2362,273 @@ function GlassOperationalEditor({ caseData, lead }: { caseData: WindscreenCase; 
     onError: (error) => toast.error((error as Error)?.message || 'Enregistrement impossible'),
   });
 
+  const routeAddress = [
+    form.interventionAddress,
+    form.interventionPostalCode,
+    form.interventionCity,
+  ].map((part) => part.trim()).filter(Boolean).join(' ');
+  const routeHref = routeAddress
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(routeAddress)}`
+    : null;
+  const insuranceSource = caseData.franchise_source === 'onify'
+    ? 'Onify'
+    : caseData.franchise_source === 'lead'
+      ? 'Lead conservé'
+      : caseData.franchise_source === 'manual'
+        ? 'Modifié dans le CRM'
+        : null;
+
   return (
-    <section data-operational-editor className="rounded-xl border border-primary/25 bg-primary/[0.025] p-4 sm:p-5">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <section data-operational-editor className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-foreground">Informations opérationnelles</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Toujours modifiables dans Glass. Les données du lead sont conservées et Onify complète ce qui manque.
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-semibold text-foreground">Informations opérationnelles</p>
+            <Badge variant="outline" className="rounded-full border-primary/25 bg-primary/5 text-[9px] uppercase tracking-wide text-primary">
+              Toujours modifiables
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Toujours modifiables dans Glass. Les données du lead restent visibles ; Onify complète les champs sans les effacer.
           </p>
         </div>
-        {caseData.franchise_source && (
+        {insuranceSource && (
           <Badge variant="outline" className="w-fit rounded-full text-[10px]">
-            Franchise · {caseData.franchise_source === 'onify'
-              ? 'Onify'
-              : caseData.franchise_source === 'lead' ? 'Lead' : 'Modifiée dans le CRM'}
+            Franchise · {insuranceSource}
           </Badge>
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div className="space-y-1.5 md:col-span-2 xl:col-span-1">
-          <Label htmlFor={`glass-${caseData.id}-address`}>Adresse d’intervention</Label>
-          <Input
-            id={`glass-${caseData.id}-address`}
-            value={form.interventionAddress}
-            onChange={(event) => setForm((current) => ({ ...current, interventionAddress: event.target.value }))}
-            placeholder="Rue et numéro"
-          />
-        </div>
-        <div className="grid grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)] gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor={`glass-${caseData.id}-postal-code`}>Code postal</Label>
-            <Input
-              id={`glass-${caseData.id}-postal-code`}
-              value={form.interventionPostalCode}
-              inputMode="numeric"
-              onChange={(event) => setForm((current) => ({ ...current, interventionPostalCode: event.target.value }))}
-              placeholder="59100"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`glass-${caseData.id}-city`}>Ville</Label>
-            <Input
-              id={`glass-${caseData.id}-city`}
-              value={form.interventionCity}
-              onChange={(event) => setForm((current) => ({ ...current, interventionCity: event.target.value }))}
-              placeholder="Ville"
-            />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Type d’intervention</Label>
-          <Select
-            value={form.interventionType}
-            onValueChange={(value: GlassOperationalFormState['interventionType']) => (
-              setForm((current) => ({ ...current, interventionType: value }))
+      <div className="grid items-start gap-4 xl:grid-cols-3">
+        <article className="overflow-hidden rounded-2xl border border-upcoming/20 bg-card shadow-sm">
+          <header className="flex items-center justify-between gap-3 border-b border-border bg-upcoming-soft/70 px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-upcoming text-white">
+                <MapPin className="h-4.5 w-4.5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-upcoming">Intervention</p>
+                <h3 className="truncate text-sm font-semibold text-foreground">Lieu & déplacement</h3>
+              </div>
+            </div>
+            <Badge variant="outline" className="rounded-full border-upcoming/25 bg-card text-[9px] text-upcoming">
+              {caseData.intervention_address ? 'Dossier Glass' : lead ? 'Lead' : 'À saisir'}
+            </Badge>
+          </header>
+          <div className="space-y-3 p-4">
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-address`}>Adresse d’intervention</Label>
+              <Input
+                id={`glass-${caseData.id}-address`}
+                value={form.interventionAddress}
+                onChange={(event) => setForm((current) => ({ ...current, interventionAddress: event.target.value }))}
+                placeholder="Rue et numéro"
+              />
+            </div>
+            <div className="grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-2">
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor={`glass-${caseData.id}-postal-code`}>Code postal</Label>
+                <Input
+                  id={`glass-${caseData.id}-postal-code`}
+                  value={form.interventionPostalCode}
+                  inputMode="numeric"
+                  onChange={(event) => setForm((current) => ({ ...current, interventionPostalCode: event.target.value }))}
+                  placeholder="59100"
+                />
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor={`glass-${caseData.id}-city`}>Ville</Label>
+                <Input
+                  id={`glass-${caseData.id}-city`}
+                  value={form.interventionCity}
+                  onChange={(event) => setForm((current) => ({ ...current, interventionCity: event.target.value }))}
+                  placeholder="Ville"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type d’intervention</Label>
+              <Select
+                value={form.interventionType}
+                onValueChange={(value: GlassOperationalFormState['interventionType']) => (
+                  setForm((current) => ({ ...current, interventionType: value }))
+                )}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Non renseigné</SelectItem>
+                  <SelectItem value="home">À domicile</SelectItem>
+                  <SelectItem value="workshop">À l’atelier</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {routeHref ? (
+              <Button asChild type="button" size="sm" variant="outline" className="w-full rounded-xl">
+                <a href={routeHref} target="_blank" rel="noreferrer">
+                  <Navigation className="mr-1.5 h-3.5 w-3.5" />
+                  Ouvrir l’itinéraire
+                </a>
+              </Button>
+            ) : (
+              <Button type="button" size="sm" variant="outline" className="w-full rounded-xl" disabled>
+                <Navigation className="mr-1.5 h-3.5 w-3.5" />
+                Adresse à compléter
+              </Button>
             )}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Non renseigné</SelectItem>
-              <SelectItem value="home">À domicile</SelectItem>
-              <SelectItem value="workshop">À l’atelier</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-insurance`}>Assurance</Label>
-          <Input
-            id={`glass-${caseData.id}-insurance`}
-            value={form.insuranceName}
-            onChange={(event) => setForm((current) => ({ ...current, insuranceName: event.target.value }))}
-            placeholder="Compagnie d’assurance"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-franchise`}>Franchise</Label>
-          <div className="grid grid-cols-[minmax(0,1fr)_108px] gap-2">
-            <Input
-              id={`glass-${caseData.id}-franchise`}
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={form.franchiseAmount}
-              onChange={(event) => setForm((current) => ({ ...current, franchiseAmount: event.target.value }))}
-              placeholder="Non connue"
-            />
-            <Select
-              value={form.franchiseType}
-              onValueChange={(value: GlassOperationalFormState['franchiseType']) => (
-                setForm((current) => ({ ...current, franchiseType: value }))
-              )}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="euro">€</SelectItem>
-                <SelectItem value="percent">%</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-gift`}>Cadeau / offre</Label>
-          <Input
-            id={`glass-${caseData.id}-gift`}
-            value={form.gift}
-            onChange={(event) => setForm((current) => ({ ...current, gift: event.target.value }))}
-            placeholder="Ex. iPhone 14, carte cadeau…"
-          />
-        </div>
+        </article>
 
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-gift-amount`}>Montant du cadeau</Label>
-          <Input
-            id={`glass-${caseData.id}-gift-amount`}
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
-            value={form.giftAmount}
-            onChange={(event) => setForm((current) => ({ ...current, giftAmount: event.target.value }))}
-            placeholder="Montant en euros"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-contract`}>N° de contrat</Label>
-          <Input
-            id={`glass-${caseData.id}-contract`}
-            value={form.contractNumber}
-            onChange={(event) => setForm((current) => ({ ...current, contractNumber: event.target.value }))}
-            placeholder="Numéro de contrat"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-claim`}>N° de sinistre</Label>
-          <Input
-            id={`glass-${caseData.id}-claim`}
-            value={form.claimNumber}
-            onChange={(event) => setForm((current) => ({ ...current, claimNumber: event.target.value }))}
-            placeholder="Numéro de sinistre"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`glass-${caseData.id}-claim-date`}>Date du sinistre</Label>
-          <Input
-            id={`glass-${caseData.id}-claim-date`}
-            type="date"
-            value={form.claimDate}
-            onChange={(event) => setForm((current) => ({ ...current, claimDate: event.target.value }))}
-          />
-        </div>
+        <article className="overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-sm">
+          <header className="flex items-center justify-between gap-3 border-b border-border bg-primary/[0.06] px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <LogoAssureur nom={form.insuranceName} taille="md" className="rounded-xl" />
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-primary">Sinistre</p>
+                <h3 className="truncate text-sm font-semibold text-foreground">Sinistre & assurance</h3>
+              </div>
+            </div>
+            {insuranceSource && (
+              <Badge variant="outline" className="rounded-full border-primary/25 bg-card text-[9px] text-primary">
+                {insuranceSource}
+              </Badge>
+            )}
+          </header>
+          <div className="space-y-3 p-4">
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-insurance`}>Compagnie d’assurance</Label>
+              <Input
+                id={`glass-${caseData.id}-insurance`}
+                value={form.insuranceName}
+                onChange={(event) => setForm((current) => ({ ...current, insuranceName: event.target.value }))}
+                placeholder="Compagnie d’assurance"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-franchise`}>Franchise</Label>
+              <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+                <Input
+                  id={`glass-${caseData.id}-franchise`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.franchiseAmount}
+                  onChange={(event) => setForm((current) => ({ ...current, franchiseAmount: event.target.value }))}
+                  placeholder="Non connue"
+                />
+                <Select
+                  value={form.franchiseType}
+                  onValueChange={(value: GlassOperationalFormState['franchiseType']) => (
+                    setForm((current) => ({ ...current, franchiseType: value }))
+                  )}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="euro">€</SelectItem>
+                    <SelectItem value="percent">%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Vide = montant encore inconnu. Le zéro reste une vraie valeur.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor={`glass-${caseData.id}-contract`}>N° de contrat</Label>
+                <Input
+                  id={`glass-${caseData.id}-contract`}
+                  value={form.contractNumber}
+                  onChange={(event) => setForm((current) => ({ ...current, contractNumber: event.target.value }))}
+                  placeholder="Contrat"
+                />
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor={`glass-${caseData.id}-claim`}>N° de sinistre</Label>
+                <Input
+                  id={`glass-${caseData.id}-claim`}
+                  value={form.claimNumber}
+                  onChange={(event) => setForm((current) => ({ ...current, claimNumber: event.target.value }))}
+                  placeholder="Sinistre"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-claim-date`}>Date du sinistre</Label>
+              <Input
+                id={`glass-${caseData.id}-claim-date`}
+                type="date"
+                value={form.claimDate}
+                onChange={(event) => setForm((current) => ({ ...current, claimDate: event.target.value }))}
+              />
+            </div>
+          </div>
+        </article>
+
+        <article className="overflow-hidden rounded-2xl border border-due/20 bg-card shadow-sm">
+          <header className="flex items-center justify-between gap-3 border-b border-border bg-due-soft/70 px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-due text-white">
+                <GiftIcon className="h-4.5 w-4.5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-due">Commercial</p>
+                <h3 className="truncate text-sm font-semibold text-foreground">Cadeau & offre</h3>
+              </div>
+            </div>
+            <Badge variant="outline" className="rounded-full border-due/25 bg-card text-[9px] text-due">
+              {caseData.gift_type || caseData.offer ? 'Dossier Glass' : lead?.offer ? 'Lead' : 'À saisir'}
+            </Badge>
+          </header>
+          <div className="space-y-3 p-4">
+            <div className="rounded-xl border border-due/20 bg-due-soft px-4 py-4 text-center">
+              <GiftIcon className="mx-auto h-7 w-7 text-due" aria-hidden />
+              <p className="mt-2 truncate text-sm font-semibold text-foreground">{form.gift || 'Aucun cadeau sélectionné'}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {form.giftAmount ? `${form.giftAmount.replace('.', ',')} € renseignés` : 'Montant non renseigné'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-gift`}>Cadeau / offre</Label>
+              <Input
+                id={`glass-${caseData.id}-gift`}
+                value={form.gift}
+                onChange={(event) => setForm((current) => ({ ...current, gift: event.target.value }))}
+                placeholder="Ex. iPhone 14, carte cadeau…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`glass-${caseData.id}-gift-amount`}>Valeur du cadeau</Label>
+              <div className="relative">
+                <Input
+                  id={`glass-${caseData.id}-gift-amount`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={form.giftAmount}
+                  onChange={(event) => setForm((current) => ({ ...current, giftAmount: event.target.value }))}
+                  placeholder="Montant"
+                  className="pr-9"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">€</span>
+              </div>
+            </div>
+            <p className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[10px] leading-relaxed text-muted-foreground">
+              Cette information suit l’affaire du lead jusqu’au dossier Glass et à la remise au client.
+            </p>
+          </div>
+        </article>
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2.5">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            L’enregistrement met à jour Glass et le lead historique lié, sans modifier les statuts pilotés par Onify.
+          </p>
+        </div>
         <Button
           type="button"
-          className="rounded-full"
+          className="shrink-0 rounded-full"
           disabled={saveMutation.isPending}
           onClick={() => saveMutation.mutate()}
         >
