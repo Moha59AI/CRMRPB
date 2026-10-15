@@ -73,5 +73,26 @@ jobs:
             --exclude-glob index.html \
             ./dist/ /CRMRPB-main/CRMRPB-main/dist/
           put -O /CRMRPB-main/CRMRPB-main/dist/ ./dist/index.html
+
+          # Apache refuse tout le domaine si un dossier parent n'est pas
+          # traversable ou si le .htaccess n'est pas lisible. Les permissions
+          # sont donc normalisees apres chaque transfert SFTP.
+          chmod 755 /CRMRPB-main
+          chmod 755 /CRMRPB-main/CRMRPB-main
+          chmod 755 /CRMRPB-main/CRMRPB-main/dist
+          chmod 755 /CRMRPB-main/CRMRPB-main/dist/assets
+          chmod 644 /CRMRPB-main/CRMRPB-main/dist/.htaccess
+          chmod 644 /CRMRPB-main/CRMRPB-main/dist/index.html
           bye
           LFTP_COMMANDS
+
+      - name: Verifier que le CRM repond apres publication
+        run: |
+          for tentative in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --location \
+              --output /dev/null https://crm.relaisparebrise.fr/login; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

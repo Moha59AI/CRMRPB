@@ -24,6 +24,18 @@ test('le deploiement publie index apres toutes les ressources empreintees', asyn
   assert.ok(publication > exclusion);
 });
 
+test('le deploiement garantit les permissions requises par Apache', async () => {
+  const workflow = await read('.github/workflows/deploy-ionos.yml');
+  const publication = workflow.indexOf('put -O /CRMRPB-main/CRMRPB-main/dist/ ./dist/index.html');
+  const dossierWeb = workflow.indexOf('chmod 755 /CRMRPB-main/CRMRPB-main/dist');
+  const htaccess = workflow.indexOf('chmod 644 /CRMRPB-main/CRMRPB-main/dist/.htaccess');
+  const verification = workflow.indexOf('https://crm.relaisparebrise.fr/login');
+
+  assert.ok(dossierWeb > publication);
+  assert.ok(htaccess > dossierWeb);
+  assert.ok(verification > htaccess);
+});
+
 test('le navigateur repare sans intervention un ancien cache CSS pollue', async () => {
   const main = await read('src/main.tsx');
   const recovery = await read('src/lib/stylesheet-recovery.ts');
