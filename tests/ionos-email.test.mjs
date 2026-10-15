@@ -182,7 +182,12 @@ test('la boite mail separe les recus des envoyes et detecte assureurs experts et
   assert.match(service, /\.in\('type', \['email_inbound', 'email_outbound'\]\)/);
   assert.match(service, /EMAIL_LIST_COLUMNS/);
   assert.match(service, /fetchEmailHtml/);
-  assert.match(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
+  assert.match(service, /fetchMailboxEmailPage/);
+  assert.match(service, /\.limit\(EMAIL_PAGE_SIZE\)/);
+  assert.match(service, /created_at\.lt\.\$\{cursor\.created_at\}/);
+  assert.doesNotMatch(service, /\.range\(offset, offset \+ EMAIL_PAGE_SIZE - 1\)/);
+  assert.match(inbox, /useInfiniteQuery/);
+  assert.match(inbox, /Charger les messages plus anciens/);
   assert.match(classification, /insurer\.claims_email/);
   assert.match(classification, /solutions-expertises\.com/);
   assert.match(classification, /vsf41\.com/);

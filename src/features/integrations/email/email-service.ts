@@ -28,6 +28,16 @@ export interface IonosSyncResult {
   remaining_history: boolean;
 }
 
+export interface MailboxEmailCursor {
+  created_at: string;
+  id: string;
+}
+
+export interface MailboxEmailPage {
+  emails: Communication[];
+  next_cursor: MailboxEmailCursor | null;
+}
+
 export interface SendIonosEmailInput {
   to?: string;
   contact_id?: string;
@@ -68,13 +78,13 @@ export interface SupplierDocumentProcessingState {
   created_at: string;
 }
 
-const EMAIL_PAGE_SIZE = 500;
+const EMAIL_PAGE_SIZE = 250;
 const EMAIL_LIST_COLUMNS = [
   'id', 'workspace_id', 'lead_id', 'case_id', 'contact_id', 'user_id',
   'type', 'direction', 'status', 'content', 'subject', 'duration_seconds',
   'recording_url', 'provider', 'external_id', 'delivered_at', 'sender_email',
   'recipient_email', 'email_message_id', 'email_in_reply_to', 'email_smtp_accepted_at',
-  'email_sent_copy_saved_at', 'email_attachments',
+  'email_sent_copy_saved_at', 'email_attachments', 'read_at', 'starred_at',
   'created_at',
 ].join(',');
 
@@ -308,33 +318,44 @@ export async function getIonosMailboxStatus(): Promise<IonosMailboxStatus> {
 }
 
 /**
- * Charge l'historique complet par lots pour que la boite mail ne masque pas
- * les anciens messages derriere la limite implicite de Supabase.
+ * Charge une tranche de la boite par curseur. Un OFFSET profond finissait par
+ * parcourir plus de 12 000 lignes et Supabase annulait toute la page pour
+ * depassement de temps. Le curseur garde la requete bornee, meme quand
+ * l'historique IONOS devient volumineux.
  */
-export async function fetchMailboxEmails(): Promise<Communication[]> {
-  const emails: Communication[] = [];
-  let offset = 0;
+export async function fetchMailboxEmailPage(
+  cursor: MailboxEmailCursor | null = null,
+): Promise<MailboxEmailPage> {
+  let query = supabase
+    .from('communications')
+    // Le HTML peut peser plusieurs centaines de Ko : la liste reste legere
+    // et le charge seulement pour le message effectivement ouvert.
+    .select(EMAIL_LIST_COLUMNS)
+    .in('type', ['email_inbound', 'email_outbound'])
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(EMAIL_PAGE_SIZE);
 
-  while (true) {
-    const { data, error } = await supabase
-      .from('communications')
-      // Le HTML peut peser plusieurs centaines de Ko : la liste reste legere
-      // et le charge seulement pour le message effectivement ouvert.
-      .select(EMAIL_LIST_COLUMNS)
-      .in('type', ['email_inbound', 'email_outbound'])
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(offset, offset + EMAIL_PAGE_SIZE - 1);
-    if (error) throw new Error(error.message);
-
-    const page = ((data ?? []) as unknown as Array<Omit<Communication, 'email_html'>>)
-      .map((email) => ({ ...email, email_html: null }));
-    emails.push(...page);
-    if (page.length < EMAIL_PAGE_SIZE) break;
-    offset += EMAIL_PAGE_SIZE;
+  if (cursor) {
+    query = query.or([
+      `created_at.lt.${cursor.created_at}`,
+      `and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
+    ].join(','));
   }
 
-  return emails;
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const emails = ((data ?? []) as unknown as Array<Omit<Communication, 'email_html'>>)
+    .map((email) => ({ ...email, email_html: null }));
+  const last = emails.at(-1);
+
+  return {
+    emails,
+    next_cursor: emails.length === EMAIL_PAGE_SIZE && last
+      ? { created_at: last.created_at, id: last.id }
+      : null,
+  };
 }
 
 export async function fetchSupplierDocumentProcessingStates(): Promise<SupplierDocumentProcessingState[]> {

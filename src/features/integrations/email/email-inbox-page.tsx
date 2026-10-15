@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowLeft,
@@ -56,10 +56,10 @@ import {
   type EmailPartyClassification,
 } from './email-classification';
 import {
-  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmails, fetchSupplierDocumentProcessingStates,
+  fetchEmailAttachment, fetchEmailHtml, fetchMailboxEmailPage, fetchSupplierDocumentProcessingStates,
   getIonosConnection, getIonosMailboxStatus, parseIonosSettings, prepareEmailAttachments,
   retrySupplierDocumentProcessing, sendIonosEmail, syncIonosMailbox,
-  type IonosMailboxStatus, type SupplierDocumentProcessingState,
+  type IonosMailboxStatus, type MailboxEmailCursor, type SupplierDocumentProcessingState,
   marquerEmailLu, basculerSuiviEmail, marquerEmailsLus,
 } from './email-service';
 import { EmailAttachmentPicker } from './email-attachment-picker';
@@ -254,10 +254,16 @@ export function EmailInboxPage() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [actionEnCours, setActionEnCours] = useState(false);
 
-  const emailsQuery = useQuery({
+  const emailsQuery = useInfiniteQuery({
     queryKey: ['mailbox-emails'],
-    queryFn: fetchMailboxEmails,
+    queryFn: ({ pageParam }) => fetchMailboxEmailPage(pageParam),
+    initialPageParam: null as MailboxEmailCursor | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
+  const mailboxEmails = useMemo(
+    () => emailsQuery.data?.pages.flatMap((page) => page.emails) ?? [],
+    [emailsQuery.data],
+  );
   const supplierProcessingQuery = useQuery({
     queryKey: ['supplier-document-processing'],
     queryFn: fetchSupplierDocumentProcessingStates,
@@ -307,14 +313,14 @@ export function EmailInboxPage() {
 
   const classificationMap = useMemo(() => {
     const map = new Map<string, EmailPartyClassification>();
-    (emailsQuery.data ?? []).forEach((email) => {
+    mailboxEmails.forEach((email) => {
       map.set(email.id, classifyEmailParty(email, insurersQuery.data ?? []));
     });
     return map;
-  }, [emailsQuery.data, insurersQuery.data]);
+  }, [mailboxEmails, insurersQuery.data]);
 
   const counts = useMemo(() => {
-    const emails = emailsQuery.data ?? [];
+    const emails = mailboxEmails;
     return {
       inbound: emails.filter((email) => email.direction === 'inbound').length,
       suppliers: emails.filter((email) => (
@@ -331,11 +337,11 @@ export function EmailInboxPage() {
       unlinked: emails.filter((email) => !email.contact_id && !email.lead_id).length,
       starred: emails.filter((email) => email.starred_at).length,
     } satisfies Record<MailboxView, number>;
-  }, [emailsQuery.data, classificationMap]);
+  }, [mailboxEmails, classificationMap]);
 
   /** Non-lus par vue : c'est ce chiffre qui appelle une action, pas le total. */
   const nonLus = useMemo(() => {
-    const emails = (emailsQuery.data ?? []).filter(estNonLu);
+    const emails = mailboxEmails.filter(estNonLu);
     const parVue = (cle: MailboxView) => emails.filter((email) => (
       matchesMailboxView(email, cle, classificationMap.get(email.id) ?? OTHER_CLASSIFICATION)
     )).length;
@@ -345,11 +351,11 @@ export function EmailInboxPage() {
       outbound: 0, all: parVue('all'), unlinked: parVue('unlinked'),
       starred: emails.filter((email) => email.starred_at).length,
     };
-  }, [emailsQuery.data, classificationMap]);
+  }, [mailboxEmails, classificationMap]);
 
   const suivis = useMemo(
-    () => (emailsQuery.data ?? []).filter((email) => email.starred_at).length,
-    [emailsQuery.data],
+    () => mailboxEmails.filter((email) => email.starred_at).length,
+    [mailboxEmails],
   );
 
   // Le rail reprend l'ordre de Gmail : ce qui arrive, ce qu'on a mis de
@@ -370,7 +376,7 @@ export function EmailInboxPage() {
 
   const filteredEmails = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('fr-FR');
-    return (emailsQuery.data ?? []).filter((email) => {
+    return mailboxEmails.filter((email) => {
       const classification = classificationMap.get(email.id) ?? OTHER_CLASSIFICATION;
       if (!matchesMailboxView(email, view, classification)) return false;
       if (!needle) return true;
@@ -387,7 +393,7 @@ export function EmailInboxPage() {
         classification.organization,
       ].some((value) => value?.toLocaleLowerCase('fr-FR').includes(needle));
     });
-  }, [emailsQuery.data, search, view, contactMap, leadMap, classificationMap]);
+  }, [mailboxEmails, search, view, contactMap, leadMap, classificationMap]);
 
   useEffect(() => {
     if (filteredEmails.length === 0) {
@@ -434,7 +440,7 @@ export function EmailInboxPage() {
 
     // L'affichage ne dépend pas de l'écriture : le message s'ouvre tout de
     // suite, et la liste se rafraîchit quand la base a pris la marque.
-    const email = emailsQuery.data?.find((item) => item.id === id);
+    const email = mailboxEmails.find((item) => item.id === id);
     if (!email || !estNonLu(email)) return;
     void marquerEmailLu(id)
       .then(() => queryClient.invalidateQueries({ queryKey: ['emails'] }))
@@ -640,7 +646,18 @@ export function EmailInboxPage() {
                 <p className="mt-1 max-w-xs text-sm text-muted-foreground">
                   {search ? 'Essayez une autre recherche.' : 'Les nouveaux messages apparaîtront automatiquement ici.'}
                 </p>
-                {!search && (
+                {emailsQuery.hasNextPage ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-4 rounded-full"
+                    disabled={emailsQuery.isFetchingNextPage}
+                    onClick={() => void emailsQuery.fetchNextPage()}
+                  >
+                    {emailsQuery.isFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Chercher dans les messages plus anciens
+                  </Button>
+                ) : !search && (
                   <Button size="sm" className="mt-4 rounded-full" onClick={() => setComposeOpen(true)}>
                     <PenLine className="mr-2 h-4 w-4" />
                     Écrire un email
@@ -682,6 +699,21 @@ export function EmailInboxPage() {
                     />
                   );
                 })}
+                {emailsQuery.hasNextPage && (
+                  <div className="flex justify-center bg-card p-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      disabled={emailsQuery.isFetchingNextPage}
+                      onClick={() => void emailsQuery.fetchNextPage()}
+                    >
+                      {emailsQuery.isFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Charger les messages plus anciens
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -986,10 +1018,7 @@ function EmailDetail({
     [supplierJobs],
   );
 
-  const handleLinked = (updatedEmail: Communication) => {
-    queryClient.setQueryData<Communication[]>(['mailbox-emails'], (current) => (
-      current?.map((item) => item.id === updatedEmail.id ? updatedEmail : item) ?? current
-    ));
+  const handleLinked = () => {
     void queryClient.invalidateQueries({ queryKey: ['mailbox-emails'] });
     void queryClient.invalidateQueries({ queryKey: ['communications'] });
   };
