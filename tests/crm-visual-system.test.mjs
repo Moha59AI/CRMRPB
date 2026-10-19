@@ -67,6 +67,31 @@ test('le cockpit reste responsive et enveloppe toutes les routes', async () => {
   assert.match(css, /@media \(max-width: 639px\)/);
 });
 
+test('la nouvelle experience garde les modules accessibles en un geste', async () => {
+  const [layout, palette, barre, hero] = await Promise.all([
+    read('src/layouts/app-layout.tsx'),
+    read('src/components/CRMCommandPalette.tsx'),
+    read('src/components/BarreOnglets.tsx'),
+    read('src/components/ModuleHero.tsx'),
+  ]);
+
+  assert.match(layout, /CLE_SIDEBAR_DEPLOYEE/);
+  assert.match(layout, /localStorage\.getItem/);
+  assert.match(layout, /return true/);
+  assert.match(layout, /<CRMCommandPalette/);
+  assert.match(layout, /Centre de pilotage/);
+  assert.match(layout, /bg-\[#0b1117\]/);
+
+  assert.match(palette, /event\.key\.toLowerCase\(\) === 'k'/);
+  assert.match(palette, /ouvrirNouveauLead: true/);
+  assert.match(palette, /sections\.map/);
+
+  assert.match(barre, /rounded-2xl/);
+  assert.match(barre, /backdrop-blur-xl/);
+  assert.match(hero, /Espace en direct/);
+  assert.match(hero, /sm:text-3xl/);
+});
+
 test('les briques visuelles Bolt sont partagees par les vrais modules', async () => {
   const [
     kpi, section, toolbar, empty, error, responsive,

@@ -42,10 +42,11 @@ export function BarreOnglets({
   const dansLeTiroir = !onglets.some((i) => estActif(i.path));
 
   return (
-    <nav
-      aria-label="Navigation principale"
-      className="safe-bas flex shrink-0 items-stretch border-t border-border bg-card md:hidden"
-    >
+    <div className="safe-bas shrink-0 bg-background/95 px-2 pb-2 pt-1 backdrop-blur-xl md:hidden">
+      <nav
+        aria-label="Navigation principale"
+        className="flex items-stretch rounded-2xl border border-border/80 bg-card/95 p-1 shadow-[var(--shadow-3)]"
+      >
       {onglets.map((item) => {
         const actif = estActif(item.path);
         const Icone = item.icon;
@@ -55,14 +56,17 @@ export function BarreOnglets({
             type="button"
             onClick={() => navigate(item.path)}
             aria-current={actif ? 'page' : undefined}
-            className="flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-1.5"
+            className={cn(
+              'relative flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 pb-1 pt-1.5 transition-colors',
+              actif && 'bg-accent/70',
+            )}
           >
             {/* La pastille tient lieu d'état actif : sur cinq icônes de la
                 même couleur, une simple nuance ne se repère pas d'un coup. */}
             <span
               className={cn(
                 'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
-                actif ? 'bg-accent text-accent-foreground' : 'text-muted-foreground',
+                actif ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground',
               )}
             >
               <Icone className="h-5 w-5" strokeWidth={actif ? 2.25 : 1.75} />
@@ -70,7 +74,7 @@ export function BarreOnglets({
             <span
               className={cn(
                 'max-w-full truncate text-[10px] font-medium leading-none',
-                actif ? 'text-foreground' : 'text-muted-foreground',
+                actif ? 'font-semibold text-primary' : 'text-muted-foreground',
               )}
             >
               {item.label}
@@ -83,7 +87,10 @@ export function BarreOnglets({
         type="button"
         onClick={onOuvrirMenu}
         aria-label="Ouvrir le menu"
-        className="flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-1.5"
+        className={cn(
+          'flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 pb-1 pt-1.5 transition-colors',
+          dansLeTiroir && 'bg-accent/70',
+        )}
       >
         {/* Sur un écran qui n'est dans aucun onglet, c'est « Menu » qui porte
             l'état actif — sans quoi la barre prétendrait qu'on n'est nulle
@@ -91,7 +98,7 @@ export function BarreOnglets({
         <span
           className={cn(
             'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
-            dansLeTiroir ? 'bg-accent text-accent-foreground' : 'text-muted-foreground',
+            dansLeTiroir ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground',
           )}
         >
           <Menu className="h-5 w-5" strokeWidth={dansLeTiroir ? 2.25 : 1.75} />
@@ -99,12 +106,13 @@ export function BarreOnglets({
         <span
           className={cn(
             'text-[10px] font-medium leading-none',
-            dansLeTiroir ? 'text-foreground' : 'text-muted-foreground',
+            dansLeTiroir ? 'font-semibold text-primary' : 'text-muted-foreground',
           )}
         >
           Menu
         </span>
       </button>
-    </nav>
+      </nav>
+    </div>
   );
 }

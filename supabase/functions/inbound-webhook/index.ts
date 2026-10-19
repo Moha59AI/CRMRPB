@@ -11,6 +11,373 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 );
 
+const clientDocumentBucket = 'client-documents';
+const maxDocumentBytes = 10 * 1024 * 1024;
+const maxDocumentsBytes = 10 * 1024 * 1024;
+
+const websiteDocumentFields = {
+  carte_grise: { documentType: 'registration', label: 'Carte grise' },
+  attestation_assurance: { documentType: 'insurance_cert', label: 'Attestation d’assurance' },
+  photo_vehicule: { documentType: 'photo_windscreen', label: 'Photo face avant' },
+} as const;
+
+const defaultDocumentRules = [
+  { document_type: 'registration', label: 'Carte grise', enabled: true, required: true },
+  { document_type: 'insurance_cert', label: 'Attestation d’assurance', enabled: true, required: true },
+  { document_type: 'technical_inspection', label: 'Contrôle technique', enabled: true, required: false },
+  { document_type: 'other', label: 'Autre document', enabled: true, required: false },
+];
+
+type WebsiteDocumentField = keyof typeof websiteDocumentFields;
+
+interface IncomingDocument {
+  field: WebsiteDocumentField;
+  documentType: string;
+  label: string;
+  file: File;
+  mimeType: string;
+  extension: string;
+  originalName: string;
+}
+
+interface ParsedIncomingRequest {
+  payload: Record<string, unknown>;
+  documents: IncomingDocument[];
+}
+
+interface DocumentRule {
+  document_type: string;
+  label: string;
+  enabled: boolean;
+  required: boolean;
+}
+
+function responseJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function safeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeFileName(value: string): string {
+  const name = value.split(/[\\/]/).pop()?.replace(/\p{Cc}/gu, '').trim() ?? '';
+  return name.slice(0, 180) || 'document';
+}
+
+function startsWithBytes(bytes: Uint8Array, signature: number[]): boolean {
+  return signature.every((value, index) => bytes[index] === value);
+}
+
+function detectDocumentType(bytes: Uint8Array): { mimeType: string; extension: string } | null {
+  if (startsWithBytes(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
+    return { mimeType: 'application/pdf', extension: 'pdf' };
+  }
+  if (startsWithBytes(bytes, [0xff, 0xd8, 0xff])) {
+    return { mimeType: 'image/jpeg', extension: 'jpg' };
+  }
+  if (startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return { mimeType: 'image/png', extension: 'png' };
+  }
+
+  const ascii = new TextDecoder('ascii').decode(bytes);
+  if (ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP') {
+    return { mimeType: 'image/webp', extension: 'webp' };
+  }
+  if (ascii.slice(4, 8) === 'ftyp') {
+    const brand = ascii.slice(8, 12).toLowerCase();
+    if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
+      return { mimeType: 'image/heic', extension: 'heic' };
+    }
+    if (['mif1', 'msf1'].includes(brand)) {
+      return { mimeType: 'image/heif', extension: 'heif' };
+    }
+  }
+  return null;
+}
+
+async function validateIncomingDocument(
+  field: WebsiteDocumentField,
+  file: File,
+): Promise<IncomingDocument> {
+  if (file.size <= 0 || file.size > maxDocumentBytes) {
+    throw new Error(`Le fichier ${safeFileName(file.name)} dépasse la limite de 10 Mo.`);
+  }
+
+  const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const detected = detectDocumentType(header);
+  if (!detected) {
+    throw new Error(`Le format du fichier ${safeFileName(file.name)} n’est pas accepté.`);
+  }
+
+  const definition = websiteDocumentFields[field];
+  return {
+    field,
+    documentType: definition.documentType,
+    label: definition.label,
+    file,
+    mimeType: detected.mimeType,
+    extension: detected.extension,
+    originalName: safeFileName(file.name),
+  };
+}
+
+async function parseIncomingRequest(req: Request): Promise<ParsedIncomingRequest> {
+  const contentType = req.headers.get('content-type')?.toLowerCase() ?? '';
+  if (!contentType.includes('multipart/form-data')) {
+    const bodyText = await req.text();
+    try {
+      return { payload: JSON.parse(bodyText), documents: [] };
+    } catch {
+      return { payload: { raw: bodyText }, documents: [] };
+    }
+  }
+
+  const form = await req.formData();
+  const rawPayload = form.get('payload');
+  let payload: Record<string, unknown> = {};
+  if (typeof rawPayload === 'string' && rawPayload.trim()) {
+    try {
+      payload = JSON.parse(rawPayload) as Record<string, unknown>;
+    } catch {
+      throw new Error('Le contenu du formulaire est invalide.');
+    }
+  } else {
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') payload[key] = value;
+    }
+  }
+
+  const documents: IncomingDocument[] = [];
+  for (const field of Object.keys(websiteDocumentFields) as WebsiteDocumentField[]) {
+    const value = form.get(field);
+    if (value instanceof File && value.size > 0) {
+      documents.push(await validateIncomingDocument(field, value));
+    }
+  }
+
+  const totalBytes = documents.reduce((total, document) => total + document.file.size, 0);
+  if (totalBytes > maxDocumentsBytes) {
+    throw new Error('L’ensemble des documents dépasse la limite de 10 Mo.');
+  }
+
+  return { payload, documents };
+}
+
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function documentRules(value: unknown): DocumentRule[] {
+  if (!Array.isArray(value)) return defaultDocumentRules;
+  const rules = value.flatMap((raw): DocumentRule[] => {
+    if (!raw || typeof raw !== 'object') return [];
+    const rule = raw as Record<string, unknown>;
+    if (typeof rule.document_type !== 'string' || typeof rule.label !== 'string') return [];
+    return [{
+      document_type: rule.document_type,
+      label: rule.label.trim() || rule.document_type,
+      enabled: rule.enabled === true,
+      required: rule.required === true,
+    }];
+  });
+  return rules.length > 0 ? rules : defaultDocumentRules;
+}
+
+async function attachWebsiteDocuments(
+  workspaceId: string,
+  leadId: string,
+  documents: IncomingDocument[],
+): Promise<{ count: number; complete: boolean; requestId: string | null }> {
+  if (documents.length === 0) return { count: 0, complete: false, requestId: null };
+
+  const now = new Date().toISOString();
+  const { data: existingRequest, error: requestLookupError } = await supabase
+    .from('client_document_requests')
+    .select('id, submitted_at')
+    .eq('workspace_id', workspaceId)
+    .eq('lead_id', leadId)
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (requestLookupError) throw requestLookupError;
+
+  let requestId = existingRequest?.id ?? null;
+  const createdRequest = !requestId;
+  if (!requestId) {
+    const tokenSeed = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const { data: request, error: requestError } = await supabase
+      .from('client_document_requests')
+      .insert({
+        workspace_id: workspaceId,
+        lead_id: leadId,
+        token_hash: await sha256(tokenSeed),
+        status: 'open',
+        expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        last_opened_at: now,
+      })
+      .select('id')
+      .single();
+    if (requestError || !request) throw requestError ?? new Error('Demande documentaire introuvable.');
+    requestId = request.id;
+  } else {
+    await supabase
+      .from('client_document_requests')
+      .update({ last_opened_at: now, updated_at: now })
+      .eq('id', requestId);
+  }
+
+  if (createdRequest) {
+    const { data: settings } = await supabase
+      .from('client_document_portal_settings')
+      .select('document_rules')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+    const rules = documentRules(settings?.document_rules).filter((rule) => rule.enabled);
+    const documentTypes = new Set(rules.map((rule) => rule.document_type));
+    for (const document of documents) {
+      if (!documentTypes.has(document.documentType)) {
+        rules.push({
+          document_type: document.documentType,
+          label: document.label,
+          enabled: true,
+          required: false,
+        });
+        documentTypes.add(document.documentType);
+      }
+    }
+    const { error: rulesError } = await supabase.from('client_document_items').insert(
+      rules.map((rule) => ({
+        workspace_id: workspaceId,
+        request_id: requestId,
+        document_type: rule.document_type,
+        label: rule.label,
+        required: rule.required,
+      })),
+    );
+    if (rulesError) throw rulesError;
+  }
+
+  const { data: existingItems, error: itemsError } = await supabase
+    .from('client_document_items')
+    .select('id, document_type, storage_path')
+    .eq('request_id', requestId);
+  if (itemsError) throw itemsError;
+
+  const itemsByType = new Map((existingItems ?? []).map((item) => [item.document_type, item]));
+  for (const document of documents) {
+    let item = itemsByType.get(document.documentType);
+    if (!item) {
+      const { data: insertedItem, error: insertItemError } = await supabase
+        .from('client_document_items')
+        .insert({
+          workspace_id: workspaceId,
+          request_id: requestId,
+          document_type: document.documentType,
+          label: document.label,
+          required: false,
+        })
+        .select('id, document_type, storage_path')
+        .single();
+      if (insertItemError || !insertedItem) throw insertItemError ?? new Error('Document introuvable.');
+      item = insertedItem;
+      itemsByType.set(document.documentType, item);
+    }
+
+    const storagePath = `${workspaceId}/${requestId}/${item.id}/${crypto.randomUUID()}.${document.extension}`;
+    const bytes = new Uint8Array(await document.file.arrayBuffer());
+    const { error: uploadError } = await supabase.storage
+      .from(clientDocumentBucket)
+      .upload(storagePath, bytes, { contentType: document.mimeType, upsert: false });
+    if (uploadError) throw uploadError;
+
+    const { error: updateError } = await supabase
+      .from('client_document_items')
+      .update({
+        status: 'uploaded',
+        storage_path: storagePath,
+        original_name: document.originalName,
+        mime_type: document.mimeType,
+        size_bytes: document.file.size,
+        uploaded_at: now,
+        validated_at: null,
+        rejection_reason: null,
+        notification_email_sent_at: null,
+        notification_email_error: null,
+      })
+      .eq('id', item.id)
+      .eq('request_id', requestId);
+    if (updateError) {
+      await supabase.storage.from(clientDocumentBucket).remove([storagePath]);
+      throw updateError;
+    }
+
+    if (item.storage_path && item.storage_path !== storagePath) {
+      await supabase.storage.from(clientDocumentBucket).remove([item.storage_path]);
+    }
+
+    const { error: activityError } = await supabase.from('client_document_activity').insert({
+      workspace_id: workspaceId,
+      request_id: requestId,
+      lead_id: leadId,
+      event_type: 'document_uploaded',
+      document_type: document.documentType,
+      device_type: 'unknown',
+    });
+    if (activityError) console.warn('website document activity', activityError.message);
+  }
+
+  const { data: remaining, error: remainingError } = await supabase
+    .from('client_document_items')
+    .select('id')
+    .eq('request_id', requestId)
+    .eq('required', true)
+    .not('status', 'in', '(uploaded,validated)');
+  if (remainingError) throw remainingError;
+
+  const complete = (remaining ?? []).length === 0;
+  const { error: requestUpdateError } = await supabase
+    .from('client_document_requests')
+    .update({
+      status: complete ? 'complete' : 'open',
+      submitted_at: complete ? existingRequest?.submitted_at ?? now : null,
+      last_opened_at: now,
+      updated_at: now,
+    })
+    .eq('id', requestId);
+  if (requestUpdateError) throw requestUpdateError;
+
+  await supabase.from('leads').update({
+    status: complete ? 'documents_received' : 'documents_requested',
+    updated_at: now,
+  })
+    .eq('id', leadId)
+    .eq('workspace_id', workspaceId)
+    .in('status', [
+      'new', 'to_call', 'calling', 'nrp', 'interested',
+      'documents_requested', 'documents_received',
+    ]);
+
+  if (complete) {
+    const { error: completionActivityError } = await supabase.from('client_document_activity').insert({
+      workspace_id: workspaceId,
+      request_id: requestId,
+      lead_id: leadId,
+      event_type: 'request_completed',
+      device_type: 'unknown',
+    });
+    if (completionActivityError) console.warn('website document completion activity', completionActivityError.message);
+  }
+
+  return { count: documents.length, complete, requestId };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -46,14 +413,20 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Endpoint disabled' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Parse the payload
-    const bodyText = await req.text();
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(bodyText);
-    } catch {
-      payload = { raw: bodyText };
-    }
+    const parsedRequest = await parseIncomingRequest(req);
+    const payload: Record<string, unknown> = parsedRequest.documents.length > 0
+      ? {
+          ...parsedRequest.payload,
+          documents: parsedRequest.documents.map((document) => ({
+            field: document.field,
+            document_type: document.documentType,
+            label: document.label,
+            file_name: document.originalName,
+            mime_type: document.mimeType,
+            size_bytes: document.file.size,
+          })),
+        }
+      : parsedRequest.payload;
 
     // Extract headers
     const headers: Record<string, string> = {};
@@ -175,9 +548,11 @@ Deno.serve(async (req: Request) => {
         if (!mappedLead[field]) mappedLead[field] = getFirstValid(payload, candidates) ?? null;
       }
 
+      let leadId: string | null = null;
+
       // Create lead if we have at least a name or phone
       if (mappedLead.first_name || mappedLead.last_name || mappedLead.phone || mappedLead.email) {
-        const { error: leadError } = await supabase.rpc('upsert_lead_from_webhook', {
+        const { data: storedLeadId, error: leadError } = await supabase.rpc('upsert_lead_from_webhook', {
           p_workspace_id: endpoint.workspace_id,
           p_first_name: mappedLead.first_name,
           p_last_name: mappedLead.last_name,
@@ -209,38 +584,51 @@ Deno.serve(async (req: Request) => {
         if (leadError) {
           throw new Error(`Lead creation failed: ${leadError.message}`);
         }
+        if (typeof storedLeadId === 'string') leadId = storedLeadId;
       }
 
+      if (parsedRequest.documents.length > 0 && !leadId) {
+        throw new Error('Les documents reçus ne peuvent pas être rattachés : le lead est introuvable.');
+      }
+
+      const attachedDocuments = leadId
+        ? await attachWebsiteDocuments(endpoint.workspace_id, leadId, parsedRequest.documents)
+        : { count: 0, complete: false, requestId: null };
+
       // Mark as processed
-      await supabase
+      const { error: processedError } = await supabase
         .from('webhook_events')
         .update({
           processing_status: 'processed',
           processed_at: new Date().toISOString(),
         })
         .eq('id', eventRecord.id);
+      if (processedError) throw processedError;
+
+      return responseJson({
+        success: true,
+        event_id: eventRecord.id,
+        lead_id: leadId,
+        documents_received: attachedDocuments.count,
+        documents_complete: attachedDocuments.complete,
+        document_request_id: attachedDocuments.requestId,
+      });
 
     } catch (err) {
-      console.error('Webhook processing error:', err.message);
+      const message = safeErrorMessage(err);
+      console.error('Webhook processing error:', message);
       await supabase
         .from('webhook_events')
         .update({
           processing_status: 'error',
-          error_message: err.message,
+          error_message: message,
           processing_attempts: 1,
         })
         .eq('id', eventRecord.id);
+      return responseJson({ success: false, event_id: eventRecord.id, error: message }, 500);
     }
-
-    return new Response(
-      JSON.stringify({ success: true, event_id: eventRecord.id }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return responseJson({ error: safeErrorMessage(err) }, 500);
   }
 });
 
