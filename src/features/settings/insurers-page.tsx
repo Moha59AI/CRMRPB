@@ -128,7 +128,7 @@ export function InsurersPage() {
         }
       />
 
-      <div className="space-y-4 overflow-y-auto p-6">
+      <div className="space-y-4 overflow-y-auto p-3 sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             La franchise renseignée ici est proposée à la qualification d'un lead.

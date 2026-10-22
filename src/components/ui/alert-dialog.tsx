@@ -40,7 +40,7 @@ const AlertDialogContent = React.forwardRef<
         // pour répondre, et à le redescendre pour continuer. Ancrée en bas,
         // la feuille arrive là où la main se trouve déjà, et la marge
         // inférieure tient compte du trait d'accueil de l'iPhone.
-        'fixed z-50 grid gap-4 border bg-background p-6 shadow-lg duration-200',
+        'fixed z-50 grid gap-4 border bg-background p-4 shadow-lg duration-200 sm:p-6',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-2xl',

@@ -43,8 +43,16 @@ export function ModuleToolbar({
           />
         </div>
       )}
-      {filters && <div className="flex flex-wrap items-center gap-2">{filters}</div>}
-      {actions && <div className="flex flex-wrap items-center gap-2 lg:ml-auto">{actions}</div>}
+      {filters && (
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-0.5 scrollbar-thin [&>*]:shrink-0 lg:flex-wrap lg:overflow-visible lg:pb-0">
+          {filters}
+        </div>
+      )}
+      {actions && (
+        <div className="grid w-full grid-cols-2 gap-2 [&>*]:min-w-0 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:ml-auto">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

@@ -273,8 +273,8 @@ export function AppLayout() {
         {/* En-tete telephone : le menu complet vit dans un tiroir plutot que
             dans une barre du bas. Onze entrees reparties en cinq sections n'y
             tiendraient pas, et les tronquer ferait perdre le classement. */}
-        <header className="safe-haut shrink-0 border-b border-white/10 bg-[#0b1117] text-white shadow-md md:hidden">
-          <div className="flex h-16 items-center gap-2 px-3">
+        <header className="safe-haut shrink-0 border-b border-white/10 bg-[#0b1117]/95 text-white shadow-md backdrop-blur-xl md:hidden">
+          <div className="flex h-14 min-w-0 items-center gap-1.5 overflow-hidden px-2.5 min-[390px]:gap-2 min-[390px]:px-3">
           <Sheet open={tiroirOuvert} onOpenChange={setTiroirOuvert}>
             <SheetTrigger asChild>
               <Button
@@ -286,7 +286,7 @@ export function AppLayout() {
               </Button>
             </SheetTrigger>
 
-            <SheetContent side="left" className="w-72 p-0 sm:p-0">
+            <SheetContent side="left" className="w-[min(20rem,calc(100vw-0.75rem))] p-0 sm:p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <TiroirNavigation
                 sections={sectionsVisibles}
@@ -305,12 +305,12 @@ export function AppLayout() {
           </Sheet>
 
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-[9px] font-black tracking-[-0.08em] text-white shadow-sm">
+            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-[9px] font-black tracking-[-0.08em] text-white shadow-sm min-[360px]:flex">
               RPB
             </div>
             <div className="min-w-0">
               <span className="block truncate text-sm font-semibold text-white">{titreCourant}</span>
-              <span className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-white/40">
+              <span className="hidden items-center gap-1 text-[9px] uppercase tracking-wider text-white/40 min-[360px]:flex">
                 <Activity className="h-2.5 w-2.5 text-primary" /> En direct
               </span>
             </div>
@@ -327,13 +327,13 @@ export function AppLayout() {
             <Search className="h-5 w-5" />
           </Button>
 
-          <div className="crm-mobile-notifications w-11 shrink-0">
+          <div className="crm-mobile-notifications h-11 w-11 shrink-0">
             {!estTechnicien && (
               <>{estMobile && <ClocheNotifications reduit mobile />}</>
             )}
           </div>
 
-          <Avatar className="h-8 w-8 shrink-0 ring-1 ring-white/15">
+          <Avatar className="hidden h-8 w-8 shrink-0 ring-1 ring-white/15 min-[390px]:flex">
             <AvatarFallback className="bg-white/10 text-xs font-semibold text-white">
               {initials}
             </AvatarFallback>

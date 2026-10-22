@@ -76,9 +76,9 @@ export function FollowUpPage() {
         title="Suivi"
         description="Relances et suivis en attente"
         action={
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[130px] rounded-full">
+              <SelectTrigger className="w-full rounded-full sm:w-[130px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -89,7 +89,7 @@ export function FollowUpPage() {
               </SelectContent>
             </Select>
             <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger className="w-[160px] rounded-full">
+              <SelectTrigger className="w-full rounded-full sm:w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -105,7 +105,7 @@ export function FollowUpPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+      <div className="flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-6">
         {isLoading && (
           <div className="space-y-3 max-w-3xl">
             {Array.from({ length: 6 }).map((_, i) => (

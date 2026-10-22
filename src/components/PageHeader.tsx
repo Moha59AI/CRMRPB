@@ -23,7 +23,7 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
   const Icon = current?.icon ?? LayoutDashboard;
 
   return (
-    <div className="gutter-x shrink-0 py-3 sm:py-4">
+    <div className="gutter-x shrink-0 py-2.5 sm:py-4">
       <ModuleHero
         title={title}
         description={description}

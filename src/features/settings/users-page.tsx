@@ -155,7 +155,7 @@ export function UsersPage() {
         }
       />
 
-      <div className="space-y-6 overflow-y-auto p-6">
+      <div className="space-y-4 overflow-y-auto p-3 sm:space-y-6 sm:p-6">
         {/* Invitations en attente */}
         {estAdmin && enAttente.length > 0 && (
           <Card className="rounded-xl border border-border">

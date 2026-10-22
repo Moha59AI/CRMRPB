@@ -8,6 +8,7 @@ import {
   BarChart3, TrendingUp, AlertCircle, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { ResponsiveDataView } from '@/components/ResponsiveDataView';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -155,11 +156,11 @@ export function CampaignsPage() {
       />
 
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3 gutter-x border-b border-border py-4">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-2 items-end gap-2 gutter-x border-b border-border py-3 sm:flex sm:flex-wrap sm:gap-3 sm:py-4">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Canal</Label>
           <Select value={channelFilter} onValueChange={setChannelFilter}>
-            <SelectTrigger className="w-[160px] rounded-lg">
+            <SelectTrigger className="w-full rounded-lg sm:w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -170,10 +171,10 @@ export function CampaignsPage() {
           </Select>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Statut</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px] rounded-lg">
+            <SelectTrigger className="w-full rounded-lg sm:w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -225,57 +226,73 @@ export function CampaignsPage() {
         )}
 
         {!isLoading && !isError && filteredCampaigns.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs">Nom</TableHead>
-                <TableHead className="text-xs">Canal</TableHead>
-                <TableHead className="text-xs">Statut</TableHead>
-                <TableHead className="text-xs text-right">Envoyés</TableHead>
-                <TableHead className="text-xs text-right">Livrés</TableHead>
-                <TableHead className="text-xs text-right">Échecs</TableHead>
-                <TableHead className="text-xs text-right">Réponses</TableHead>
-                <TableHead className="text-xs text-right">Conversions</TableHead>
-                <TableHead className="text-xs">Date programmée</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCampaigns.map((c) => (
-                <TableRow
-                  key={c.id}
-                  className="cursor-pointer"
-                  onClick={() => setSelectedCampaignId(c.id)}
-                >
-                  <TableCell className="font-medium text-foreground">
-                    <div className="flex items-center gap-2">
-                      {c.channel === 'sms' ? (
-                        <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="truncate">{c.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="rounded-full text-[10px]">
-                      {channelLabel(c.channel)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`rounded-full text-[10px] ${campaignStatusColor(c.status)}`}>
-                      {campaignStatusLabels[c.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{c.sent_count}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{c.delivered_count}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{c.failed_count}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{c.reply_count}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{c.conversion_count}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{formatDate(c.scheduled_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ResponsiveDataView
+            mobile={
+              <ul className="space-y-2 p-3">
+                {filteredCampaigns.map((campaign) => (
+                  <li key={campaign.id}>
+                    <CampaignMobileCard
+                      campaign={campaign}
+                      onOpen={() => setSelectedCampaignId(campaign.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            }
+            desktop={
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-xs">Nom</TableHead>
+                    <TableHead className="text-xs">Canal</TableHead>
+                    <TableHead className="text-xs">Statut</TableHead>
+                    <TableHead className="text-xs text-right">Envoyés</TableHead>
+                    <TableHead className="text-xs text-right">Livrés</TableHead>
+                    <TableHead className="text-xs text-right">Échecs</TableHead>
+                    <TableHead className="text-xs text-right">Réponses</TableHead>
+                    <TableHead className="text-xs text-right">Conversions</TableHead>
+                    <TableHead className="text-xs">Date programmée</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCampaigns.map((c) => (
+                    <TableRow
+                      key={c.id}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedCampaignId(c.id)}
+                    >
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          {c.channel === 'sms' ? (
+                            <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          )}
+                          <span className="truncate">{c.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="rounded-full text-[10px]">
+                          {channelLabel(c.channel)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`rounded-full text-[10px] ${campaignStatusColor(c.status)}`}>
+                          {campaignStatusLabels[c.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{c.sent_count}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{c.delivered_count}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{c.failed_count}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{c.reply_count}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{c.conversion_count}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDate(c.scheduled_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
         )}
       </div>
 
@@ -296,6 +313,55 @@ export function CampaignsPage() {
         contacts={contacts ?? []}
       />
     </>
+  );
+}
+
+function CampaignMobileCard({ campaign, onOpen }: { campaign: Campaign; onOpen: () => void }) {
+  const Icon = campaign.channel === 'sms' ? MessageSquare : Mail;
+  const metrics = [
+    ['Envoyés', campaign.sent_count],
+    ['Livrés', campaign.delivered_count],
+    ['Réponses', campaign.reply_count],
+    ['Conversions', campaign.conversion_count],
+  ] as const;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="app-card-motion w-full rounded-xl border border-border bg-card p-4 text-left shadow-sm"
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-foreground">{campaign.name}</span>
+          <span className="mt-1.5 flex flex-wrap gap-1.5">
+            <Badge variant="outline" className="rounded-full text-[10px]">
+              {channelLabel(campaign.channel)}
+            </Badge>
+            <Badge variant="outline" className={`rounded-full text-[10px] ${campaignStatusColor(campaign.status)}`}>
+              {campaignStatusLabels[campaign.status]}
+            </Badge>
+          </span>
+        </span>
+      </div>
+
+      <span className="mt-4 grid grid-cols-4 gap-1 rounded-xl bg-muted/45 p-2.5">
+        {metrics.map(([label, value]) => (
+          <span key={label} className="min-w-0 text-center">
+            <span className="tabular block text-sm font-semibold text-foreground">{value}</span>
+            <span className="block truncate text-[9px] text-muted-foreground">{label}</span>
+          </span>
+        ))}
+      </span>
+
+      <span className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>Programmée</span>
+        <span className="tabular font-medium text-foreground">{formatDate(campaign.scheduled_at)}</span>
+      </span>
+    </button>
   );
 }
 

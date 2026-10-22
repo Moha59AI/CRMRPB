@@ -118,7 +118,7 @@ export function CadencesPage() {
         }
       />
 
-      <div className="space-y-6 overflow-y-auto p-6">
+      <div className="space-y-4 overflow-y-auto p-3 sm:space-y-6 sm:p-6">
         <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-4 py-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">

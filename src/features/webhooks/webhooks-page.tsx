@@ -103,7 +103,7 @@ export function WebhooksPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+      <div className="flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-6">
         {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (

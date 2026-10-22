@@ -51,22 +51,22 @@ export function ModuleHero({
         aria-hidden
       />
 
-      <div className="relative grid gap-5 px-5 py-5 sm:px-7 sm:py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
-        <div className="flex min-w-0 items-start gap-4 sm:gap-5">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-primary text-primary-foreground shadow-[0_14px_30px_-14px_rgba(22,163,74,0.95)] sm:h-14 sm:w-14">
+      <div className="relative grid gap-3.5 px-4 py-4 sm:gap-5 sm:px-7 sm:py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
+        <div className="flex min-w-0 items-start gap-3 sm:gap-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-primary text-primary-foreground shadow-[0_14px_30px_-14px_rgba(22,163,74,0.95)] sm:h-14 sm:w-14 sm:rounded-2xl">
             <Icon className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} aria-hidden />
           </span>
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-secondary-foreground/60 sm:text-[10px]">
+              <p className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-secondary-foreground/60 sm:text-[10px] sm:tracking-[0.18em]">
                 {eyebrow}
               </p>
-              <span className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary sm:text-[10px]">
+              <span className="hidden items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary min-[380px]:flex sm:text-[10px]">
                 <Activity className="h-3 w-3" /> Espace en direct
               </span>
             </div>
-            <h1 className="mt-2 text-balance text-2xl font-semibold tracking-tight text-secondary-foreground sm:text-3xl">
+            <h1 className="mt-2 break-words text-xl font-semibold tracking-tight text-secondary-foreground min-[380px]:text-2xl sm:text-3xl">
               {title}
             </h1>
             {description && (
@@ -78,14 +78,14 @@ export function ModuleHero({
         </div>
 
         {action && (
-          <div className="crm-module-actions flex w-full min-w-0 flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/15 p-2.5 shadow-inner backdrop-blur-sm lg:w-auto lg:max-w-[48rem] lg:justify-end">
+          <div className="crm-module-actions flex w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/15 p-2 shadow-inner backdrop-blur-sm sm:rounded-2xl sm:p-2.5 lg:w-auto lg:max-w-[48rem] lg:justify-end">
             {action}
           </div>
         )}
       </div>
 
       {footer && (
-        <div className="relative border-t border-white/10 bg-black/10 px-5 py-3 sm:px-7">
+        <div className="relative overflow-x-auto border-t border-white/10 bg-black/10 px-4 py-3 scrollbar-thin sm:px-7">
           {footer}
         </div>
       )}

@@ -416,16 +416,78 @@
   }
 
   @media (max-width: 639px) {
+    :root {
+      /* 12 px laisse respirer une carte de 351 px sur un iPhone de 375 px,
+         sans sacrifier la largeur utile aux champs et aux listes. */
+      --gutter-x: 0.75rem;
+      --gutter-y: 0.75rem;
+      --gutter-gap: 0.75rem;
+    }
+
     .crm-module-hero {
       border-radius: 1.25rem;
     }
-    .crm-module-actions > * {
+
+    /* Les actions d'en-tête restent accessibles au pouce et ne débordent
+       plus quand un module en propose deux ou trois. */
+    .crm-module-actions > :where(button, a, [role='button']) {
+      flex: 1 1 calc(50% - 0.25rem);
       min-width: 0;
+      min-height: 2.75rem;
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+    .crm-module-actions > :only-child {
+      flex-basis: 100%;
+    }
+    .crm-module-actions > div {
+      min-width: 0;
+      width: 100%;
+    }
+
+    /* Les tableaux qui n'ont pas encore de vue en cartes restent lisibles :
+       largeur naturelle, glissement horizontal fluide et indication visuelle
+       qu'une suite existe à droite. */
+    .crm-table-scroll {
+      padding-bottom: 0.25rem;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
+      -webkit-mask-image: linear-gradient(to right, black 0 calc(100% - 1rem), transparent 100%);
+      mask-image: linear-gradient(to right, black 0 calc(100% - 1rem), transparent 100%);
+    }
+    .crm-table-scroll:focus-within,
+    .crm-table-scroll:hover {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+    .crm-table-scroll :where(th, td) {
+      scroll-snap-align: start;
+    }
+
+    /* Une longue référence, une adresse ou un objet de mail ne doit jamais
+       agrandir la page entière au-delà de l'écran. */
+    [data-crm-module-shell] :where(p, h1, h2, h3, dd, label) {
+      overflow-wrap: anywhere;
+    }
+    [data-crm-module-shell] :where(input, textarea, select) {
+      max-width: 100%;
     }
     [data-crm-module-shell] {
+      min-width: 0;
+      max-width: 100vw;
       background-image:
         radial-gradient(circle at 100% 0%, hsl(var(--primary) / 0.09), transparent 18rem),
         linear-gradient(180deg, hsl(var(--background) / 0.84), hsl(var(--surface)) 10rem);
+    }
+  }
+
+  @media (max-width: 359px) {
+    :root {
+      --gutter-x: 0.625rem;
+    }
+
+    .crm-module-actions > :where(button, a, [role='button']) {
+      flex-basis: 100%;
     }
   }
 

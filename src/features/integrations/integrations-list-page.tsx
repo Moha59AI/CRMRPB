@@ -71,7 +71,7 @@ export function IntegrationsListPage() {
           </Button>
         }
       />
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           {integrations.map((integration) => {
             const Icon = integration.icon;

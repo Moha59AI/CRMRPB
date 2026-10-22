@@ -36,3 +36,28 @@ test('agenda et relances restent exploitables sur un ecran etroit', async () => 
   assert.match(relances, /flex-nowrap[\s\S]*overflow-x-auto/);
   assert.match(relances, /grid grid-cols-2 items-center/);
 });
+
+test('les campagnes passent en cartes et les tableaux gardent une largeur lisible', async () => {
+  const [campaigns, table, css] = await Promise.all([
+    read('src/features/campaigns/campaigns-page.tsx'),
+    read('src/components/ui/table.tsx'),
+    read('src/index.css'),
+  ]);
+
+  assert.match(campaigns, /<ResponsiveDataView/);
+  assert.match(campaigns, /<CampaignMobileCard/);
+  assert.match(campaigns, /grid-cols-4 gap-1/);
+  assert.match(table, /crm-table-scroll/);
+  assert.match(table, /min-w-max[\s\S]*md:min-w-0/);
+  assert.match(css, /--gutter-x: 0\.75rem/);
+  assert.match(css, /\.crm-module-actions/);
+});
+
+test('la coque mobile garde le titre visible sur les petits iPhone', async () => {
+  const layout = await read('src/layouts/app-layout.tsx');
+
+  assert.match(layout, /h-14 min-w-0/);
+  assert.match(layout, /min-\[360px\]:flex/);
+  assert.match(layout, /min-\[390px\]:flex/);
+  assert.match(layout, /w-\[min\(20rem,calc\(100vw-0\.75rem\)\)\]/);
+});

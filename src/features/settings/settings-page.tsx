@@ -79,7 +79,7 @@ export function SettingsPage() {
         }
       />
 
-      <div className="overflow-y-auto p-6">
+      <div className="overflow-y-auto p-3 sm:p-6">
         <Tabs defaultValue={estAdmin ? 'etat' : 'entreprise'} className="space-y-6">
           <TabsList className="rounded-full">
             {estAdmin && <TabsTrigger value="etat" className="rounded-full">Vue d'ensemble</TabsTrigger>}

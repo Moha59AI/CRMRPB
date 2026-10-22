@@ -233,7 +233,7 @@ export function MetaSettingsPage() {
       />
 
       <div className="overflow-y-auto scrollbar-thin">
-        <div className="mx-auto max-w-3xl space-y-6 p-6">
+        <div className="mx-auto max-w-3xl space-y-4 p-3 sm:space-y-6 sm:p-6">
           {/* Permissions notice */}
           {!canManage && (
             <Card className="rounded-xl border border-warning/30 bg-warning/5 p-4">
