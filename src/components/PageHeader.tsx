@@ -8,9 +8,10 @@ interface PageHeaderProps {
   title: string;
   description?: string;
   action?: ReactNode;
+  compactMobile?: boolean;
 }
 
-export function PageHeader({ title, description, action }: PageHeaderProps) {
+export function PageHeader({ title, description, action, compactMobile = false }: PageHeaderProps) {
   const { pathname } = useLocation();
   const sections = [...navSections, ...settingsNavSections];
   const items = sections.flatMap((section) => section.items.map((item) => ({
@@ -23,13 +24,17 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
   const Icon = current?.icon ?? LayoutDashboard;
 
   return (
-    <div className="gutter-x shrink-0 py-2.5 sm:py-4">
+    <div
+      className="gutter-x crm-page-header shrink-0 py-2.5 sm:py-4"
+      data-compact-mobile={compactMobile ? 'true' : undefined}
+    >
       <ModuleHero
         title={title}
         description={description}
         action={action}
         icon={Icon}
         eyebrow={current ? `${current.section} · ${current.label}` : 'Relais Pare-Brise · CRM'}
+        compactMobile={compactMobile}
       />
     </div>
   );

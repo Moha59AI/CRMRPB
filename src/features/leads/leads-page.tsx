@@ -338,34 +338,37 @@ export function LeadsPage() {
       <PageHeader
         title="Leads"
         description="Prospects reçus depuis Meta et autres sources"
+        compactMobile
         action={
-          <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="flex w-auto items-center gap-1.5 sm:gap-2">
             {/* Outil de developpement : jamais visible en production, et la
                 fonction SQL est en plus reservee aux administrateurs. */}
             {OUTILS_DEMO_ACTIFS && (
               <Button
                 variant="outline"
-                className="flex-1 rounded-full sm:flex-none"
+                className="rounded-full px-3"
                 disabled={seeding}
                 onClick={() => seedMutation.mutate()}
+                aria-label="Créer des données de démonstration"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Données de démo
+                <Sparkles className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Données de démo</span>
               </Button>
             )}
             <Button
-              className="flex-1 rounded-full sm:flex-none"
+              className="rounded-full px-3 sm:px-4"
               onClick={() => setNewLeadOpen(true)}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau lead
+              <Plus className="mr-1.5 h-4 w-4 sm:mr-2" />
+              <span className="md:hidden">Nouveau</span>
+              <span className="hidden md:inline">Nouveau lead</span>
             </Button>
           </div>
         }
       />
 
       {/* Toolbar: view toggle + filters */}
-      <div className="flex flex-wrap items-center gap-3 gutter-x border-b border-border py-3">
+      <div className="flex flex-wrap items-center gap-2 gutter-x border-b border-border py-2 sm:gap-3 sm:py-3">
         {/* View toggle */}
         <div className="hidden items-center rounded-lg bg-muted p-1 md:inline-flex">
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
@@ -375,47 +378,8 @@ export function LeadsPage() {
 
         <div className="hidden h-6 w-px bg-border md:block" />
 
-        {/* Archives : consulter, et ranger. */}
-        <div className="order-first flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:order-none md:w-auto">
-          <Button
-            variant={voirArchives ? 'default' : 'outline'}
-            size="sm"
-            className="shrink-0 rounded-full"
-            onClick={afficherArchives}
-          >
-            {voirArchives
-              ? <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
-              : <Archive className="mr-1.5 h-3.5 w-3.5" />}
-            {voirArchives ? 'Voir les actifs' : 'Archives'}
-          </Button>
-
-          {!voirArchives && (
-            <Button
-              variant={voirAArchiver ? 'default' : 'outline'}
-              size="sm" className="shrink-0 rounded-full"
-              onClick={afficherAArchiver}
-            >
-              <Clock3 className="mr-1.5 h-3.5 w-3.5" />
-              {voirAArchiver ? 'Voir tous les actifs' : 'À archiver (+2 jours)'}
-            </Button>
-          )}
-
-          {voirArchives && peutSupprimer(profileCourant?.role ?? null) && (
-            <Button
-              variant="outline" size="sm"
-              className="shrink-0 rounded-full text-destructive hover:text-destructive"
-              onClick={() => setSuppressionOuverte(true)}
-            >
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              Vider les archives
-            </Button>
-          )}
-        </div>
-
-        <div className="hidden h-6 w-px bg-border md:block" />
-
         {/* Search */}
-        <div className="relative w-full min-w-0 sm:min-w-[200px] sm:flex-1">
+        <div className="order-first relative w-full min-w-0 md:order-none md:min-w-[200px] md:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Nom, téléphone, email, ville..."
@@ -425,50 +389,89 @@ export function LeadsPage() {
           />
         </div>
 
-        {/* Source filter */}
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[calc(50vw-1.75rem)] rounded-lg sm:w-[130px]">
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes sources</SelectItem>
-            {sourceSelectOptions.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Status filter */}
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[calc(50vw-1.75rem)] rounded-lg sm:w-[150px]">
-            <SelectValue placeholder="Statut" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous statuts</SelectItem>
-            {leadStatusFilterOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Advisor filter */}
-        <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
-          <SelectTrigger className="w-full rounded-lg sm:w-[160px]">
-            <SelectValue placeholder="Conseiller" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous conseillers</SelectItem>
-            {profiles?.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{profileName(p)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {hasFilters && (
-          <Button variant="ghost" size="sm" className="rounded-lg" onClick={clearFilters}>
-            Effacer
+        {/* Sur telephone, archives et filtres vivent sur un seul rail : ils ne
+            prennent plus trois lignes avant le premier lead. */}
+        <div className="flex w-full items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin md:w-auto md:flex-wrap md:gap-2 md:overflow-visible md:pb-0">
+          <Button
+            variant={voirArchives ? 'default' : 'outline'}
+            size="sm"
+            className="shrink-0 rounded-full"
+            onClick={afficherArchives}
+          >
+            {voirArchives
+              ? <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
+              : <Archive className="mr-1.5 h-3.5 w-3.5" />}
+            {voirArchives ? 'Actifs' : 'Archives'}
           </Button>
-        )}
+
+          {!voirArchives && (
+            <Button
+              variant={voirAArchiver ? 'default' : 'outline'}
+              size="sm"
+              className="shrink-0 rounded-full"
+              onClick={afficherAArchiver}
+            >
+              <Clock3 className="mr-1.5 h-3.5 w-3.5" />
+              {voirAArchiver ? 'Tous les actifs' : 'À archiver (+2 jours)'}
+            </Button>
+          )}
+
+          {voirArchives && peutSupprimer(profileCourant?.role ?? null) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-full text-destructive hover:text-destructive"
+              onClick={() => setSuppressionOuverte(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Vider
+            </Button>
+          )}
+
+          <div className="hidden h-6 w-px shrink-0 bg-border md:block" />
+
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="h-10 w-[132px] shrink-0 rounded-full sm:w-[140px]">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes sources</SelectItem>
+              {sourceSelectOptions.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-10 w-[142px] shrink-0 rounded-full sm:w-[160px]">
+              <SelectValue placeholder="Statut" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous statuts</SelectItem>
+              {leadStatusFilterOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={advisorFilter} onValueChange={setAdvisorFilter}>
+            <SelectTrigger className="h-10 w-[150px] shrink-0 rounded-full sm:w-[170px]">
+              <SelectValue placeholder="Conseiller" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous conseillers</SelectItem>
+              {profiles?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{profileName(p)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {hasFilters && (
+            <Button variant="ghost" size="sm" className="shrink-0 rounded-full" onClick={clearFilters}>
+              Effacer
+            </Button>
+          )}
+        </div>
       </div>
 
       {!voirArchives && !voirAArchiver && selectionLeads.size > 0 && leads && (
@@ -821,7 +824,7 @@ function ViewToggleButton({
  * la fiche et lancer l'appel sont deux gestes differents, et le second doit
  * rester a un doigt.
  */
-function ListeMobile({
+export function ListeMobile({
   leads, selection, onSelectionChange, onOuvrir, onSupprimer,
 }: {
   leads: Lead[];
@@ -831,71 +834,88 @@ function ListeMobile({
   onSupprimer?: (lead: Lead) => void;
 }) {
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto overscroll-contain bg-card">
       <ul className="divide-y divide-border">
-        {leads.map((lead) => (
-          <li
-            key={lead.id}
-            style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
-            className={cn(
-              'flex items-stretch transition-colors',
-              couleurLigneLead(lead.status, selection.has(lead.id)),
-            )}
-          >
-            <div className="flex w-11 shrink-0 items-center justify-center">
-              <Checkbox
-                checked={selection.has(lead.id)}
-                onCheckedChange={(valeur) => onSelectionChange(lead.id, valeur === true)}
-                aria-label={`Sélectionner ${leadName(lead)}`}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => onOuvrir(lead)}
-              className="min-w-0 flex-1 px-4 py-3 text-left active:bg-muted/50"
+        {leads.map((lead) => {
+          const vehicule = vehicleLabel(lead);
+          const contexte = [
+            lead.phone,
+            lead.city,
+            vehicule === '—' ? null : vehicule,
+            vitrageLabel(lead),
+          ].filter(Boolean).join(' · ');
+
+          return (
+            <li
+              key={lead.id}
+              style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
+              className={cn(
+                'flex min-h-[64px] items-stretch transition-colors',
+                couleurLigneLead(lead.status, selection.has(lead.id)),
+              )}
             >
-              <div className="min-w-0">
-                <span className="block truncate text-sm font-medium text-foreground">
-                  {leadName(lead)}
-                </span>
-                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1">
-                  <SourceBadge source={lead.source} />
-                  <StatusBadge status={lead.status} />
-                </div>
+              <div className="flex w-11 shrink-0 items-center justify-center">
+                <Checkbox
+                  checked={selection.has(lead.id)}
+                  onCheckedChange={(valeur) => onSelectionChange(lead.id, valeur === true)}
+                  aria-label={`Sélectionner ${leadName(lead)}`}
+                />
               </div>
-
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {lead.city && <span className="truncate">{lead.city}</span>}
-                {vehicleLabel(lead) && <span className="truncate">{vehicleLabel(lead)}</span>}
-                <span className={cn('truncate', !lead.glass_type && 'italic text-muted-foreground/70')}>
-                  {vitrageLabel(lead)}
-                </span>
-                <span className="tabular">{formatDate(lead.arrive_le)}</span>
-              </div>
-            </button>
-
-            {lead.phone && (
-              <a
-                href={`tel:${lead.phone}`}
-                aria-label={`Appeler ${leadName(lead)}`}
-                className="flex w-14 shrink-0 items-center justify-center border-l border-border text-primary active:bg-muted/50"
-              >
-                <Phone className="h-4 w-4" />
-              </a>
-            )}
-
-            {onSupprimer && (
               <button
                 type="button"
-                aria-label={`Supprimer ${leadName(lead)}`}
-                onClick={() => onSupprimer(lead)}
-                className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground active:bg-muted/50"
+                onClick={() => onOuvrir(lead)}
+                className="min-w-0 flex-1 px-2.5 py-2 text-left active:bg-muted/50"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                    {leadName(lead)}
+                  </span>
+                  <StatusBadge
+                    status={lead.status}
+                    className="max-w-[8rem] shrink-0 truncate px-1.5 py-0 text-[9px]"
+                  />
+                </span>
+
+                <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+                  <SourceBadge source={lead.source}
+                    className="max-w-[7rem] shrink-0 overflow-hidden truncate px-1.5 py-0 text-[9px]"
+                  />
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1 truncate text-[11px] text-muted-foreground',
+                      !lead.glass_type && 'italic',
+                    )}
+                    title={contexte}
+                  >
+                    {contexte}
+                  </span>
+                  <BadgeAttente lead={lead} compact />
+                </span>
               </button>
-            )}
-          </li>
-        ))}
+
+              {lead.phone && (
+                <a
+                  href={`tel:${lead.phone}`}
+                  aria-label={`Appeler ${leadName(lead)}`}
+                  className="flex w-11 shrink-0 items-center justify-center border-l border-border text-primary active:bg-muted/50"
+                >
+                  <Phone className="h-4 w-4" />
+                </a>
+              )}
+
+              {onSupprimer && (
+                <button
+                  type="button"
+                  aria-label={`Supprimer ${leadName(lead)}`}
+                  onClick={() => onSupprimer(lead)}
+                  className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground active:bg-muted/50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

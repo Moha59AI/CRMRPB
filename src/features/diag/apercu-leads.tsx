@@ -8,8 +8,10 @@
 // La route n'existe pas en production.
 
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { CompactList, KanbanCard } from '@/features/leads/leads-page';
+import { CompactList, KanbanCard, ListeMobile } from '@/features/leads/leads-page';
 import { LeadPipeline } from '@/features/leads/lead-pipeline';
 import type { Lead, LeadSource, LeadStatus } from '@/types';
 import { VisionneusePdf } from '@/features/billing/bouton-pdf-facture';
@@ -79,6 +81,16 @@ const CAS: { titre: string; lead: Lead }[] = [
 export function ApercuLeads() {
   const rien = () => {};
   const [pdfOuvert, setPdfOuvert] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+
+  const basculerSelection = (leadId: string, actif: boolean) => {
+    setSelection((selectionActuelle) => {
+      const suivante = new Set(selectionActuelle);
+      if (actif) suivante.add(leadId);
+      else suivante.delete(leadId);
+      return suivante;
+    });
+  };
 
   return (
     <div className="min-h-full bg-background">
@@ -86,8 +98,32 @@ export function ApercuLeads() {
         Aperçu de développement — leads fabriqués, aucune requête.
       </p>
 
+      <PageHeader
+        title="Leads"
+        description="Prospects reçus depuis Meta et autres sources"
+        compactMobile
+        action={(
+          <Button className="rounded-full px-3">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Nouveau
+          </Button>
+        )}
+      />
+
       <div className="gutter-x py-5">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Liste téléphone dense
+        </h2>
+        <div className="h-[340px] max-w-[390px] overflow-hidden rounded-xl border border-border bg-card">
+          <ListeMobile
+            leads={CAS.map((c) => c.lead)}
+            selection={selection}
+            onSelectionChange={basculerSelection}
+            onOuvrir={rien}
+          />
+        </div>
+
+        <h2 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Carte du pipeline
         </h2>
 

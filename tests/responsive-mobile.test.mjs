@@ -61,3 +61,19 @@ test('la coque mobile garde le titre visible sur les petits iPhone', async () =>
   assert.match(layout, /min-\[390px\]:flex/);
   assert.match(layout, /w-\[min\(20rem,calc\(100vw-0\.75rem\)\)\]/);
 });
+
+test('la liste mobile des leads reste dense et garde les informations de décision', async () => {
+  const [page, hero, preview] = await Promise.all([
+    read('src/features/leads/leads-page.tsx'),
+    read('src/components/ModuleHero.tsx'),
+    read('src/features/diag/apercu-leads.tsx'),
+  ]);
+
+  assert.match(page, /<PageHeader[\s\S]*compactMobile/);
+  assert.match(page, /overflow-x-auto[\s\S]*À archiver \(\+2 jours\)/);
+  assert.match(page, /flex min-h-\[64px\] items-stretch/);
+  assert.match(page, /px-2\.5 py-2 text-left/);
+  assert.match(page, /<StatusBadge[\s\S]*<SourceBadge[\s\S]*<BadgeAttente lead=\{lead\} compact/);
+  assert.match(hero, /compactMobile && 'max-md:grid-cols-/);
+  assert.match(preview, /Liste téléphone dense[\s\S]*<ListeMobile/);
+});

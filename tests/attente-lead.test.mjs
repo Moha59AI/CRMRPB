@@ -16,13 +16,13 @@ test('le score, jamais calcule, ne s affiche plus nulle part', async () => {
   assert.doesNotMatch(fiche, /\['Score', String\(lead\.score\)\]/);
 });
 
-test("l'attente prend sa place, dans les trois vues et sur la fiche", async () => {
+test("l'attente prend sa place, dans toutes les vues et sur la fiche", async () => {
   const page = await read('src/features/leads/leads-page.tsx');
   const fiche = await read('src/features/dossier/dossier-contenu.tsx');
 
   assert.match(page, />Attente<\/TableHead>/);
-  // Tableau, carte kanban, liste compacte.
-  assert.equal((page.match(/<BadgeAttente lead=\{lead\}/g) ?? []).length, 3);
+  // Tableau, carte kanban, liste compacte et liste mobile dense.
+  assert.equal((page.match(/<BadgeAttente lead=\{lead\}/g) ?? []).length, 4);
   assert.match(fiche, /\['En attente depuis', attenteDuLead\(lead\)\.libelle\]/);
 });
 
