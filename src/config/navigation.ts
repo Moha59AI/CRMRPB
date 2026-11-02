@@ -24,6 +24,7 @@ import {
   Palette,
   Boxes,
   ShieldCheck,
+  ListTodo,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -78,6 +79,12 @@ export const navSections: NavSection[] = [
         path: '/relances',
         icon: BellRing,
         description: 'Ce qui attend une action',
+      },
+      {
+        label: 'Tâches',
+        path: '/tasks',
+        icon: ListTodo,
+        description: 'Rappels et demandes à traiter',
       },
       {
         label: 'Boîte mail',

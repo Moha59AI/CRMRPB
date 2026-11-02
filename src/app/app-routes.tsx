@@ -144,7 +144,8 @@ export function AppRoutes() {
           <Route path="/cases" element={<AncienLienDossierGlass />} />
           <Route path="/contacts" element={charger(<ContactsPage />)} />
           <Route path="/calendar" element={charger(<CalendarPage />)} />
-          <Route path="/follow-up" element={charger(<FollowUpPage />)} />
+          <Route path="/tasks" element={charger(<FollowUpPage />)} />
+          <Route path="/follow-up" element={<Navigate to="/tasks" replace />} />
           <Route path="/workflows" element={charger(<WorkflowsPage />)} />
           <Route path="/marketing" element={charger(<MarketingPage />)} />
           <Route path="/campaigns" element={charger(<CampaignsPage />)} />

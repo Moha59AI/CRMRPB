@@ -639,7 +639,7 @@ function CarteTaches({ taches, chargement }: { taches: Task[]; chargement: boole
           <Vide>Aucune tâche à venir. Rien de prévu aujourd'hui ni demain.</Vide>
         ) : (
           taches.slice(0, 4).map((t) => (
-            <Link key={t.id} to="/follow-up" className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-surface">
+            <Link key={t.id} to="/tasks" className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-surface">
               <span className={cn(
                 'h-2 w-2 shrink-0 rounded-full',
                 t.priority === 'urgent' ? 'bg-urgent' : t.priority === 'high' ? 'bg-due' : 'bg-upcoming',
@@ -653,10 +653,10 @@ function CarteTaches({ taches, chargement }: { taches: Task[]; chargement: boole
         )}
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm" className="flex-1 rounded-full">
-            <Link to="/follow-up"><FileText className="mr-1.5 h-3.5 w-3.5" />Note rapide</Link>
+            <Link to="/tasks"><FileText className="mr-1.5 h-3.5 w-3.5" />Voir les tâches</Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="flex-1 rounded-full">
-            <Link to="/follow-up"><Plus className="mr-1.5 h-3.5 w-3.5" />Planifier</Link>
+            <Link to="/tasks"><Plus className="mr-1.5 h-3.5 w-3.5" />Planifier</Link>
           </Button>
         </div>
       </div>

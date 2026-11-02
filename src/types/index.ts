@@ -29,6 +29,7 @@ export type AppointmentType = 'intervention' | 'call' | 'meeting' | 'other';
 export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TaskType = 'call' | 'sms' | 'email' | 'follow_up' | 'document' | 'other';
+export type TaskOrigin = 'manual' | 'email_auto' | 'ai' | 'import';
 
 export type CommunicationType =
   | 'sms_outbound' | 'sms_inbound' | 'call_outbound' | 'call_inbound'
@@ -456,6 +457,10 @@ export interface Task {
   status: TaskStatus;
   due_at: string | null;
   completed_at: string | null;
+  /** Email entrant ayant créé automatiquement la tâche, le cas échéant. */
+  source_communication_id: string | null;
+  /** Origine visible dans le module Tâches. */
+  origin: TaskOrigin;
   created_at: string;
   updated_at: string;
 }

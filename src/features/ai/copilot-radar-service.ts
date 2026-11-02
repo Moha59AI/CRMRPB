@@ -315,7 +315,7 @@ export async function fetchCopilotRadar(context: RadarContext): Promise<CopilotR
       domain: 'commercial',
       title: task.title,
       description: `Tâche en retard de ${elapsedLabel(delay)}.`,
-      link: task.lead_id ? openLeadLink(task.lead_id) : task.case_id ? '/glass' : '/follow-up',
+      link: task.lead_id ? openLeadLink(task.lead_id) : task.case_id ? '/glass' : '/tasks',
       dueAt: task.due_at,
       source: 'rule',
     });

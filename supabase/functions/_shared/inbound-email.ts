@@ -128,6 +128,38 @@ function extraireImmatriculations(value: string): string[] {
   return [...new Set(trouvees.map(normaliserImmatriculation))];
 }
 
+function normaliserPourDetection(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Reconnaît une vraie demande d'envoi de pièces, sans transformer chaque mail
+ * d'un expert ou d'un assureur en tâche. Il faut à la fois une formulation de
+ * demande et le nom d'un document métier.
+ */
+export function estDemandePieces(subject: string, content: string): boolean {
+  const texte = normaliserPourDetection(`${subject}\n${content}`);
+  const formulations = [
+    /demande (?:de |des )?(?:piece|pieces|document|documents|justificatif|justificatifs)/,
+    /(?:piece|pieces|document|documents|justificatif|justificatifs) (?:manquant|manquants|manquante|manquantes|attendu|attendus|attendue|attendues|necessaire|necessaires)/,
+    /(?:merci|veuillez|priere) (?:de )?(?:nous )?(?:transmettre|adresser|envoyer|faire parvenir|communiquer|retourner|joindre)/,
+    /dans l attente (?:de |des )?(?:piece|pieces|document|documents|justificatif|justificatifs)/,
+  ];
+  const documents = [
+    'piece', 'document', 'justificatif', 'carte grise', 'certificat d immatriculation',
+    'attestation', 'declaration', 'cession', 'facture', 'devis', 'photo',
+    'bon de livraison', 'rib', 'rapport', 'releve', 'ordre de reparation',
+  ];
+  return formulations.some((formulation) => formulation.test(texte))
+    && documents.some((document) => texte.includes(document));
+}
+
 export async function emailAlreadyImported(
   admin: SupabaseClient,
   workspaceId: string,
@@ -170,7 +202,7 @@ export async function storeInboundEmail(
       .limit(1)
       .maybeSingle(),
     admin.from('leads')
-      .select('id, contact_id')
+      .select('id, contact_id, assigned_user_id')
       .eq('workspace_id', email.workspaceId)
       .ilike('email', email.sender)
       .order('created_at', { ascending: false })
@@ -189,7 +221,7 @@ export async function storeInboundEmail(
       ));
       const { data: candidates, error: candidatesError } = await admin
         .from('leads')
-        .select('id, contact_id, vehicle_registration')
+        .select('id, contact_id, assigned_user_id, vehicle_registration')
         .eq('workspace_id', email.workspaceId)
         .or(filtres.join(','))
         .order('created_at', { ascending: false })
@@ -228,6 +260,36 @@ export async function storeInboundEmail(
   });
   if (insertError?.code === '23505') return 'duplicate';
   if (insertError) throw new Error(insertError.message);
+
+  const correspondantPrioritaire = correspondant.type === 'assureur' || correspondant.type === 'expert';
+  if (email.notify && correspondantPrioritaire && estDemandePieces(email.subject, email.content)) {
+    const typeCorrespondant = correspondant.type === 'assureur' ? 'Assureur' : 'Expert';
+    const nomCorrespondant = correspondant.nom ?? typeCorrespondant;
+    const extrait = email.content.replace(/\s+/g, ' ').trim().slice(0, 700);
+    const { error: taskError } = await admin.from('tasks').upsert({
+      workspace_id: email.workspaceId,
+      lead_id: leadId,
+      contact_id: contactId,
+      assigned_user_id: linkedLead?.assigned_user_id ?? null,
+      title: `Envoyer les pièces demandées · ${nomCorrespondant}`,
+      description: [
+        `Demande reçue de ${email.sender}`,
+        `Objet : ${email.subject}`,
+        extrait ? `Message : ${extrait}` : null,
+      ].filter(Boolean).join('\n'),
+      type: 'document',
+      priority: 'high',
+      status: 'pending',
+      due_at: email.createdAt,
+      source_communication_id: email.id,
+      origin: 'email_auto',
+    }, {
+      onConflict: 'workspace_id,source_communication_id',
+      ignoreDuplicates: true,
+    });
+    // Une migration en retard ne doit jamais bloquer la boîte IONOS.
+    if (taskError) console.warn('Création de la tâche de pièces impossible', taskError.message);
+  }
 
   if (correspondant.type === 'fournisseur') {
     const supplierPdfs = email.attachments.filter((attachment) => (
@@ -268,7 +330,6 @@ export async function storeInboundEmail(
   // doit interrompre l'équipe que pour un correspondant métier prioritaire.
   // Fournisseurs, clients et expéditeurs ordinaires restent consultables dans
   // le module Mail sans créer de notification CRM ou push mobile.
-  const correspondantPrioritaire = correspondant.type === 'assureur' || correspondant.type === 'expert';
   if (email.notify && correspondantPrioritaire && (recipients ?? []).length > 0) {
     const notificationTitle = correspondant.type === 'assureur'
       ? `Email assureur${correspondant.nom ? ` · ${correspondant.nom}` : ''}`

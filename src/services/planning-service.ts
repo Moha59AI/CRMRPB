@@ -1,7 +1,7 @@
 // Rendez-vous et taches
 
 import { supabase } from '@/lib/supabase';
-import type { Appointment, Task } from '@/types';
+import type { Appointment, Task, TaskStatus } from '@/types';
 import { getWorkspaceId } from '@/services/workspace';
 
 /** Ce que l'agenda a besoin de savoir du client d'un rendez-vous. */
@@ -149,16 +149,20 @@ export async function deleteAppointment(id: string): Promise<{ error: string | n
 
 export async function fetchTasks(params: {
   status?: string;
+  statuses?: readonly TaskStatus[];
   assignedUserId?: string;
   leadId?: string;
   caseId?: string;
 }): Promise<Task[]> {
   let query = supabase.from('tasks').select('*').order('due_at', { ascending: true, nullsFirst: false });
-  if (params.status && params.status !== 'all') query = query.eq('status', params.status);
+  if (params.statuses?.length) query = query.in('status', [...params.statuses]);
+  else if (params.status && params.status !== 'all') query = query.eq('status', params.status);
   if (params.assignedUserId && params.assignedUserId !== 'all') query = query.eq('assigned_user_id', params.assignedUserId);
   if (params.leadId) query = query.eq('lead_id', params.leadId);
   if (params.caseId) query = query.eq('case_id', params.caseId);
-  const { data, error } = await query.limit(200);
+  // Une fiche n'a que quelques tâches. Le module global doit en revanche
+  // conserver une vraie vue d'équipe sans masquer le 201e rappel.
+  const { data, error } = await query.limit(params.leadId || params.caseId ? 200 : 1_000);
   if (error) throw new Error(error.message);
   return (data as Task[]) ?? [];
 }

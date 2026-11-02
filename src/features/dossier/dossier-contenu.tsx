@@ -27,6 +27,7 @@ import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
 import { LeadOverviewSummary } from './lead-overview-summary';
 import { OnifyGlassHandoff } from './onify-glass-handoff';
+import { LeadTasksPanel } from '@/features/tasks/lead-tasks-panel';
 
 interface EvenementTimeline {
   cle: string;
@@ -196,6 +197,12 @@ export function DossierContenu({
           lead={lead}
           onUpdate={onUpdate}
           disabled={enregistrement}
+        />
+
+        <LeadTasksPanel
+          lead={lead}
+          profiles={profiles}
+          tasks={taches ?? []}
         />
 
         <Bloc titre="Note rapide">

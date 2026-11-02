@@ -82,6 +82,7 @@ export function LeadAiAssistant({
         priority: action.priority ?? 'normal',
         status: 'pending',
         due_at: action.suggested_at,
+        origin: 'ai',
       });
       if (result.error) throw new Error(result.error);
       if (!result.task) throw new Error('La tâche n’a pas été créée');
@@ -90,7 +91,8 @@ export function LeadAiAssistant({
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['lead-tasks', lead.id] }),
-        queryClient.invalidateQueries({ queryKey: ['today', 'tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['accueil', 'taches'] }),
+        queryClient.invalidateQueries({ queryKey: ['followup-tasks'] }),
         queryClient.invalidateQueries({ queryKey: ['relances'] }),
         queryClient.invalidateQueries({ queryKey: ['copilot-radar'] }),
       ]);
