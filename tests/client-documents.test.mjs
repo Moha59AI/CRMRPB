@@ -183,6 +183,31 @@ test('un nouveau lien ne masque pas les documents deja recus', async () => {
   assert.match(panel, /restent disponibles même lorsqu’un nouveau lien a été créé/);
 });
 
+test('la relance SMS renouvelle le lien sans perdre les documents deja recus', async () => {
+  const migration = await read('supabase/migrations/20261104100000_client_document_sms_reminder.sql');
+  const service = await read('src/services/client-documents-service.ts');
+  const panel = await read('src/features/dossier/documents-client-panel.tsx');
+  const message = await read('src/features/client-documents/document-reminder-message.ts');
+
+  assert.match(migration, /renew_client_document_request_link/);
+  assert.match(migration, /gen_random_bytes\(18\)/);
+  assert.match(migration, /digest\(convert_to\(v_token, 'UTF8'\), 'sha256'\)/);
+  assert.match(migration, /update public\.client_document_requests request/);
+  assert.doesNotMatch(migration, /insert into public\.client_document_requests/);
+  assert.match(migration, /item\.required/);
+  assert.match(migration, /item\.status not in \('uploaded', 'validated'\)/);
+  assert.match(migration, /v_role not in \('admin', 'manager', 'advisor'\)/);
+
+  assert.match(service, /renewClientDocumentRequestLink/);
+  assert.match(service, /renew_client_document_request_link/);
+  assert.match(panel, /Relancer par SMS/);
+  assert.match(panel, /documentReminderMessage/);
+  assert.match(panel, /createCommunication/);
+  assert.match(panel, /status: 'sent'/);
+  assert.match(message, /il nous manque encore/);
+  assert.match(message, /Relais Pare-Brise/);
+});
+
 test('la fiche client affiche l activite du lien documentaire sans tracer l adresse IP', async () => {
   const migration = await read('supabase/migrations/20261008140000_activite_portail_documents.sql');
   const edge = await read('supabase/functions/client-documents/index.ts');

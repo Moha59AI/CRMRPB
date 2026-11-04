@@ -81,6 +81,16 @@ export async function createClientDocumentRequest(leadId: string): Promise<Creat
   return { ...created, url: clientDocumentPortalUrl(created.access_token) };
 }
 
+export async function renewClientDocumentRequestLink(requestId: string): Promise<CreatedRequest & { url: string }> {
+  const { data, error } = await supabase.rpc('renew_client_document_request_link', {
+    p_request_id: requestId,
+  });
+  if (error) throw new Error(error.message);
+  const renewed = (data as CreatedRequest[] | null)?.[0];
+  if (!renewed?.access_token) throw new Error('Le lien documentaire n’a pas été renouvelé.');
+  return { ...renewed, url: clientDocumentPortalUrl(renewed.access_token) };
+}
+
 export async function fetchLatestClientDocumentRequest(leadId: string): Promise<ClientDocumentRequestSummary | null> {
   const requests = await fetchClientDocumentRequests(leadId);
   return requests[0] ?? null;

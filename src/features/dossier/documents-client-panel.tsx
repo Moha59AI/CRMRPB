@@ -8,11 +8,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ClientDocumentActivityTimeline } from '@/features/client-documents/client-document-activity-timeline';
+import { documentReminderMessage } from '@/features/client-documents/document-reminder-message';
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { cn } from '@/lib/utils';
 import {
-  createClientDocumentRequest, fetchClientDocumentRequests,
+  createClientDocumentRequest, fetchClientDocumentRequests, renewClientDocumentRequestLink,
 } from '@/services/client-documents-service';
+import { createCommunication } from '@/services/activity-service';
 import type { Lead } from '@/types';
 
 export function DocumentsClientPanel({ lead }: { lead: Lead }) {
@@ -25,6 +27,7 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
+  const current = requests.data?.[0] ?? null;
 
   const create = useMutation({
     mutationFn: () => createClientDocumentRequest(lead.id),
@@ -32,6 +35,38 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
       setLatestUrl(created.url);
       queryClient.invalidateQueries({ queryKey: ['client-document-request', lead.id] });
       toast.success('Nouveau lien documentaire créé');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const remind = useMutation({
+    mutationFn: async () => {
+      if (!current) throw new Error('Aucune demande documentaire à relancer.');
+      if (!lead.phone) throw new Error('Le numéro de téléphone du client est manquant.');
+
+      const renewed = await renewClientDocumentRequestLink(current.id);
+      const message = documentReminderMessage(lead, renewed.url, current.items);
+      const journal = await createCommunication({
+        lead_id: lead.id,
+        type: 'sms_outbound',
+        direction: 'outbound',
+        status: 'sent',
+        content: message,
+      });
+
+      return { ...renewed, message, journalError: journal.error };
+    },
+    onSuccess: (renewed) => {
+      setLatestUrl(renewed.url);
+      queryClient.invalidateQueries({ queryKey: ['client-document-request', lead.id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-communications', lead.id] });
+      queryClient.invalidateQueries({ queryKey: ['communications'] });
+      if (renewed.journalError) {
+        toast.warning('Le SMS est prêt, mais la relance n’a pas pu être ajoutée à l’historique.');
+      } else {
+        toast.success('Relance documentaire prête à envoyer');
+      }
+      window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(renewed.message)}`;
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -63,7 +98,6 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
     );
   }
 
-  const current = requests.data?.[0] ?? null;
   const previousReceived = (requests.data ?? []).slice(1).flatMap((previousRequest) => (
     previousRequest.items
       .filter((item) => ['uploaded', 'validated'].includes(item.status) && item.storage_path)
@@ -72,6 +106,10 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
   const received = current?.items.filter((item) => ['uploaded', 'validated'].includes(item.status)).length ?? 0;
   const total = current?.items.length ?? 0;
   const progress = total ? Math.round((received / total) * 100) : 0;
+  const missingRequired = current?.items.filter(
+    (item) => item.required && !['uploaded', 'validated'].includes(item.status),
+  ) ?? [];
+  const canRemind = Boolean(current && current.status !== 'complete' && missingRequired.length > 0);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -123,6 +161,26 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
             </span>
           </div>
           <Progress value={progress} className="mt-4" />
+
+          {canRemind && (
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{missingRequired.length} pièce{missingRequired.length > 1 ? 's' : ''} obligatoire{missingRequired.length > 1 ? 's' : ''} encore attendue{missingRequired.length > 1 ? 's' : ''}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Le bouton renouvelle le lien sécurisé sans perdre les documents déjà reçus.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="w-full shrink-0 rounded-full sm:w-auto"
+                disabled={!lead.phone || remind.isPending}
+                onClick={() => remind.mutate()}
+              >
+                {remind.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="mr-1.5 h-3.5 w-3.5" />}
+                Relancer par SMS
+              </Button>
+            </div>
+          )}
 
           <div className="mt-4 divide-y divide-border">
             {current.items.map((item) => {
