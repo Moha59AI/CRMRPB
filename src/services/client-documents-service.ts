@@ -2,6 +2,17 @@ import { supabase } from '@/lib/supabase';
 
 export type ClientDocumentStatus = 'requested' | 'uploaded' | 'validated' | 'rejected';
 
+export interface ClientDocumentFile {
+  id: string;
+  item_id: string;
+  original_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_at: string;
+  storage_path?: string | null;
+  preview_url?: string | null;
+}
+
 export interface ClientDocumentItem {
   id: string;
   document_type: string;
@@ -15,6 +26,7 @@ export interface ClientDocumentItem {
   uploaded_at: string | null;
   rejection_reason: string | null;
   preview_url?: string | null;
+  files: ClientDocumentFile[];
 }
 
 export interface ClientDocumentRequestSummary {
@@ -53,6 +65,22 @@ export interface ClientDocumentSession {
   completion_message?: string;
   show_gift?: boolean;
   items: Omit<ClientDocumentItem, 'storage_path'>[];
+}
+
+export function clientDocumentFiles(item: ClientDocumentItem): ClientDocumentFile[] {
+  if (item.files?.length) return item.files;
+  if (!item.storage_path || !item.original_name || !item.uploaded_at) return [];
+
+  return [{
+    id: `legacy-${item.id}`,
+    item_id: item.id,
+    original_name: item.original_name,
+    mime_type: item.mime_type,
+    size_bytes: item.size_bytes,
+    uploaded_at: item.uploaded_at,
+    storage_path: item.storage_path,
+    preview_url: item.preview_url,
+  }];
 }
 
 interface CreatedRequest {
@@ -106,12 +134,21 @@ export async function fetchClientDocumentRequests(leadId: string): Promise<Clien
   if (!requests?.length) return [];
 
   const requestIds = requests.map((request) => request.id);
-  const [{ data: items, error: itemsError }, { data: activity, error: activityError }] = await Promise.all([
+  const [
+    { data: items, error: itemsError },
+    { data: files, error: filesError },
+    { data: activity, error: activityError },
+  ] = await Promise.all([
     supabase
       .from('client_document_items')
       .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
       .in('request_id', requestIds)
       .order('created_at'),
+    supabase
+      .from('client_document_files')
+      .select('id, request_id, item_id, storage_path, original_name, mime_type, size_bytes, uploaded_at')
+      .in('request_id', requestIds)
+      .order('uploaded_at'),
     supabase
       .from('client_document_activity')
       .select('id, request_id, event_type, document_type, device_type, created_at')
@@ -119,13 +156,19 @@ export async function fetchClientDocumentRequests(leadId: string): Promise<Clien
       .order('created_at', { ascending: false }),
   ]);
   if (itemsError) throw new Error(itemsError.message);
+  if (filesError) throw new Error(filesError.message);
   // Les documents restent accessibles pendant que la migration de suivi est
   // deployee. Une table d'activite absente ne casse donc jamais la fiche.
   if (activityError) console.warn('Historique du portail documentaire indisponible', activityError.message);
 
   return requests.map((request) => ({
     ...request,
-    items: (items ?? []).filter((item) => item.request_id === request.id),
+    items: (items ?? [])
+      .filter((item) => item.request_id === request.id)
+      .map((item) => ({
+        ...item,
+        files: (files ?? []).filter((file) => file.item_id === item.id),
+      })),
     activity: (activity ?? []).filter((event) => event.request_id === request.id),
   })) as ClientDocumentRequestSummary[];
 }
@@ -143,12 +186,21 @@ export async function fetchClientDocumentHistory(leadIds: string[]): Promise<Cli
   if (!requests?.length) return [];
 
   const requestIds = requests.map((request) => request.id);
-  const [{ data: items, error: itemsError }, { data: activity, error: activityError }] = await Promise.all([
+  const [
+    { data: items, error: itemsError },
+    { data: files, error: filesError },
+    { data: activity, error: activityError },
+  ] = await Promise.all([
     supabase
       .from('client_document_items')
       .select('id, request_id, document_type, label, required, status, storage_path, original_name, mime_type, size_bytes, uploaded_at, rejection_reason')
       .in('request_id', requestIds)
       .order('created_at'),
+    supabase
+      .from('client_document_files')
+      .select('id, request_id, item_id, storage_path, original_name, mime_type, size_bytes, uploaded_at')
+      .in('request_id', requestIds)
+      .order('uploaded_at'),
     supabase
       .from('client_document_activity')
       .select('id, request_id, event_type, document_type, device_type, created_at')
@@ -156,11 +208,17 @@ export async function fetchClientDocumentHistory(leadIds: string[]): Promise<Cli
       .order('created_at', { ascending: false }),
   ]);
   if (itemsError) throw new Error(itemsError.message);
+  if (filesError) throw new Error(filesError.message);
   if (activityError) console.warn('Historique du portail documentaire indisponible', activityError.message);
 
   return requests.map((request) => ({
     ...request,
-    items: (items ?? []).filter((item) => item.request_id === request.id),
+    items: (items ?? [])
+      .filter((item) => item.request_id === request.id)
+      .map((item) => ({
+        ...item,
+        files: (files ?? []).filter((file) => file.item_id === item.id),
+      })),
     activity: (activity ?? []).filter((event) => event.request_id === request.id),
   })) as ClientDocumentRequestHistory[];
 }

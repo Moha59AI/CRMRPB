@@ -13,7 +13,8 @@ const supabase = createClient(
 
 const clientDocumentBucket = 'client-documents';
 const maxDocumentBytes = 10 * 1024 * 1024;
-const maxDocumentsBytes = 10 * 1024 * 1024;
+const maxDocuments = 12;
+const maxDocumentsBytes = 60 * 1024 * 1024;
 
 const websiteDocumentFields = {
   carte_grise: { documentType: 'registration', label: 'Carte grise' },
@@ -153,15 +154,19 @@ async function parseIncomingRequest(req: Request): Promise<ParsedIncomingRequest
 
   const documents: IncomingDocument[] = [];
   for (const field of Object.keys(websiteDocumentFields) as WebsiteDocumentField[]) {
-    const value = form.get(field);
-    if (value instanceof File && value.size > 0) {
-      documents.push(await validateIncomingDocument(field, value));
+    for (const value of form.getAll(field)) {
+      if (value instanceof File && value.size > 0) {
+        documents.push(await validateIncomingDocument(field, value));
+      }
     }
   }
 
+  if (documents.length > maxDocuments) {
+    throw new Error(`Vous pouvez envoyer jusqu’à ${maxDocuments} documents à la fois.`);
+  }
   const totalBytes = documents.reduce((total, document) => total + document.file.size, 0);
   if (totalBytes > maxDocumentsBytes) {
-    throw new Error('L’ensemble des documents dépasse la limite de 10 Mo.');
+    throw new Error('L’ensemble des documents dépasse la limite de 60 Mo.');
   }
 
   return { payload, documents };
@@ -297,6 +302,23 @@ async function attachWebsiteDocuments(
       .upload(storagePath, bytes, { contentType: document.mimeType, upsert: false });
     if (uploadError) throw uploadError;
 
+    const { error: fileError } = await supabase
+      .from('client_document_files')
+      .insert({
+        workspace_id: workspaceId,
+        request_id: requestId,
+        item_id: item.id,
+        storage_path: storagePath,
+        original_name: document.originalName,
+        mime_type: document.mimeType,
+        size_bytes: document.file.size,
+        uploaded_at: now,
+      });
+    if (fileError) {
+      await supabase.storage.from(clientDocumentBucket).remove([storagePath]);
+      throw fileError;
+    }
+
     const { error: updateError } = await supabase
       .from('client_document_items')
       .update({
@@ -314,12 +336,7 @@ async function attachWebsiteDocuments(
       .eq('id', item.id)
       .eq('request_id', requestId);
     if (updateError) {
-      await supabase.storage.from(clientDocumentBucket).remove([storagePath]);
       throw updateError;
-    }
-
-    if (item.storage_path && item.storage_path !== storagePath) {
-      await supabase.storage.from(clientDocumentBucket).remove([item.storage_path]);
     }
 
     const { error: activityError } = await supabase.from('client_document_activity').insert({

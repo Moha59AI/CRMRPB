@@ -5,7 +5,7 @@ import { ClientDocumentActivityTimeline } from '@/features/client-documents/clie
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { LIBELLE_VITRAGE, formatDateTime } from '@/features/leads/lead-shared';
 import {
-  fetchClientDocumentHistory,
+  clientDocumentFiles, fetchClientDocumentHistory,
 } from '@/services/client-documents-service';
 import type { Lead } from '@/types';
 
@@ -37,8 +37,10 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
 
   const interventionsById = new Map(interventions.map((lead) => [lead.id, lead]));
   const allItems = history.data.flatMap((request) => request.items);
-  const received = allItems.filter((item) => ['uploaded', 'validated'].includes(item.status)).length;
-  const progress = allItems.length ? Math.round((received / allItems.length) * 100) : 0;
+  const allFiles = allItems.flatMap(clientDocumentFiles);
+  const requiredItems = allItems.filter((item) => item.required);
+  const receivedRequired = requiredItems.filter((item) => ['uploaded', 'validated'].includes(item.status)).length;
+  const progress = requiredItems.length ? Math.round((receivedRequired / requiredItems.length) * 100) : 100;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -46,7 +48,9 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold">Documents de toutes les interventions</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">{received} pièce{received > 1 ? 's' : ''} reçue{received > 1 ? 's' : ''} sur {allItems.length}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {allFiles.length} fichier{allFiles.length > 1 ? 's' : ''} reçu{allFiles.length > 1 ? 's' : ''} · {receivedRequired} catégorie{receivedRequired > 1 ? 's' : ''} obligatoire{receivedRequired > 1 ? 's' : ''} complète{receivedRequired > 1 ? 's' : ''} sur {requiredItems.length}
+            </p>
           </div>
           <span className="text-sm font-semibold tabular">{progress}%</span>
         </div>
@@ -74,15 +78,28 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
             <div className="divide-y divide-border px-4">
               {request.items.map((item) => {
                 const uploaded = ['uploaded', 'validated'].includes(item.status);
+                const files = clientDocumentFiles(item);
                 return (
-                  <div key={item.id} className="flex items-center gap-3 py-3">
-                    {uploaded ? <CheckCircle2 className="h-4 w-4 shrink-0 text-done" /> : <Clock3 className="h-4 w-4 shrink-0 text-muted-foreground" />}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.label}</p>
-                      <p className="truncate text-xs text-muted-foreground">{uploaded ? item.original_name ?? 'Document reçu' : 'En attente'}</p>
+                  <div key={item.id} className="py-3">
+                    <div className="flex items-center gap-3">
+                      {uploaded ? <CheckCircle2 className="h-4 w-4 shrink-0 text-done" /> : <Clock3 className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.label}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {files.length > 0 ? `${files.length} fichier${files.length > 1 ? 's' : ''}` : 'En attente'}
+                        </p>
+                      </div>
                     </div>
-                    {uploaded && item.storage_path && (
-                      <StaffDocumentLink storagePath={item.storage_path} />
+                    {files.length > 0 && (
+                      <div className="ml-7 mt-2 space-y-1.5">
+                        {files.map((file) => (
+                          <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2">
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
+                            {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );

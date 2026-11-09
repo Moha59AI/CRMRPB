@@ -12,7 +12,8 @@ import { documentReminderMessage } from '@/features/client-documents/document-re
 import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
 import { cn } from '@/lib/utils';
 import {
-  createClientDocumentRequest, fetchClientDocumentRequests, renewClientDocumentRequestLink,
+  clientDocumentFiles, createClientDocumentRequest, fetchClientDocumentRequests,
+  renewClientDocumentRequestLink,
 } from '@/services/client-documents-service';
 import { createCommunication } from '@/services/activity-service';
 import type { Lead } from '@/types';
@@ -99,13 +100,19 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
   }
 
   const previousReceived = (requests.data ?? []).slice(1).flatMap((previousRequest) => (
-    previousRequest.items
-      .filter((item) => ['uploaded', 'validated'].includes(item.status) && item.storage_path)
-      .map((item) => ({ item, requestCreatedAt: previousRequest.created_at }))
+    previousRequest.items.flatMap((item) => (
+      clientDocumentFiles(item).map((file) => ({
+        item,
+        file,
+        requestCreatedAt: previousRequest.created_at,
+      }))
+    ))
   ));
   const received = current?.items.filter((item) => ['uploaded', 'validated'].includes(item.status)).length ?? 0;
-  const total = current?.items.length ?? 0;
-  const progress = total ? Math.round((received / total) * 100) : 0;
+  const receivedFiles = current?.items.reduce((count, item) => count + clientDocumentFiles(item).length, 0) ?? 0;
+  const requiredItems = current?.items.filter((item) => item.required) ?? [];
+  const receivedRequired = requiredItems.filter((item) => ['uploaded', 'validated'].includes(item.status)).length;
+  const progress = requiredItems.length ? Math.round((receivedRequired / requiredItems.length) * 100) : 100;
   const missingRequired = current?.items.filter(
     (item) => item.required && !['uploaded', 'validated'].includes(item.status),
   ) ?? [];
@@ -149,7 +156,9 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
             <div>
               <h3 className="text-sm font-semibold">Dernière demande</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {current.status === 'complete' ? 'Toutes les pièces obligatoires sont arrivées' : `${received} document${received > 1 ? 's' : ''} reçu${received > 1 ? 's' : ''}`}
+                {current.status === 'complete'
+                  ? `Toutes les pièces obligatoires sont arrivées · ${receivedFiles} fichier${receivedFiles > 1 ? 's' : ''}`
+                  : `${received} catégorie${received > 1 ? 's' : ''} reçue${received > 1 ? 's' : ''} · ${receivedFiles} fichier${receivedFiles > 1 ? 's' : ''}`}
               </p>
             </div>
             <span className={cn(
@@ -185,17 +194,30 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
           <div className="mt-4 divide-y divide-border">
             {current.items.map((item) => {
               const uploaded = ['uploaded', 'validated'].includes(item.status);
+              const files = clientDocumentFiles(item);
               return (
-                <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  {uploaded ? <CheckCircle2 className="h-4 w-4 shrink-0 text-done" /> : <Clock3 className="h-4 w-4 shrink-0 text-muted-foreground" />}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.label}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {uploaded ? item.original_name ?? 'Document reçu' : item.required ? 'En attente — obligatoire' : 'En attente — facultatif'}
-                    </p>
+                <div key={item.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    {uploaded ? <CheckCircle2 className="h-4 w-4 shrink-0 text-done" /> : <Clock3 className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.label}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {files.length > 0
+                          ? `${files.length} fichier${files.length > 1 ? 's' : ''} reçu${files.length > 1 ? 's' : ''}`
+                          : item.required ? 'En attente — obligatoire' : 'En attente — facultatif'}
+                      </p>
+                    </div>
                   </div>
-                  {uploaded && item.storage_path && (
-                    <StaffDocumentLink storagePath={item.storage_path} />
+                  {files.length > 0 && (
+                    <div className="ml-7 mt-2 space-y-1.5">
+                      {files.map((file) => (
+                        <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
+                          {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
@@ -225,16 +247,16 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
             </p>
           </div>
           <div className="mt-4 divide-y divide-border">
-            {previousReceived.map(({ item, requestCreatedAt }) => (
-              <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+            {previousReceived.map(({ item, file, requestCreatedAt }) => (
+              <div key={file.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-done" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{item.label}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {item.original_name ?? 'Document reçu'} · demande du {new Date(requestCreatedAt).toLocaleDateString('fr-FR')}
+                    {file.original_name} · demande du {new Date(requestCreatedAt).toLocaleDateString('fr-FR')}
                   </p>
                 </div>
-                {item.storage_path && <StaffDocumentLink storagePath={item.storage_path} />}
+                {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
               </div>
             ))}
           </div>

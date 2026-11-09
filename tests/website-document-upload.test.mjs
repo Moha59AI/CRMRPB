@@ -21,13 +21,17 @@ test('les pieces du site sont controlees puis rangees dans le portail documentai
 
   assert.match(webhook, /detectDocumentType/);
   assert.match(webhook, /maxDocumentBytes = 10 \* 1024 \* 1024/);
-  assert.match(webhook, /maxDocumentsBytes = 10 \* 1024 \* 1024/);
+  assert.match(webhook, /form\.getAll\(field\)/);
+  assert.match(webhook, /maxDocuments = 12/);
+  assert.match(webhook, /maxDocumentsBytes = 60 \* 1024 \* 1024/);
   assert.match(webhook, /\.from\('client_document_requests'\)/);
   assert.match(webhook, /\.from\('client_document_items'\)/);
+  assert.match(webhook, /\.from\('client_document_files'\)/);
   assert.match(webhook, /\.from\(clientDocumentBucket\)[\s\S]*\.upload\(storagePath/);
   assert.match(webhook, /status: 'uploaded'/);
   assert.match(webhook, /original_name: document\.originalName/);
   assert.match(webhook, /event_type: 'document_uploaded'/);
+  assert.doesNotMatch(webhook, /item\.storage_path && item\.storage_path !== storagePath/);
 });
 
 test('les documents du site sont rattaches au lead cree et font avancer son statut', async () => {

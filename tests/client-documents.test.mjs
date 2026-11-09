@@ -69,7 +69,7 @@ test('le client voit que chaque document est recu puis traite par l equipe', asy
   assert.match(page, /Document bien reçu/);
   assert.match(page, /Toutes les pièces nécessaires sont bien reçues/);
   assert.match(page, /Vous n’avez rien d’autre à faire pour le moment/);
-  assert.match(page, /Le fichier est enregistré et sera vérifié par notre équipe/);
+  assert.match(page, /Vous pouvez en ajouter d’autres si nécessaire/);
   assert.match(page, /aria-live="polite"/);
   assert.match(page, /1\. Documents reçus/);
   assert.match(page, /2\. Vérification/);
@@ -166,8 +166,8 @@ test('le document est ouvert par un vrai lien deja signe', async () => {
   assert.match(service, /createSignedUrl\(path, 3600\)/);
   assert.match(link, /createStaffDocumentPreviewUrl\(storagePath\)/);
   assert.match(link, /href=\{preview\.data\}/);
-  assert.match(panel, /<StaffDocumentLink storagePath=\{item\.storage_path\}/);
-  assert.match(history, /<StaffDocumentLink storagePath=\{item\.storage_path\}/);
+  assert.match(panel, /<StaffDocumentLink storagePath=\{file\.storage_path\}/);
+  assert.match(history, /<StaffDocumentLink storagePath=\{file\.storage_path\}/);
   assert.doesNotMatch(link, /window\.open/);
   assert.doesNotMatch(link, /target="_blank"/);
 });
@@ -206,6 +206,29 @@ test('la relance SMS renouvelle le lien sans perdre les documents deja recus', a
   assert.match(panel, /status: 'sent'/);
   assert.match(message, /il nous manque encore/);
   assert.match(message, /Relais Pare-Brise/);
+});
+
+test('une categorie accepte plusieurs fichiers sans ecraser les depots precedents', async () => {
+  const migration = await read('supabase/migrations/20261109100000_client_document_multiple_files.sql');
+  const edge = await read('supabase/functions/client-documents/index.ts');
+  const service = await read('src/services/client-documents-service.ts');
+  const page = await read('src/features/client-documents/client-documents-page.tsx');
+  const panel = await read('src/features/dossier/documents-client-panel.tsx');
+
+  assert.match(migration, /create table if not exists public\.client_document_files/);
+  assert.match(migration, /foreign key \(item_id, request_id, workspace_id\)/);
+  assert.match(migration, /client_document_files enable row level security/);
+  assert.match(migration, /on conflict \(storage_path\) do nothing/);
+  assert.doesNotMatch(migration, /update public\.client_document_requests/);
+  assert.doesNotMatch(migration, /delete from public\.client_document_requests/);
+  assert.doesNotMatch(migration, /token_hash|revoked_at/);
+  assert.match(edge, /\.from\('client_document_files'\)\.upsert/);
+  assert.doesNotMatch(edge, /item\.storage_path && item\.storage_path !== path/);
+  assert.match(service, /clientDocumentFiles/);
+  assert.match(service, /\.from\('client_document_files'\)/);
+  assert.match(page, /multiple/);
+  assert.match(page, /Ajouter d’autres fichiers/);
+  assert.match(panel, /clientDocumentFiles\(item\)/);
 });
 
 test('la fiche client affiche l activite du lien documentaire sans tracer l adresse IP', async () => {

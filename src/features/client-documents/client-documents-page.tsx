@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import {
-  AlertCircle, CarFront, Check, CheckCircle2, Clock3, ExternalLink,
+  AlertCircle, CarFront, Check, CheckCircle2, Clock3,
   FileCheck2, FileText, Gift, IdCard, Loader2,
   LockKeyhole, PhoneCall, ShieldCheck, Smartphone, UploadCloud,
 } from 'lucide-react';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import {
-  fetchClientDocumentSession, uploadClientDocument,
+  clientDocumentFiles, fetchClientDocumentSession, uploadClientDocument,
   type ClientDocumentItem, type ClientDocumentSession,
 } from '@/services/client-documents-service';
 
@@ -24,15 +24,15 @@ const previewSession: ClientDocumentSession = {
   expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
   submitted_at: null,
   page_title: 'Ajoutez les pièces de votre dossier',
-  page_intro: 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.',
+  page_intro: 'Prenez des photos nettes ou choisissez vos PDF. Vous pouvez ajouter plusieurs fichiers dans chaque catégorie.',
   completion_title: 'Toutes les pièces nécessaires sont bien reçues',
   completion_message: 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.',
   show_gift: true,
   items: [
-    { id: 'preview-registration', document_type: 'registration', label: 'Carte grise', required: true, status: 'uploaded', original_name: 'carte-grise.pdf', mime_type: 'application/pdf', size_bytes: 842_000, uploaded_at: new Date().toISOString(), rejection_reason: null, preview_url: null },
-    { id: 'preview-insurance', document_type: 'insurance_cert', label: 'Attestation d’assurance', required: true, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
-    { id: 'preview-technical-inspection', document_type: 'technical_inspection', label: 'Contrôle technique', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
-    { id: 'preview-other', document_type: 'other', label: 'Autre document', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null },
+    { id: 'preview-registration', document_type: 'registration', label: 'Carte grise', required: true, status: 'uploaded', original_name: 'carte-grise.pdf', mime_type: 'application/pdf', size_bytes: 842_000, uploaded_at: new Date().toISOString(), rejection_reason: null, preview_url: null, files: [{ id: 'preview-registration-file', item_id: 'preview-registration', original_name: 'carte-grise.pdf', mime_type: 'application/pdf', size_bytes: 842_000, uploaded_at: new Date().toISOString(), preview_url: null }] },
+    { id: 'preview-insurance', document_type: 'insurance_cert', label: 'Attestation d’assurance', required: true, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null, files: [] },
+    { id: 'preview-technical-inspection', document_type: 'technical_inspection', label: 'Contrôle technique', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null, files: [] },
+    { id: 'preview-other', document_type: 'other', label: 'Autre document', required: false, status: 'requested', original_name: null, mime_type: null, size_bytes: null, uploaded_at: null, rejection_reason: null, preview_url: null, files: [] },
   ],
 };
 
@@ -47,6 +47,15 @@ const previewCompleteSession: ClientDocumentSession = {
     mime_type: item.mime_type ?? 'application/pdf',
     size_bytes: item.size_bytes ?? 640_000,
     uploaded_at: item.uploaded_at ?? new Date().toISOString(),
+    files: item.files.length > 0 ? item.files : [{
+      id: `preview-file-${item.id}`,
+      item_id: item.id,
+      original_name: item.original_name ?? 'attestation-assurance.pdf',
+      mime_type: item.mime_type ?? 'application/pdf',
+      size_bytes: item.size_bytes ?? 640_000,
+      uploaded_at: item.uploaded_at ?? new Date().toISOString(),
+      preview_url: null,
+    }],
   } : item),
 };
 
@@ -67,6 +76,7 @@ export function ClientDocumentsPage() {
   const [lastReceipt, setLastReceipt] = useState<{
     itemId: string;
     label: string;
+    count: number;
     complete: boolean;
   } | null>(null);
 
@@ -82,16 +92,25 @@ export function ClientDocumentsPage() {
   });
 
   const upload = useMutation({
-    mutationFn: ({ item, file }: { item: ClientDocumentItem; file: File }) => {
-      if (!accepted.includes(file.type)) throw new Error('Utilisez un PDF ou une photo (JPG, PNG, WEBP ou HEIC).');
-      if (file.size > maxBytes) throw new Error('Le fichier dépasse 12 Mo.');
-      return uploadClientDocument(token, item.id, file);
+    mutationFn: async ({ item, files }: { item: ClientDocumentItem; files: File[] }) => {
+      for (const file of files) {
+        if (!accepted.includes(file.type)) throw new Error('Utilisez uniquement des PDF ou photos (JPG, PNG, WEBP ou HEIC).');
+        if (file.size > maxBytes) throw new Error(`« ${file.name} » dépasse 12 Mo.`);
+      }
+
+      let complete = false;
+      for (const file of files) {
+        const result = await uploadClientDocument(token, item.id, file);
+        complete = result.complete;
+      }
+      return { complete, count: files.length };
     },
     onMutate: () => setLastReceipt(null),
     onSuccess: async (result, { item }) => {
-      setLastReceipt({ itemId: item.id, label: item.label, complete: result.complete });
+      setLastReceipt({ itemId: item.id, label: item.label, count: result.count, complete: result.complete });
       await queryClient.invalidateQueries({ queryKey: ['client-document-session', token] });
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['client-document-session', token] }),
   });
 
   if (!token && !preview) return <PortalMessage title="Lien nécessaire" detail="Ouvrez le lien privé reçu par SMS. Si vous ne l’avez plus, contactez Relais Pare-Brise pour en recevoir un nouveau." />;
@@ -135,7 +154,7 @@ export function ClientDocumentsPage() {
               {data.page_title || 'Ajoutez les pièces de votre dossier'}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              {data.page_intro || 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.'}
+              {data.page_intro || 'Prenez des photos nettes ou choisissez vos PDF. Vous pouvez ajouter plusieurs fichiers dans chaque catégorie.'}
             </p>
             <div className="mt-5 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" />Depuis votre téléphone</span>
@@ -222,7 +241,7 @@ export function ClientDocumentsPage() {
             <div>
               <p className="font-semibold text-foreground">Document bien reçu</p>
               <p className="mt-1 leading-5 text-muted-foreground">
-                « {lastReceipt.label} » est enregistré. {lastReceipt.complete
+                {lastReceipt.count > 1 ? `${lastReceipt.count} fichiers` : 'Le fichier'} « {lastReceipt.label} » {lastReceipt.count > 1 ? 'sont enregistrés' : 'est enregistré'}. {lastReceipt.complete
                   ? 'Toutes les pièces nécessaires sont maintenant disponibles pour notre équipe.'
                   : 'Vous pouvez poursuivre avec les pièces restantes.'}
               </p>
@@ -244,7 +263,7 @@ export function ClientDocumentsPage() {
               item={item as ClientDocumentItem}
               pending={upload.isPending && upload.variables?.item.id === item.id}
               recentlyReceived={lastReceipt?.itemId === item.id}
-              onFile={(file) => upload.mutate({ item: item as ClientDocumentItem, file })}
+              onFiles={(files) => upload.mutate({ item: item as ClientDocumentItem, files })}
               preview={preview}
             />
           ))}
@@ -260,16 +279,17 @@ export function ClientDocumentsPage() {
 }
 
 function DocumentUploadCard({
-  item, pending, recentlyReceived, onFile, preview,
+  item, pending, recentlyReceived, onFiles, preview,
 }: {
   item: ClientDocumentItem;
   pending: boolean;
   recentlyReceived: boolean;
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
   preview: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const received = ['uploaded', 'validated'].includes(item.status);
+  const files = clientDocumentFiles(item);
   const DocumentIcon = item.document_type === 'registration' ? IdCard
     : item.document_type === 'insurance_cert' ? ShieldCheck
       : item.document_type === 'technical_inspection' ? FileCheck2
@@ -304,16 +324,9 @@ function DocumentUploadCard({
             </span>
           </div>
           {received ? (
-            <>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {item.original_name} {item.size_bytes ? `· ${formatSize(item.size_bytes)}` : ''}
-              </p>
-              <p className="mt-2 text-xs font-medium leading-5 text-done">
-                {item.status === 'validated'
-                  ? 'Cette pièce a été vérifiée par notre équipe.'
-                  : 'Le fichier est enregistré et sera vérifié par notre équipe.'}
-              </p>
-            </>
+            <p className="mt-1 text-xs font-medium leading-5 text-done">
+              {files.length} fichier{files.length > 1 ? 's' : ''} enregistré{files.length > 1 ? 's' : ''}. Vous pouvez en ajouter d’autres si nécessaire. Notre équipe vérifiera chaque fichier.
+            </p>
           ) : (
             <p className="mt-1 text-xs text-muted-foreground">PDF ou photo, 12 Mo maximum</p>
           )}
@@ -323,29 +336,42 @@ function DocumentUploadCard({
         </div>
       </div>
 
+      {files.length > 0 && (
+        <div className="mt-4 space-y-2 rounded-xl border border-border bg-muted/25 p-2.5">
+          {files.map((file, index) => (
+            <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-card px-3 py-2">
+              <FileCheck2 className="h-4 w-4 shrink-0 text-done" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{file.original_name || `Fichier ${index + 1}`}</p>
+                <p className="text-[11px] text-muted-foreground">{formatSize(file.size_bytes)}</p>
+              </div>
+              {file.preview_url && (
+                <a href={file.preview_url} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-medium text-primary hover:underline">
+                  Voir
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         <input
           ref={input}
           type="file"
+          multiple
           accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
           className="hidden"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) onFile(file);
+            const selected = Array.from(event.target.files ?? []);
+            if (selected.length > 0) onFiles(selected);
             event.target.value = '';
           }}
         />
         <Button className="w-full rounded-full sm:w-auto" disabled={pending || preview} onClick={() => input.current?.click()}>
           {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-          {pending ? 'Envoi en cours…' : received ? 'Remplacer ce document' : 'Ajouter le document'}
+          {pending ? 'Envoi en cours…' : received ? 'Ajouter d’autres fichiers' : 'Ajouter un ou plusieurs fichiers'}
         </Button>
-        {received && item.preview_url && (
-          <Button variant="outline" className="w-full rounded-full sm:w-auto" asChild>
-            <a href={item.preview_url} target="_blank" rel="noreferrer">
-              Voir <ExternalLink className="ml-2 h-3.5 w-3.5" />
-            </a>
-          </Button>
-        )}
       </div>
     </section>
   );

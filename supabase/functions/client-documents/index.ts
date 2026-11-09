@@ -16,7 +16,7 @@ const allowedMime = new Map([
 
 const defaultPortalSettings = {
   page_title: 'Ajoutez les pièces de votre dossier',
-  page_intro: 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.',
+  page_intro: 'Prenez des photos nettes ou choisissez vos PDF. Vous pouvez ajouter plusieurs fichiers dans chaque catégorie.',
   completion_title: 'Toutes les pièces nécessaires sont bien reçues',
   completion_message: 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.',
   show_gift: true,
@@ -234,6 +234,7 @@ async function session(token: string, req: Request) {
   const [
     { data: lead, error: leadError },
     { data: items, error: itemsError },
+    { data: files, error: filesError },
     { data: savedSettings, error: settingsError },
   ] = await Promise.all([
     admin.from('leads').select('first_name, last_name, offer').eq('id', request.lead_id).single(),
@@ -241,6 +242,10 @@ async function session(token: string, req: Request) {
       .select('id, document_type, label, required, status, original_name, mime_type, size_bytes, storage_path, uploaded_at, rejection_reason')
       .eq('request_id', request.id)
       .order('created_at'),
+    admin.from('client_document_files')
+      .select('id, item_id, original_name, mime_type, size_bytes, storage_path, uploaded_at')
+      .eq('request_id', request.id)
+      .order('uploaded_at'),
     admin.from('client_document_portal_settings')
       .select('page_title, page_intro, completion_title, completion_message, show_gift, document_rules')
       .eq('workspace_id', request.workspace_id)
@@ -248,17 +253,39 @@ async function session(token: string, req: Request) {
   ]);
   if (leadError) throw leadError;
   if (itemsError) throw itemsError;
+  if (filesError) throw filesError;
   if (settingsError) console.warn('Reglages du portail indisponibles, valeurs par defaut utilisees', settingsError.message);
 
   const visibleTypes = visibleDocumentTypes(savedSettings?.document_rules);
   const enriched = await Promise.all((items ?? []).filter((item) => (
     visibleTypes.has(item.document_type)
   )).map(async (item) => {
-    let preview_url: string | null = null;
-    if (item.storage_path && ['uploaded', 'validated'].includes(item.status)) {
-      const { data } = await admin.storage.from(bucket).createSignedUrl(item.storage_path, 300);
-      preview_url = data?.signedUrl ?? null;
-    }
+    const storedFiles = (files ?? []).filter((file) => file.item_id === item.id);
+    const sourceFiles = storedFiles.length > 0
+      ? storedFiles
+      : item.storage_path && item.original_name && item.uploaded_at
+        ? [{
+            id: `legacy-${item.id}`,
+            item_id: item.id,
+            original_name: item.original_name,
+            mime_type: item.mime_type,
+            size_bytes: item.size_bytes,
+            storage_path: item.storage_path,
+            uploaded_at: item.uploaded_at,
+          }]
+        : [];
+    const enrichedFiles = await Promise.all(sourceFiles.map(async (file) => {
+      const { data } = await admin.storage.from(bucket).createSignedUrl(file.storage_path, 300);
+      return {
+        id: file.id,
+        item_id: item.id,
+        original_name: file.original_name,
+        mime_type: file.mime_type,
+        size_bytes: file.size_bytes,
+        uploaded_at: file.uploaded_at,
+        preview_url: data?.signedUrl ?? null,
+      };
+    }));
     return {
       id: item.id,
       document_type: item.document_type,
@@ -270,7 +297,8 @@ async function session(token: string, req: Request) {
       size_bytes: item.size_bytes,
       uploaded_at: item.uploaded_at,
       rejection_reason: item.rejection_reason,
-      preview_url,
+      preview_url: enrichedFiles.at(-1)?.preview_url ?? null,
+      files: enrichedFiles,
     };
   }));
 
@@ -369,6 +397,21 @@ async function completeUpload(body: Record<string, unknown>, token: string, req:
   }
 
   const now = new Date().toISOString();
+  const { error: fileError } = await admin.from('client_document_files').upsert({
+    workspace_id: request.workspace_id,
+    request_id: request.id,
+    item_id: item.id,
+    storage_path: path,
+    original_name: originalName,
+    mime_type: mimeType,
+    size_bytes: storedSize,
+    uploaded_at: now,
+  }, { onConflict: 'storage_path' });
+  if (fileError) {
+    await admin.storage.from(bucket).remove([path]);
+    throw fileError;
+  }
+
   const { error: updateError } = await admin.from('client_document_items').update({
     status: 'uploaded', storage_path: path, original_name: originalName,
     mime_type: mimeType, size_bytes: storedSize, uploaded_at: now,
@@ -378,10 +421,6 @@ async function completeUpload(body: Record<string, unknown>, token: string, req:
   if (updateError) throw updateError;
 
   await recordActivity(request, req, 'document_uploaded', item.document_type);
-
-  if (item.storage_path && item.storage_path !== path) {
-    await admin.storage.from(bucket).remove([item.storage_path]);
-  }
 
   const { data: remaining, error: remainingError } = await admin
     .from('client_document_items')

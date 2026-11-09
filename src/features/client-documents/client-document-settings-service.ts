@@ -27,7 +27,7 @@ export interface ClientDocumentPortalSettings {
 
 export const DEFAULT_CLIENT_DOCUMENT_PORTAL_SETTINGS: ClientDocumentPortalSettings = {
   page_title: 'Ajoutez les pièces de votre dossier',
-  page_intro: 'Prenez une photo nette ou choisissez un PDF. Vous pouvez remplacer un document tant que nécessaire.',
+  page_intro: 'Prenez des photos nettes ou choisissez vos PDF. Vous pouvez ajouter plusieurs fichiers dans chaque catégorie.',
   completion_title: 'Toutes les pièces nécessaires sont bien reçues',
   completion_message: 'Votre dossier est transmis à l’équipe Relais Pare-Brise. Vous n’avez rien d’autre à faire pour le moment : nous vérifions les documents et nous vous contactons pour la suite ou si une pièce doit être remplacée.',
   show_gift: true,
