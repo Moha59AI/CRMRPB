@@ -23,7 +23,6 @@ import {
   Wrench,
   Palette,
   Boxes,
-  ShieldCheck,
   ListTodo,
   type LucideIcon,
 } from 'lucide-react';
@@ -48,9 +47,8 @@ export interface NavSection {
  * « Clients » et non « Contacts », qui laissait croire à un simple carnet
  * d'adresses sans lien avec les affaires.
  *
- * Glass est distinct : il reprend les dossiers officiellement crees dans
- * Onify, apres reception des pieces. Il ne remplace ni le lead commercial ni
- * l'intervention terrain.
+ * Onify enrichit directement Leads. Il n existe donc pas de module Glass
+ * separe ni de seconde fiche a rechercher.
  */
 export const navSections: NavSection[] = [
   {
@@ -104,16 +102,10 @@ export const navSections: NavSection[] = [
         description: 'Les interventions à traiter',
       },
       {
-        label: 'Glass',
-        path: '/glass',
-        icon: ShieldCheck,
-        description: 'Tous les dossiers Glass synchronisés depuis Onify',
-      },
-      {
         label: 'Clients',
         path: '/contacts',
         icon: Users,
-        description: 'Les clients passés dans Glass et leur historique',
+        description: 'Les clients et tout leur historique',
       },
     ],
   },

@@ -19,7 +19,11 @@ export const statusLabels: Record<string, string> = {
   interested: 'Qualifié',
   documents_requested: 'Attente documents',
   documents_received: 'Prêt Onify',
+  onify_processing: 'Suivi Onify',
   appointment_scheduled: 'RDV pris',
+  intervention_done: 'Intervention réalisée',
+  payment_pending: 'Facturation',
+  sav: 'SAV',
   lost: 'Perdu',
   converted: 'Clôturé',
 };
@@ -38,7 +42,11 @@ export type LeadJourneyStageKey =
   | 'qualifie'
   | 'documents'
   | 'onify_ready'
+  | 'onify'
   | 'rdv'
+  | 'intervention'
+  | 'finance'
+  | 'sav'
   | 'perdu'
   | 'cloture';
 
@@ -55,10 +63,9 @@ export interface LeadJourneyStage {
 }
 
 /**
- * Le pipeline suit maintenant la realite operationnelle : le prospect reste
- * un lead et devient pret pour Onify apres reception des pieces. Lorsqu'un
- * vrai dossier Glass est detecte, il quitte ce module et l'affaire continue
- * dans Glass : il n'existe donc aucune etape post-Onify dans ce pipeline.
+ * Une seule fiche suit l intervention de son arrivee jusqu au reglement.
+ * Onify enrichit le lead avec ses statuts, le vehicule, l assurance et la
+ * franchise ; il ne provoque plus un transfert vers un autre module.
  */
 export const leadJourneyStages: readonly LeadJourneyStage[] = [
   {
@@ -98,11 +105,42 @@ export const leadJourneyStages: readonly LeadJourneyStage[] = [
     automated: true,
   },
   {
+    key: 'onify',
+    label: 'Suivi Onify',
+    description: 'Dossier créé, accord et vitrage suivis depuis la même fiche',
+    statuses: ['onify_processing'],
+    targetStatus: 'onify_processing',
+    automated: true,
+  },
+  {
     key: 'rdv',
     label: 'RDV pris',
     description: 'Créneau planifié dans l’agenda',
     statuses: ['appointment_scheduled'],
     targetStatus: 'appointment_scheduled',
+  },
+  {
+    key: 'intervention',
+    label: 'Intervention réalisée',
+    description: 'Travaux terminés, dossier à finaliser',
+    statuses: ['intervention_done'],
+    targetStatus: 'intervention_done',
+    automated: true,
+  },
+  {
+    key: 'finance',
+    label: 'Facturation',
+    description: 'Facture ou règlement en attente',
+    statuses: ['payment_pending'],
+    targetStatus: 'payment_pending',
+    automated: true,
+  },
+  {
+    key: 'sav',
+    label: 'SAV',
+    description: 'Dossier à reprendre après intervention',
+    statuses: ['sav'],
+    targetStatus: 'sav',
   },
   {
     key: 'perdu',
@@ -132,8 +170,8 @@ export function leadStageForKey(key: string): LeadJourneyStage | undefined {
 }
 
 /**
- * Chaque filtre correspond maintenant a une etape exacte : les pieces recues
- * ne remontent plus dans l'attente et les dossiers Onify sont dans Glass.
+ * Chaque filtre correspond a une etape exacte de la meme fiche, avant comme
+ * apres la creation du dossier Onify.
  */
 export interface LeadStatusFilterOption {
   value: string;
@@ -154,7 +192,8 @@ export function leadStatusesForFilter(key: string): readonly LeadStatus[] | unde
 
 export function leadStageDescription(status: LeadStatus): string {
   if (status === 'calling') return 'Appel en cours — enregistrez son résultat';
-  if (status === 'documents_received') return 'Pièces reçues — créez le dossier Glass dans Onify';
+  if (status === 'documents_received') return 'Pièces reçues — créez le dossier dans Onify';
+  if (status === 'onify_processing') return 'Dossier Onify synchronisé — suivez son avancement ici';
   return leadStageForStatus(status).description;
 }
 

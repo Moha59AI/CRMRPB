@@ -22,7 +22,7 @@ const LeadsPage = lazy(() => import('@/features/leads/leads-page').then((m) => (
 const RelancesPage = lazy(() => import('@/features/relances/relances-page').then((m) => ({ default: m.RelancesPage })));
 const DossierModal = lazy(() => import('@/features/dossier/dossier-modal').then((m) => ({ default: m.DossierModal })));
 const ClientModal = lazy(() => import('@/features/client/client-modal').then((m) => ({ default: m.ClientModal })));
-const GlassPage = lazy(() => import('@/features/cases/cases-page').then((m) => ({ default: m.GlassPage })));
+const LegacyOnifyCaseRedirect = lazy(() => import('@/features/cases/legacy-onify-case-redirect').then((m) => ({ default: m.LegacyOnifyCaseRedirect })));
 const ContactsPage = lazy(() => import('@/features/contacts/contacts-page').then((m) => ({ default: m.ContactsPage })));
 const CalendarPage = lazy(() => import('@/features/calendar/calendar-page').then((m) => ({ default: m.CalendarPage })));
 const FollowUpPage = lazy(() => import('@/features/follow-up/follow-up-page').then((m) => ({ default: m.FollowUpPage })));
@@ -83,12 +83,6 @@ function charger(element: ReactNode, superposee = false) {
   return <Suspense fallback={<ChargementPage superposee={superposee} />}>{element}</Suspense>;
 }
 
-/** Garde aussi l'identifiant `?id=` des anciens liens vers un dossier. */
-function AncienLienDossierGlass() {
-  const { search } = useLocation();
-  return <Navigate to={`/glass${search}`} replace />;
-}
-
 /**
  * Routage avec location d'arriere-plan.
  *
@@ -139,9 +133,11 @@ export function AppRoutes() {
           <Route path="/atelier" element={charger(<AtelierPage />)} />
           <Route path="/interventions/:leadId" element={charger(<DossierModal pleinePage />)} />
           <Route path="/clients/:contactId" element={charger(<ClientModal pleinePage />)} />
-          <Route path="/glass" element={charger(<GlassPage />)} />
-          {/* Compatibilite avec les anciens favoris et liens internes. */}
-          <Route path="/cases" element={<AncienLienDossierGlass />} />
+          {/* Le module Glass a ete fusionne dans Leads. Ces deux routes
+              conservent les anciens favoris et ouvrent maintenant la fiche
+              Lead enrichie par Onify. */}
+          <Route path="/glass" element={charger(<LegacyOnifyCaseRedirect />)} />
+          <Route path="/cases" element={charger(<LegacyOnifyCaseRedirect />)} />
           <Route path="/contacts" element={charger(<ContactsPage />)} />
           <Route path="/calendar" element={charger(<CalendarPage />)} />
           <Route path="/tasks" element={charger(<FollowUpPage />)} />

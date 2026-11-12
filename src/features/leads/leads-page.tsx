@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, Sparkles, Table as TableIcon, Columns3, List, Phone, AlertTriangle,
-  Archive, ArchiveRestore, Trash2, Clock3, Loader2,
+  Archive, ArchiveRestore, Trash2, Clock3, Loader2, DatabaseZap,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { ModuleEmptyState } from '@/components/ModuleEmptyState';
@@ -337,7 +337,7 @@ export function LeadsPage() {
     <div className="flex h-full flex-col bg-background">
       <PageHeader
         title="Leads"
-        description="Prospects reçus depuis Meta et autres sources"
+        description="Toutes les affaires, du premier contact jusqu’au suivi Onify et au règlement"
         compactMobile
         action={
           <div className="flex w-auto items-center gap-1.5 sm:gap-2">
@@ -760,6 +760,22 @@ function libelleAge(date: string): string {
   return `il y a ${jours} jours`;
 }
 
+function OnifyBadge({ lead, compact = false }: { lead: Lead; compact?: boolean }) {
+  if (!lead.onify_glass_case_id && !lead.onify_reference) return null;
+  return (
+    <span
+      title={lead.onify_status_label || lead.onify_work_status_label || 'Dossier Onify synchronisé'}
+      className={cn(
+        'inline-flex max-w-36 items-center gap-1 truncate rounded-full border border-violet-300/70 bg-violet-50 font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300',
+        compact ? 'px-1.5 py-0 text-[9px]' : 'px-2 py-0.5 text-[10px]',
+      )}
+    >
+      <DatabaseZap className="h-3 w-3 shrink-0" />
+      <span className="truncate">{lead.onify_reference || 'Onify'}</span>
+    </span>
+  );
+}
+
 /**
  * Chaque etape porte la meme couleur dans le tableau, la liste mobile et le
  * pipeline. Le liseré reste visible meme sur un ecran peu contraste. La
@@ -880,6 +896,7 @@ export function ListeMobile({
                   <SourceBadge source={lead.source}
                     className="max-w-[7rem] shrink-0 overflow-hidden truncate px-1.5 py-0 text-[9px]"
                   />
+                  <OnifyBadge lead={lead} compact />
                   <span
                     className={cn(
                       'min-w-0 flex-1 truncate text-[11px] text-muted-foreground',
@@ -993,7 +1010,10 @@ function LeadsTable({
                 >
                   {initialesLead(lead)}
                 </span>
-                <span className="text-sm font-semibold text-foreground">{leadName(lead)}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">{leadName(lead)}</span>
+                  <OnifyBadge lead={lead} compact />
+                </span>
               </span>
             </TableCell>
             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -1255,6 +1275,7 @@ export function KanbanCard({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <SourceBadge source={lead.source} />
+        <OnifyBadge lead={lead} compact />
         <span
           className={cn(
             'rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-medium',
@@ -1330,6 +1351,7 @@ export function CompactList({
                 {vitrageLabel(lead)}
               </span>
               <SourceBadge source={lead.source} className="shrink-0" />
+              <OnifyBadge lead={lead} compact />
               <StatusBadge status={lead.status} className="shrink-0" />
               <BadgeAttente lead={lead} compact />
             </button>

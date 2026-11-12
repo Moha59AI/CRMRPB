@@ -146,7 +146,7 @@ export function ContactsPage() {
     <>
       <PageHeader
         title="Clients"
-        description="Client dès la création de son dossier Glass Onify"
+        description="Client dès la création de son dossier Onify"
         action={
           <Button className="rounded-full" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -306,7 +306,7 @@ function ListeMobileContacts({
                     variant="outline"
                     className="shrink-0 rounded-full border-primary/25 bg-primary/5 text-[10px] text-primary"
                   >
-                    Glass
+                    Onify
                   </Badge>
                 )}
                 {/* Un client qui revient est le renseignement le plus utile
@@ -360,7 +360,7 @@ function ContactRow({ contact, resume, onOpen }: {
               variant="outline"
               className="rounded-full border-primary/25 bg-primary/5 text-[10px] text-primary"
             >
-              Glass
+              Onify
             </Badge>
           )}
         </span>
@@ -461,7 +461,7 @@ function CreateContactDialog({
         <DialogHeader>
           <DialogTitle>Nouveau contact</DialogTitle>
           <DialogDescription>
-            Il restera prospect jusqu’à la création de son dossier Glass Onify.
+            Il restera prospect jusqu’à la création de son dossier Onify.
           </DialogDescription>
         </DialogHeader>
 

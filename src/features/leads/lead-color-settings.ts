@@ -9,7 +9,11 @@ export const LEAD_COLOR_KEYS = [
   'qualifie',
   'documents_requested',
   'documents_received',
+  'onify',
   'rdv',
+  'intervention',
+  'finance',
+  'sav',
   'perdu',
   'cloture',
 ] as const;
@@ -23,7 +27,11 @@ export const DEFAULT_LEAD_STAGE_COLORS: LeadStageColors = {
   qualifie: '#f59e0b',
   documents_requested: '#fb923c',
   documents_received: '#10b981',
+  onify: '#8b5cf6',
   rdv: '#3b82f6',
+  intervention: '#0ea5e9',
+  finance: '#f97316',
+  sav: '#e11d48',
   perdu: '#64748b',
   cloture: '#14b8a6',
 };
@@ -74,7 +82,11 @@ export function colorKeyForStatus(status: string): LeadColorKey | null {
   if (status === 'interested') return 'qualifie';
   if (status === 'documents_requested') return 'documents_requested';
   if (status === 'documents_received') return 'documents_received';
+  if (status === 'onify_processing') return 'onify';
   if (status === 'appointment_scheduled') return 'rdv';
+  if (status === 'intervention_done') return 'intervention';
+  if (status === 'payment_pending') return 'finance';
+  if (status === 'sav') return 'sav';
   if (status === 'lost') return 'perdu';
   if (status === 'converted') return 'cloture';
   return null;

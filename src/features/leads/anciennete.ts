@@ -33,7 +33,8 @@ export interface Attente {
  * qu'il faut vraiment rappeler.
  */
 const STATUTS_AU_REPOS: readonly LeadStatus[] = [
-  'appointment_scheduled', 'converted', 'lost', 'documents_received',
+  'documents_received', 'onify_processing', 'appointment_scheduled',
+  'intervention_done', 'payment_pending', 'sav', 'converted', 'lost',
 ];
 
 const HEURE = 3_600_000;

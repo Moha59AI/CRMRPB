@@ -32,7 +32,12 @@ test('un dossier pris en charge ne vire pas au rouge en vieillissant', async () 
   // Un rendez-vous pris il y a cinq jours n'appelle aucune action : le
   // colorer noierait les leads qu'il faut vraiment rappeler.
   assert.match(anciennete, /const STATUTS_AU_REPOS/);
-  assert.match(anciennete, /'appointment_scheduled', 'converted', 'lost', 'documents_received'/);
+  for (const statut of [
+    'documents_received', 'onify_processing', 'appointment_scheduled',
+    'intervention_done', 'payment_pending', 'sav', 'converted', 'lost',
+  ]) {
+    assert.match(anciennete, new RegExp(`'${statut}'`));
+  }
   assert.match(anciennete, /if \(STATUTS_AU_REPOS\.includes\(lead\.status\)\) return \{ heures, niveau: 'traite'/);
 });
 

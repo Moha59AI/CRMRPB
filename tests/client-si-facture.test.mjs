@@ -56,7 +56,7 @@ test('la liste separe les clients des prospects', async () => {
   assert.match(page, /listeFiltree/);
 });
 
-test('un vrai dossier Glass fait passer le prospect dans Clients sans attendre la facture', async () => {
+test('un vrai dossier Onify fait passer le prospect dans Clients sans attendre la facture', async () => {
   const sql = await read(GLASS_CLIENT_MIGRATION);
   const page = await read('src/features/contacts/contacts-page.tsx');
   const service = await read('src/services/contacts-service.ts');
@@ -66,6 +66,6 @@ test('un vrai dossier Glass fait passer le prospect dans Clients sans attendre l
   assert.match(sql, /g\.nb_dossiers_glass is not null or f\.nb_factures is not null/);
   assert.match(sql, /onify_payload jsonb/);
   assert.match(page, /useState<FiltreClient>\('clients'\)/);
-  assert.match(page, /Client dès la création de son dossier Glass Onify/);
+  assert.match(page, /Client dès la création de son dossier Onify/);
   assert.match(service, /nbDossiersGlass: Number\(l\.nb_dossiers_glass\)/);
 });

@@ -26,7 +26,7 @@ import { LeadAiAssistant } from '@/features/ai/lead-ai-assistant';
 import { lireAttributionMeta } from '@/features/leads/meta-attribution';
 import { BonRemiseCadeauDialog } from './gift-voucher-dialog';
 import { LeadOverviewSummary } from './lead-overview-summary';
-import { OnifyGlassHandoff } from './onify-glass-handoff';
+import { OnifyLeadEnrichment } from './onify-glass-handoff';
 import { LeadTasksPanel } from '@/features/tasks/lead-tasks-panel';
 
 interface EvenementTimeline {
@@ -160,6 +160,14 @@ export function DossierContenu({
     );
   }
 
+  if (onglet === 'assurance') {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <OnifyLeadEnrichment lead={lead} />
+      </div>
+    );
+  }
+
   if (onglet !== 'apercu') {
     return <OngletAVenir onglet={onglet} />;
   }
@@ -234,7 +242,7 @@ export function DossierContenu({
       {/* Colonne laterale : historique et metadonnees stables, consultables
           sans interrompre la saisie de la colonne principale. */}
       <div className="space-y-4">
-        <OnifyGlassHandoff lead={lead} />
+        <OnifyLeadEnrichment lead={lead} />
 
         <Bloc titre="Derniers échanges">
           <Timeline evenements={timeline.slice(0, 5)} chargement={chargeComms} />
@@ -466,8 +474,7 @@ function SansClient() {
 }
 
 /**
- * L'onglet Assurance s'appuie sur le dossier Glass importe depuis Onify. Il
- * est annonce comme tel plutot que d'afficher un vide sans explication.
+ * L'onglet Assurance s'appuie sur les donnees Onify recopiees sur la fiche.
  */
 function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
   const libelle = ONGLETS.find((o) => o.cle === onglet)?.label ?? onglet;
@@ -478,8 +485,8 @@ function OngletAVenir({ onglet }: { onglet: OngletDossier }) {
       </div>
       <h3 className="text-base font-semibold">{libelle}</h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Cette section s’active dès qu’un dossier Glass Onify est détecté et rattaché
-        à ce lead. La clôture reste réservée à la fin réelle de l’intervention.
+        Cette section s’active dès qu’un dossier Onify est détecté. Les données
+        viennent enrichir cette même fiche Lead, sans changement de module.
       </p>
     </div>
   );

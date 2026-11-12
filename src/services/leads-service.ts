@@ -16,34 +16,47 @@ export async function fetchLeads(params: {
   /** Affiche uniquement les leads arrivés avant ce nombre de jours. */
   plusVieuxQueJours?: number;
 }): Promise<Lead[]> {
-  let query = supabase
-    .from('leads')
-    .select('*')
-    // `arrive_le` et non `created_at` : pour un lead Meta, la date d'ecriture
-    // en base n'est pas celle ou le prospect a rempli le formulaire.
-    .order('arrive_le', { ascending: false });
+  const pageSize = 1_000;
+  const results: Lead[] = [];
 
-  query = params.archives
-    ? query.not('archived_at', 'is', null)
-    : query.is('archived_at', null);
+  // Le module unique contient maintenant aussi les dossiers Onify historiques.
+  // On pagine donc jusqu au bout au lieu de couper silencieusement a 200.
+  for (let from = 0; ; from += pageSize) {
+    let query = supabase
+      .from('leads')
+      .select('*')
+      // `arrive_le` et non `created_at` : pour un lead Meta, la date d'ecriture
+      // en base n'est pas celle ou le prospect a rempli le formulaire.
+      .order('arrive_le', { ascending: false })
+      // Stabilise la pagination quand plusieurs dossiers Onify ont la meme date.
+      .order('id', { ascending: false });
 
-  if (params.plusVieuxQueJours !== undefined) {
-    const limite = new Date(Date.now() - params.plusVieuxQueJours * 86_400_000).toISOString();
-    query = query.lt('arrive_le', limite);
+    query = params.archives
+      ? query.not('archived_at', 'is', null)
+      : query.is('archived_at', null);
+
+    if (params.plusVieuxQueJours !== undefined) {
+      const limite = new Date(Date.now() - params.plusVieuxQueJours * 86_400_000).toISOString();
+      query = query.lt('arrive_le', limite);
+    }
+
+    if (params.search) {
+      const s = params.search.trim();
+      query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,address.ilike.%${s}%,postal_code.ilike.%${s}%,city.ilike.%${s}%,intervention_address.ilike.%${s}%,intervention_postal_code.ilike.%${s}%,intervention_city.ilike.%${s}%,vehicle_registration.ilike.%${s}%,onify_reference.ilike.%${s}%`);
+    }
+    if (params.source && params.source !== 'all') query = query.eq('source', params.source);
+    if (params.statuses?.length) query = query.in('status', [...params.statuses]);
+    else if (params.status && params.status !== 'all') query = query.eq('status', params.status);
+    if (params.assignedUserId && params.assignedUserId !== 'all') query = query.eq('assigned_user_id', params.assignedUserId);
+
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const page = (data as Lead[] | null) ?? [];
+    results.push(...page);
+    if (page.length < pageSize) break;
   }
 
-  if (params.search) {
-    const s = params.search.trim();
-    query = query.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,address.ilike.%${s}%,postal_code.ilike.%${s}%,city.ilike.%${s}%,intervention_address.ilike.%${s}%,intervention_postal_code.ilike.%${s}%,intervention_city.ilike.%${s}%,vehicle_registration.ilike.%${s}%`);
-  }
-  if (params.source && params.source !== 'all') query = query.eq('source', params.source);
-  if (params.statuses?.length) query = query.in('status', [...params.statuses]);
-  else if (params.status && params.status !== 'all') query = query.eq('status', params.status);
-  if (params.assignedUserId && params.assignedUserId !== 'all') query = query.eq('assigned_user_id', params.assignedUserId);
-
-  const { data, error } = await query.limit(200);
-  if (error) throw new Error(error.message);
-  return (data as Lead[]) ?? [];
+  return results;
 }
 
 export async function fetchLeadById(id: string): Promise<Lead | null> {

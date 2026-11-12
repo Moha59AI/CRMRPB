@@ -24,7 +24,11 @@ const ETAPES: Array<{ key: LeadColorKey; label: string; description: string }> =
   { key: 'qualifie', label: 'Qualifié', description: 'Besoin confirmé' },
   { key: 'documents_requested', label: 'Attente documents', description: 'Lien envoyé, pièces attendues' },
   { key: 'documents_received', label: 'Prêt Onify', description: 'Toutes les pièces obligatoires reçues' },
+  { key: 'onify', label: 'Suivi Onify', description: 'Dossier enrichi par la synchronisation Onify' },
   { key: 'rdv', label: 'RDV pris', description: 'Créneau planifié' },
+  { key: 'intervention', label: 'Intervention réalisée', description: 'Travaux terminés, dossier à finaliser' },
+  { key: 'finance', label: 'Facturation', description: 'Facture ou règlement en attente' },
+  { key: 'sav', label: 'SAV', description: 'Dossier à reprendre' },
   { key: 'perdu', label: 'Perdu', description: 'Lead sorti du parcours' },
   { key: 'cloture', label: 'Clôturé', description: 'Dossier terminé' },
 ];

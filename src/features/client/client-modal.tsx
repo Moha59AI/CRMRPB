@@ -237,12 +237,10 @@ export function ClientModal({ pleinePage }: { pleinePage?: boolean }) {
     navigate(`/interventions/${leadId}`, { state: etatVersFiche(location) });
   };
   const ouvrirAffaire = (affaire: AffaireVitrage) => {
-    if (affaire.phase === 'leads' || affaire.phase === 'perdue') {
-      if (affaire.lead_id) ouvrirIntervention(affaire.lead_id);
-      return;
-    }
-    if (affaire.glass_case_id) navigate(`/glass?id=${affaire.glass_case_id}`);
-    else if (affaire.lead_id) ouvrirIntervention(affaire.lead_id);
+    // Onify enrichit maintenant la meme fiche Lead. L affaire ne change plus
+    // d ecran simplement parce qu un dossier technique existe.
+    if (affaire.lead_id) ouvrirIntervention(affaire.lead_id);
+    else navigate('/leads');
   };
 
   const nom = client
@@ -973,7 +971,7 @@ function LigneConsentement({
 
 const PHASE_AFFAIRE: Record<AffaireVitrage['phase'], { label: string; classe: string }> = {
   leads: { label: 'Leads', classe: 'border-primary/25 bg-primary/5 text-primary' },
-  glass: { label: 'Glass', classe: 'border-primary/30 bg-primary/10 text-primary' },
+  glass: { label: 'Onify', classe: 'border-primary/30 bg-primary/10 text-primary' },
   agenda: { label: 'Agenda', classe: 'border-warning/35 bg-warning/10 text-warning' },
   finance: { label: 'Finance', classe: 'border-done/30 bg-done-soft text-done' },
   perdue: { label: 'Perdue', classe: 'border-urgent/30 bg-urgent-soft text-urgent' },
@@ -1090,7 +1088,7 @@ function Synthese({ synthese }: { synthese: SyntheseClient }) {
       <Chiffre valeur={synthese.nb_interventions} label="Interventions" />
       <Chiffre
         valeur={synthese.nb_dossiers_glass}
-        label={synthese.nb_dossiers_glass > 1 ? 'Dossiers Glass' : 'Dossier Glass'}
+        label={synthese.nb_dossiers_glass > 1 ? 'Dossiers Onify' : 'Dossier Onify'}
         accent={synthese.nb_dossiers_glass > 0}
       />
       <Chiffre

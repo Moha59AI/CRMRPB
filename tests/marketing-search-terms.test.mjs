@@ -32,7 +32,7 @@ test('la page separe les termes saisis des mots-cles declencheurs', async () => 
   assert.match(page, /useState<AnalysisView>\('attention'\)/);
 });
 
-test('l historique Onify est dedoublonne et distingue les dossiers Glass', async () => {
+test('l historique Onify est dedoublonne et distingue les leads enrichis', async () => {
   const migration = await read('supabase/migrations/20260904170000_import_onify_google_history.sql');
   const service = await read('src/features/marketing/marketing-service.ts');
   const page = await read('src/features/marketing/marketing-page.tsx');
@@ -42,7 +42,7 @@ test('l historique Onify est dedoublonne et distingue les dossiers Glass', async
   assert.equal((migration.match(/'\d{4}', '[A-Z0-9-]+ ·/g) ?? []).length, 6);
   assert.match(migration, /when glass_dossier_id is not null then 'converted'/);
   assert.match(service, /transformedLeads/);
-  assert.match(page, /Dossiers Glass/);
+  assert.match(page, /Dossiers Onify/);
 });
 
 test('les leads Onify attribues a Google ont une source Google Ads visible', async () => {

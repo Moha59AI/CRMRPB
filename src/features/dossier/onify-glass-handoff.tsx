@@ -3,7 +3,6 @@ import {
   CheckCircle2, ExternalLink, FileClock, Loader2, RefreshCw, ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { messageErreurBase } from '@/lib/erreurs';
 import { fetchOnifyGlassCaseByLeadId } from '@/services/cases-service';
@@ -14,15 +13,14 @@ import type { Lead } from '@/types';
 const ONIFY_GLASS_URL = 'https://app.onify.fr/glass/edition';
 
 /**
- * Passage controle entre le prospect CRM et le dossier Glass Onify.
+ * Enrichissement de la fiche Lead par le dossier Onify.
  *
  * L'API partenaire Glass est en lecture seule. Le CRM ouvre donc l'ecran
- * officiel de creation, puis confirme le passage seulement quand la
- * synchronisation retrouve un dossier Onify reel rattache a ce lead.
+ * officiel de creation, puis recopie les informations utiles sur cette meme
+ * fiche uniquement quand un dossier Onify reel est retrouve.
  */
-export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
+export function OnifyLeadEnrichment({ lead }: { lead: Lead }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const request = useQuery({
     queryKey: ['client-document-requests-onify', lead.id],
     queryFn: () => fetchClientDocumentRequests(lead.id),
@@ -50,7 +48,7 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
       ]);
       toast.success(
         counts.glassTransitions > 0
-          ? 'Dossier Onify détecté : l’affaire a été transférée dans Glass'
+          ? 'Dossier Onify détecté : la fiche Lead a été enrichie'
           : 'Synchronisation Onify terminée',
       );
     },
@@ -95,6 +93,13 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
 
   if (onifyCase) {
     const reference = onifyCase.onify_reference || onifyCase.case_number;
+    const statut = onifyCase.onify_work_status_label
+      || onifyCase.onify_status_label
+      || lead.onify_stage
+      || 'Synchronisé';
+    const franchise = onifyCase.franchise_amount == null
+      ? 'Non renseignée'
+      : `${Number(onifyCase.franchise_amount).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} ${onifyCase.franchise_type === 'percent' ? '%' : '€'}`;
     return (
       <section className="rounded-xl border border-primary/25 bg-primary/5 p-4">
         <div className="flex items-start gap-3">
@@ -102,34 +107,62 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
             <CheckCircle2 className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">Dossier Onify créé</p>
+            <p className="text-sm font-semibold text-foreground">Fiche enrichie par Onify</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Référence {reference}
-              {onifyCase.onify_status_label ? ` — ${onifyCase.onify_status_label}` : ''}
+              {statut ? ` — ${statut}` : ''}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Cette affaire continue maintenant dans Glass, avec le même contact.
+              Le dossier Onify et le lead restent une seule fiche dans le CRM.
             </p>
           </div>
         </div>
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-primary/15 bg-card/70 p-3 text-xs">
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">Assurance</dt>
+            <dd className="truncate font-medium text-foreground">
+              {onifyCase.insurance_name || onifyCase.onify_insurer_name || lead.insurance || '—'}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">Franchise</dt>
+            <dd className="truncate font-medium text-foreground">{franchise}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">Sinistre</dt>
+            <dd className="truncate font-medium text-foreground">
+              {onifyCase.insurance_claim_number || lead.insurance_claim_number || '—'}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">Paiement</dt>
+            <dd className="truncate font-medium text-foreground">
+              {onifyCase.onify_payment_status || '—'}
+            </dd>
+          </div>
+        </dl>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
           <Button
             type="button"
-            size="sm"
-            className="rounded-full"
-            onClick={() => navigate(`/glass?id=${onifyCase.id}`)}
-          >
-            Voir dans Glass
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
             size="sm"
             className="rounded-full"
             onClick={() => window.open(ONIFY_GLASS_URL, '_blank', 'noopener,noreferrer')}
           >
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
             Ouvrir Onify
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            disabled={sync.isPending}
+            onClick={() => sync.mutate()}
+          >
+            {sync.isPending
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Actualiser Onify
           </Button>
         </div>
       </section>
@@ -146,8 +179,8 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">Prêt pour Onify</p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Les pièces obligatoires sont reçues. Créez le dossier Glass dans Onify,
-              puis lancez la synchronisation pour l’attacher automatiquement à ce lead.
+              Les pièces obligatoires sont reçues. Créez le dossier dans Onify,
+              puis synchronisez : cette fiche Lead sera complétée automatiquement.
             </p>
           </div>
         </div>
@@ -176,7 +209,7 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
           </Button>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          Le contrôle automatique tourne aussi régulièrement : aucun dossier n’est marqué créé avant d’exister réellement dans Onify.
+          Le contrôle automatique tourne aussi régulièrement : la fiche n’est enrichie qu’après détection d’un vrai dossier Onify.
         </p>
       </section>
     );
@@ -189,9 +222,9 @@ export function OnifyGlassHandoff({ lead }: { lead: Lead }) {
           <FileClock className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">Avant le dossier Onify</p>
+          <p className="text-sm font-semibold text-foreground">En attente du dossier Onify</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            Le client reste un lead. Le passage à « Prêt Onify » se fera quand la carte grise et l’attestation d’assurance obligatoires seront reçues.
+            La même fiche restera dans Leads. Elle passera à « Prêt Onify » quand les pièces obligatoires seront reçues, puis sera enrichie après la création du dossier.
           </p>
         </div>
       </div>

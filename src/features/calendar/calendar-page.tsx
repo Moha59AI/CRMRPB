@@ -1075,31 +1075,31 @@ function AppointmentDetailSheet({
               Associations
             </h3>
             <dl className="space-y-2">
-              {appointment.case_id && (
+              {appointment.lead_id && (
                 <div className="flex items-center justify-between text-sm">
-                  <dt className="text-muted-foreground">Dossier</dt>
+                  <dt className="text-muted-foreground">Fiche Lead</dt>
                   <dd>
                     {peutNaviguerHorsPlanning ? (
                       <a
-                        href={`/glass?id=${appointment.case_id}`}
+                        href={`/interventions/${appointment.lead_id}`}
                         className="font-medium text-primary hover:underline"
                       >
-                        Ouvrir le dossier
+                        Ouvrir la fiche
                       </a>
                     ) : <span className="text-muted-foreground">Rattaché</span>}
                   </dd>
                 </div>
               )}
-              {appointment.lead_id && (
+              {!appointment.lead_id && appointment.case_id && (
                 <div className="flex items-center justify-between text-sm">
-                  <dt className="text-muted-foreground">Lead</dt>
+                  <dt className="text-muted-foreground">Dossier Onify</dt>
                   <dd>
                     {peutNaviguerHorsPlanning ? (
                       <a
-                        href={`/leads?id=${appointment.lead_id}`}
+                        href="/leads"
                         className="font-medium text-primary hover:underline"
                       >
-                        Ouvrir le lead
+                        Retrouver dans Leads
                       </a>
                     ) : <span className="text-muted-foreground">Rattaché</span>}
                   </dd>

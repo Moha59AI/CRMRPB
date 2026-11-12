@@ -3,34 +3,38 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const MIGRATION = 'supabase/migrations/20261013143000_lead_to_onify_glass_workflow.sql';
+const MIGRATION = 'supabase/migrations/20261110100000_unifier_leads_onify.sql';
 
-test('le lead s arrete avant Onify et le dossier continue dans Glass', async () => {
+test('le lead reste le dossier de travail et gagne les etapes Onify', async () => {
   const types = await read('src/types/index.ts');
   const shared = await read('src/features/leads/lead-shared.ts');
   const migration = await read(MIGRATION);
 
-  assert.match(types, /'documents_requested' \| 'documents_received' \| 'appointment_scheduled'/);
+  assert.match(types, /'documents_received' \| 'onify_processing'/);
+  assert.match(types, /'intervention_done' \| 'payment_pending'/);
   assert.match(shared, /documents_received: 'Prêt Onify'/);
-  assert.doesNotMatch(types, /\| 'glass_created'/);
-  assert.doesNotMatch(shared, /glass_created:/);
-  assert.match(migration, /set status = 'converted'/);
-  assert.match(migration, /archived_at = coalesce\(lead\.archived_at, now\(\)\)/);
+  assert.match(shared, /onify_processing: 'Suivi Onify'/);
+  assert.match(shared, /payment_pending: 'Facturation'/);
+  assert.match(migration, /add column if not exists onify_case_id uuid/);
+  assert.match(migration, /when lead\.status = 'converted' and lead\.onify_case_id is null[\s\S]*?then null/);
+  assert.match(migration, /else lead\.archived_at/);
+  assert.doesNotMatch(migration, /archived_at = coalesce\(lead\.archived_at, now\(\)\)/);
 });
 
-test('un vrai dossier Glass transfere le lead hors du pipeline actif', async () => {
+test('un vrai dossier Onify enrichit le lead sans le sortir du pipeline', async () => {
   const migration = await read(MIGRATION);
   const sync = await read('supabase/functions/onify-sync/index.ts');
 
   assert.match(migration, /create or replace function public\.avancer_leads_apres_dossier_glass/);
   assert.match(migration, /dossier\.onify_glass_case_id is not null/);
-  assert.match(migration, /lead\.archived_at is null/);
-  assert.match(migration, /lead\.status <> 'lost'/);
-  assert.match(migration, /set status = 'converted'/);
-  assert.match(migration, /insert into public\.notes/);
+  assert.match(migration, /insurance = coalesce/);
+  assert.match(migration, /franchise_amount = coalesce/);
+  assert.match(migration, /intervention_address = coalesce/);
+  assert.match(migration, /offer = coalesce/);
+  assert.match(migration, /status = public\.statut_lead_depuis_onify/);
   assert.match(sync, /rpc\('avancer_leads_apres_dossier_glass'/);
   assert.match(sync, /rpc\('synchroniser_affaires_vitrage'/);
-  assert.match(sync, /glassTransitions: glass\.transitions/);
+  assert.match(sync, /glassTransitions: Math\.max\(glass\.transitions, numeric\(financialLeadEnrichment\)\)/);
 });
 
 test('un nouveau depot de document ne fait pas reculer un dossier deja passe dans Onify', async () => {
@@ -44,26 +48,27 @@ test('un nouveau depot de document ne fait pas reculer un dossier deja passe dan
   );
 });
 
-test('la fiche ouvre Onify puis confirme le dossier par synchronisation', async () => {
+test('la fiche ouvre Onify puis affiche l enrichissement sur le meme lead', async () => {
   const handoff = await read('src/features/dossier/onify-glass-handoff.tsx');
   const dossier = await read('src/features/dossier/dossier-contenu.tsx');
 
+  assert.match(handoff, /export function OnifyLeadEnrichment/);
   assert.match(handoff, /https:\/\/app\.onify\.fr\/glass\/edition/);
   assert.match(handoff, /fetchClientDocumentRequests/);
   assert.match(handoff, /fetchOnifyGlassCaseByLeadId/);
   assert.match(handoff, /syncOnify/);
-  assert.match(handoff, /aucun dossier n’est marqué créé avant d’exister réellement dans Onify/);
-  assert.match(handoff, /l’affaire a été transférée dans Glass/);
-  assert.match(dossier, /<OnifyGlassHandoff lead=\{lead\} \/>/);
+  assert.match(handoff, /la fiche Lead a été enrichie/);
+  assert.match(handoff, /Le dossier Onify et le lead restent une seule fiche/);
+  assert.doesNotMatch(handoff, /navigate\('\/glass'/);
+  assert.match(dossier, /<OnifyLeadEnrichment lead=\{lead\} \/>/);
 });
 
-test('les dossiers ne sont plus crees localement en doublon de Onify', async () => {
-  const page = await read('src/features/cases/cases-page.tsx');
+test('les dossiers historiques Onify obtiennent un lead importe sans doublon', async () => {
+  const migration = await read(MIGRATION);
 
-  assert.match(page, /Tous les dossiers Glass repris depuis Onify/);
-  assert.match(page, /Créer dans Onify/);
-  assert.match(page, /fetchGlassCases/);
-  assert.doesNotMatch(page, /CreateCaseDialog/);
-  assert.doesNotMatch(page, /createCase\(/);
-  assert.doesNotMatch(page, /createCaseDocument/);
+  assert.match(migration, /insert into public\.leads \(/);
+  assert.match(migration, /and dossier\.lead_id is null/);
+  assert.match(migration, /on conflict \(workspace_id, onify_case_id\)/);
+  assert.match(migration, /update public\.windscreen_cases dossier[\s\S]*?set lead_id = lead\.id/);
+  assert.match(migration, /lead\.onify_case_id = dossier\.id/);
 });

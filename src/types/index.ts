@@ -12,8 +12,9 @@ export type GlassType =
 export type LeadSource = 'meta' | 'google_ads' | 'webhook' | 'manual' | 'import';
 export type LeadStatus =
   | 'new' | 'to_call' | 'calling' | 'nrp' | 'interested'
-  | 'documents_requested' | 'documents_received' | 'appointment_scheduled'
-  | 'lost' | 'converted';
+  | 'documents_requested' | 'documents_received' | 'onify_processing'
+  | 'appointment_scheduled' | 'intervention_done' | 'payment_pending'
+  | 'sav' | 'lost' | 'converted';
 
 export type AffaireVitragePhase = 'leads' | 'glass' | 'agenda' | 'finance' | 'perdue';
 
@@ -158,6 +159,19 @@ export interface Lead {
    * le lead reste rattache a son client et se retrouve.
    */
   archived_at: string | null;
+  /** Dossier technique Onify qui enrichit cette meme fiche Lead. */
+  onify_case_id?: string | null;
+  onify_glass_case_id?: string | null;
+  onify_reference?: string | null;
+  onify_status_code?: string | null;
+  onify_status_label?: string | null;
+  onify_work_status_code?: string | null;
+  onify_work_status_label?: string | null;
+  onify_payment_status?: string | null;
+  onify_stage?: string | null;
+  onify_synced_at?: string | null;
+  insurance_claim_number?: string | null;
+  insurance_claim_date?: string | null;
   created_at: string;
   updated_at: string;
 }

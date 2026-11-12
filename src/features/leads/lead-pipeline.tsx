@@ -28,9 +28,9 @@ interface LeadPipelineProps {
 /**
  * Parcours commercial visible par l'equipe.
  *
- * L'etape "Pret Onify" est pilotee par la reception reelle des pieces. Des
- * qu'un dossier Glass existe, le lead est archive automatiquement et quitte
- * cet ecran. Perdu et Cloture demandent une confirmation.
+ * L'etape "Pret Onify" est pilotee par la reception reelle des pieces. La
+ * synchronisation ajoute ensuite les etapes Onify, intervention et finance
+ * sur cette meme fiche. Perdu et Cloture demandent une confirmation.
  */
 export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelineProps) {
   const [confirmation, setConfirmation] = useState<LeadJourneyStage | null>(null);

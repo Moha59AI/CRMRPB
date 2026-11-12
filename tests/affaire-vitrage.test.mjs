@@ -23,14 +23,21 @@ test('une affaire vitrage relie les quatre modules sans dupliquer le contact', a
   assert.match(migration, /create or replace view public\.v_affaires_vitrage/);
 });
 
-test('la reprise conserve le lead d origine et ne fabrique aucun faux lead Glass', async () => {
-  const migration = await read(MIGRATION);
+test('la reprise conserve le lead d origine puis cree un vrai lead pour chaque historique Onify', async () => {
+  const [migration, unified] = await Promise.all([
+    read(MIGRATION),
+    read('supabase/migrations/20261110100000_unifier_leads_onify.sql'),
+  ]);
 
   assert.match(migration, /select lead\.id,[\s\S]*?from public\.leads lead/);
   assert.match(migration, /set affaire_id = lead\.affaire_id/);
   assert.match(migration, /Les dossiers Glass historiques sans lead ne fabriquent pas de faux lead/);
   assert.doesNotMatch(migration, /insert into public\.leads/);
   assert.match(migration, /select dossier\.id,[\s\S]*?from public\.windscreen_cases dossier/);
+  assert.match(unified, /insert into public\.leads \(/);
+  assert.match(unified, /'source', 'onify'/);
+  assert.match(unified, /on conflict \(workspace_id, onify_case_id\)/);
+  assert.match(unified, /set lead_id = lead\.id/);
 });
 
 test('les rendez vous et la finance recuperent automatiquement la meme affaire', async () => {
@@ -49,14 +56,15 @@ test('les rendez vous et la finance recuperent automatiquement la meme affaire',
   assert.match(sync, /affaire_id: caseLink\?\.affaireId \?\? existingLink\?\.affaireId \?\? null/);
 });
 
-test('Glass rend le parcours de l affaire visible et responsive', async () => {
-  const page = await read('src/features/cases/cases-page.tsx');
+test('Leads et la fiche client rendent le parcours de l affaire visible et modifiable', async () => {
+  const overview = await read('src/features/dossier/lead-overview-summary.tsx');
   const client = await read('src/features/client/client-modal.tsx');
   const service = await read('src/services/affaires-service.ts');
 
-  assert.match(page, /function AffaireJourney/);
-  assert.match(page, /Une seule affaire, le même contact/);
-  assert.match(page, /sm:grid-cols-4/);
+  assert.match(overview, /sm:grid-cols-2/);
+  assert.match(overview, /Les champs sont toujours modifiables/);
+  assert.match(overview, /Adresse d'intervention/);
+  assert.match(overview, /Assurance et offre/);
   assert.match(client, /function AffairesVitrageClient/);
   assert.match(client, /Une ligne par demande, du lead jusqu’à la finance/);
   assert.match(client, /fetchAffairesByContactId/);

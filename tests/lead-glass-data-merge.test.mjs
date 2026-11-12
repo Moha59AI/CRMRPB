@@ -38,22 +38,23 @@ test('la franchise Onify garde son montant et son unite sans convertir un pource
   assert.match(migration, /dossier\.franchise_source is distinct from 'lead'/);
 });
 
-test('la fiche Glass reste modifiable et synchronise aussi le lead historique', async () => {
-  const [migration, page, service] = await Promise.all([
+test('la fiche Lead reste modifiable apres l enrichissement Onify', async () => {
+  const [migration, unifiedMigration, overview] = await Promise.all([
     read(MIGRATION),
-    read('src/features/cases/cases-page.tsx'),
-    read('src/services/cases-service.ts'),
+    read('supabase/migrations/20261110100000_unifier_leads_onify.sql'),
+    read('src/features/dossier/lead-overview-summary.tsx'),
   ]);
 
   assert.match(migration, /create or replace function public\.mettre_a_jour_dossier_glass/);
   assert.match(migration, /update public\.leads lead/);
   assert.match(migration, /grant execute on function public\.mettre_a_jour_dossier_glass\(uuid, jsonb\)/);
-  assert.match(page, /data-operational-editor/);
-  assert.match(page, /Toujours modifiables dans Glass/);
-  assert.match(page, /Adresse d’intervention/);
-  assert.match(page, /Cadeau \/ offre/);
-  assert.match(page, /fetchLeadById/);
-  assert.match(service, /rpc\('mettre_a_jour_dossier_glass'/);
+  assert.match(unifiedMigration, /intervention_address = coalesce\([\s\S]*?lead\.intervention_address/);
+  assert.match(unifiedMigration, /offer = coalesce\([\s\S]*?lead\.offer/);
+  assert.match(overview, /Les champs sont toujours modifiables/);
+  assert.match(overview, /onUpdate\(\{ insurance: value \}\)/);
+  assert.match(overview, /franchise_amount: value === '' \? null : Number\(value\)/);
+  assert.match(overview, /onUpdate\(\{ offer: value \}\)/);
+  assert.match(overview, /leadUpdates\.intervention_address/);
 });
 
 test('une franchise inconnue reste inconnue et zero reste une vraie valeur', async () => {

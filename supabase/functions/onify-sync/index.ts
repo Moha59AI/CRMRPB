@@ -173,7 +173,7 @@ type SyncCounts = {
   glassLeads: number;
   /** Affaires reliees entre les modules apres la synchronisation. */
   affaires: number;
-  /** Leads convertis, archives puis transferes vers Glass pendant ce tour. */
+  /** Fiches Leads creees ou enrichies avec leur dossier Onify pendant ce tour. */
   glassTransitions: number;
   /** Leads et rendez-vous enrichis avec le véhicule fourni par Onify. */
   vehicles: number;
@@ -1129,6 +1129,14 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
   if (financialCompletionError) {
     throw new Error(`franchise des dossiers Glass: ${financialCompletionError.message}`);
   }
+  // Les factures peuvent apporter une franchise absente du dossier recovery.
+  // Une seconde propagation garantit que la fiche Lead la voit pendant le
+  // meme tour de synchronisation, sans attendre le prochain passage.
+  const { data: financialLeadEnrichment, error: financialLeadEnrichmentError } = await adminClient
+    .rpc('avancer_leads_apres_dossier_glass', { p_workspace_id: workspaceId });
+  if (financialLeadEnrichmentError) {
+    throw new Error(`enrichissement des Leads depuis Onify: ${financialLeadEnrichmentError.message}`);
+  }
   const { data: vehicles, error: vehicleError } = await adminClient
     .rpc('propager_vehicules_onify', { p_workspace_id: workspaceId });
   if (vehicleError) throw new Error(`propagation véhicules: ${vehicleError.message}`);
@@ -1163,7 +1171,7 @@ async function syncWorkspace(workspaceId: string): Promise<SyncCounts> {
     glassFullRescan,
     glassLeads: glass.leads,
     affaires: numeric(affaires.affaires),
-    glassTransitions: glass.transitions,
+    glassTransitions: Math.max(glass.transitions, numeric(financialLeadEnrichment)),
     vehicles: Number(vehicles ?? 0),
     notesRemaining: notes.remaining,
   };

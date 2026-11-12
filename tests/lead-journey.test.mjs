@@ -13,12 +13,16 @@ test('le parcours commercial distingue le lead, les pieces et le dossier Onify',
     'Qualifié',
     'Attente documents',
     'Prêt Onify',
+    'Suivi Onify',
     'RDV pris',
+    'Intervention réalisée',
+    'Facturation',
+    'SAV',
     'Perdu',
     'Clôturé',
   ];
   for (const label of labels) assert.match(shared, new RegExp(`label: '${label}'`));
-  assert.equal((shared.match(/key: '(nouveau|nrp|qualifie|documents|onify_ready|rdv|perdu|cloture)'/g) ?? []).length, 8);
+  assert.equal((shared.match(/key: '(nouveau|nrp|qualifie|documents|onify_ready|onify|rdv|intervention|finance|sav|perdu|cloture)'/g) ?? []).length, 12);
   assert.doesNotMatch(shared, /key: 'onify_created'/);
 });
 
@@ -29,6 +33,9 @@ test('les statuts techniques sont separes pour suivre la creation Onify', async 
   assert.match(shared, /statuses: \['new', 'to_call', 'calling'\]/);
   assert.match(shared, /key: 'documents',[\s\S]*?statuses: \['documents_requested'\]/);
   assert.match(shared, /key: 'onify_ready',[\s\S]*?statuses: \['documents_received'\]/);
+  assert.match(shared, /key: 'onify',[\s\S]*?statuses: \['onify_processing'\]/);
+  assert.match(shared, /key: 'intervention',[\s\S]*?statuses: \['intervention_done'\]/);
+  assert.match(shared, /key: 'finance',[\s\S]*?statuses: \['payment_pending'\]/);
   assert.match(shared, /automated: true/);
   assert.doesNotMatch(shared, /glass_created/);
   assert.match(service, /query\.in\('status', \[\.\.\.params\.statuses\]\)/);

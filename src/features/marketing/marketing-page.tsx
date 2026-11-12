@@ -32,7 +32,7 @@ import {
 const chartConfig = {
   clicks: { label: 'Clics', color: 'hsl(var(--chart-2))' },
   leads: { label: 'Leads', color: 'hsl(var(--chart-1))' },
-  transformedLeads: { label: 'Dossiers Glass', color: 'hsl(var(--chart-4))' },
+  transformedLeads: { label: 'Dossiers Onify', color: 'hsl(var(--chart-4))' },
   interventions: { label: 'Interventions', color: 'hsl(var(--chart-3))' },
 } satisfies ChartConfig;
 
@@ -82,7 +82,7 @@ function exportCampaigns(campaigns: MarketingCampaignRow[], days: number) {
   const headers = [
     'Campagne', 'ID', 'Statut', 'Dépenses', 'Impressions', 'Clics', 'CTR', 'CPC',
     'Conversions Google', 'Leads CRM', 'Taux clic vers lead', 'CPL', 'Qualifiés',
-    'Rendez-vous', 'Dossiers Glass', 'Interventions', 'Coût par intervention',
+    'Rendez-vous', 'Dossiers Onify', 'Interventions', 'Coût par intervention',
     'Factures rapprochées', 'CA net après avoirs', 'Encaissé', 'ROAS CRM',
     'Marge estimée', 'Résultat marge après avoirs et Ads',
   ];
@@ -296,7 +296,7 @@ export function MarketingPage() {
                 />
                 <Kpi
                   icon={Target}
-                  label="Dossiers Glass"
+                  label="Dossiers Onify"
                   value={integer.format(totals.transformedLeads)}
                   detail={`${cost(totals.spend, totals.transformedLeads)} / transformation · ${ratio(totals.transformedLeads, totals.leads)} des leads`}
                   trend={previous ? variation(totals.transformedLeads, previous.transformedLeads) : undefined}
@@ -353,7 +353,7 @@ export function MarketingPage() {
                     <FunnelStep label="Leads reçus" value={totals.leads} reference={totals.clicks} color="bg-primary" />
                     <FunnelStep label="Leads qualifiés" value={totals.qualifiedLeads} reference={totals.clicks} color="bg-primary" />
                     <FunnelStep label="Rendez-vous" value={totals.appointments} reference={totals.clicks} color="bg-due" />
-                    <FunnelStep label="Dossiers Glass créés" value={totals.transformedLeads} reference={totals.clicks} color="bg-upcoming" />
+                    <FunnelStep label="Dossiers Onify créés" value={totals.transformedLeads} reference={totals.clicks} color="bg-upcoming" />
                     <FunnelStep label="Interventions réalisées" value={totals.interventions} reference={totals.clicks} color="bg-done" />
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-2 text-xs">
@@ -455,7 +455,7 @@ function CampaignTable({ campaigns }: { campaigns: MarketingCampaignRow[] }) {
             <TableHead className="text-right">CPL</TableHead>
             <TableHead className="text-right">Qualifiés</TableHead>
             <TableHead className="text-right">RDV</TableHead>
-            <TableHead className="text-right">Dossiers Glass</TableHead>
+            <TableHead className="text-right">Dossiers Onify</TableHead>
             <TableHead className="text-right">Interv.</TableHead>
             <TableHead className="text-right">Coût / interv.</TableHead>
             <TableHead className="text-right">CA net</TableHead>
@@ -536,7 +536,7 @@ function ProfitabilitySection({ data }: { data: MarketingDashboardData }) {
               <h2 className="text-base font-semibold">Rentabilité Google Ads rapprochée au CRM</h2>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Les factures et avoirs sont rattachés au dossier Glass en priorité, puis au client par téléphone ou e-mail.
+              Les factures et avoirs sont rattachés à l’affaire Onify en priorité, puis au client par téléphone ou e-mail.
             </p>
           </div>
           <Badge variant="secondary" className="w-fit rounded-full">
@@ -624,7 +624,7 @@ function ProfitabilitySection({ data }: { data: MarketingDashboardData }) {
             <h3 className="text-sm font-semibold">Fiabilité financière</h3>
           </div>
           <div className="mt-4 space-y-3 text-xs">
-            <ReconciliationLine label="Par dossier Glass" value={financialAttribution.invoicesByCase} detail="lien exact" />
+            <ReconciliationLine label="Par dossier Onify" value={financialAttribution.invoicesByCase} detail="lien exact" />
             <ReconciliationLine label="Par identité client" value={financialAttribution.invoicesByContact} detail="téléphone ou e-mail" />
             <ReconciliationLine label="Dossiers avec facture" value={financialAttribution.leadsWithInvoice} detail={`${invoiceCoverage} des transformés`} />
           </div>
@@ -668,7 +668,7 @@ function TransformedCasesSection({ cases }: { cases: MarketingTransformedCaseRow
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="min-w-[190px]">Client</TableHead>
-                <TableHead className="min-w-[150px]">Dossier Glass</TableHead>
+                <TableHead className="min-w-[150px]">Dossier Onify</TableHead>
                 <TableHead className="min-w-[155px]">Origine</TableHead>
                 <TableHead className="min-w-[210px]">Campagne</TableHead>
                 <TableHead className="min-w-[210px]">Facture</TableHead>

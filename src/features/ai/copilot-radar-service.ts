@@ -105,7 +105,8 @@ interface InsightRow {
 
 const ACTIVE_LEAD_STATUSES = [
   'new', 'to_call', 'calling', 'nrp', 'interested',
-  'documents_requested', 'documents_received', 'appointment_scheduled',
+  'documents_requested', 'documents_received', 'onify_processing',
+  'appointment_scheduled', 'intervention_done', 'payment_pending', 'sav',
 ];
 
 const severityRank: Record<CopilotAlertSeverity, number> = {
@@ -315,7 +316,7 @@ export async function fetchCopilotRadar(context: RadarContext): Promise<CopilotR
       domain: 'commercial',
       title: task.title,
       description: `Tâche en retard de ${elapsedLabel(delay)}.`,
-      link: task.lead_id ? openLeadLink(task.lead_id) : task.case_id ? '/glass' : '/tasks',
+      link: task.lead_id ? openLeadLink(task.lead_id) : '/tasks',
       dueAt: task.due_at,
       source: 'rule',
     });
@@ -358,7 +359,7 @@ export async function fetchCopilotRadar(context: RadarContext): Promise<CopilotR
         domain: 'documents',
         title: `Pièces manquantes · ${item.case_number}`,
         description: 'Une intervention approche alors que le dossier documentaire est incomplet.',
-        link: item.lead_id ? openLeadLink(item.lead_id) : '/glass',
+        link: item.lead_id ? openLeadLink(item.lead_id) : '/leads',
         dueAt: item.appointment_date,
         source: 'rule',
       });

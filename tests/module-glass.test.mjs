@@ -4,19 +4,21 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('Glass est un module visible et garde la compatibilite des anciens liens', async () => {
-  const [navigation, routes, permissions] = await Promise.all([
+test('Glass disparait de la navigation et les anciens liens reviennent vers le lead', async () => {
+  const [navigation, routes, permissions, redirect] = await Promise.all([
     read('src/config/navigation.ts'),
     read('src/app/app-routes.tsx'),
     read('src/config/permissions.ts'),
+    read('src/features/cases/legacy-onify-case-redirect.tsx'),
   ]);
 
-  assert.match(navigation, /label: 'Glass'/);
-  assert.match(navigation, /path: '\/glass'/);
-  assert.match(routes, /path="\/glass"/);
-  assert.match(routes, /path="\/cases" element=\{<AncienLienDossierGlass \/>\}/);
-  assert.match(routes, /`\/glass\$\{search\}`/);
-  assert.match(permissions, /'\/glass': \['admin', 'manager', 'advisor', 'accountant'\]/);
+  assert.doesNotMatch(navigation, /label: 'Glass'/);
+  assert.doesNotMatch(navigation, /path: '\/glass'/);
+  assert.match(routes, /path="\/glass" element=\{charger\(<LegacyOnifyCaseRedirect \/>\)\}/);
+  assert.match(routes, /path="\/cases" element=\{charger\(<LegacyOnifyCaseRedirect \/>\)\}/);
+  assert.doesNotMatch(permissions, /'\/glass':/);
+  assert.match(redirect, /<Navigate to=\{`\/interventions\/\$\{query\.data\.lead_id\}`\} replace \/>/);
+  assert.match(redirect, /<Navigate to="\/leads" replace \/>/);
 });
 
 test('le module charge tous les vrais dossiers Onify sans plafond de 200', async () => {
