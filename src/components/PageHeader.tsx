@@ -9,9 +9,16 @@ interface PageHeaderProps {
   description?: string;
   action?: ReactNode;
   compactMobile?: boolean;
+  compactWorkArea?: boolean;
 }
 
-export function PageHeader({ title, description, action, compactMobile = false }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  action,
+  compactMobile = false,
+  compactWorkArea = false,
+}: PageHeaderProps) {
   const { pathname } = useLocation();
   const sections = [...navSections, ...settingsNavSections];
   const items = sections.flatMap((section) => section.items.map((item) => ({
@@ -35,6 +42,7 @@ export function PageHeader({ title, description, action, compactMobile = false }
         icon={Icon}
         eyebrow={current ? `${current.section} · ${current.label}` : 'Relais Pare-Brise · CRM'}
         compactMobile={compactMobile}
+        compactWorkArea={compactWorkArea}
       />
     </div>
   );

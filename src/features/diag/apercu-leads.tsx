@@ -102,6 +102,7 @@ export function ApercuLeads() {
         title="Leads"
         description="Prospects reçus depuis Meta et autres sources"
         compactMobile
+        compactWorkArea
         action={(
           <Button className="rounded-full px-3">
             <Plus className="mr-1.5 h-4 w-4" />
@@ -114,7 +115,7 @@ export function ApercuLeads() {
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Liste téléphone dense
         </h2>
-        <div className="h-[340px] max-w-[390px] overflow-hidden rounded-xl border border-border bg-card">
+        <div className="h-[340px] w-full max-w-[720px] overflow-hidden rounded-xl border border-border bg-card">
           <ListeMobile
             leads={CAS.map((c) => c.lead)}
             selection={selection}

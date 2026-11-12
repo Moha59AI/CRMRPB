@@ -70,6 +70,9 @@ test('la liste mobile des leads reste dense et garde les informations de décisi
   ]);
 
   assert.match(page, /<PageHeader[\s\S]*compactMobile/);
+  assert.match(page, /compactWorkArea/);
+  assert.match(page, /useMediaQuery\('\(max-width: 1399px\)'\)/);
+  assert.match(page, /estVueEtroite \? \([\s\S]*<ListeMobile/);
   assert.match(page, /overflow-x-auto[\s\S]*À archiver \(\+2 jours\)/);
   assert.match(page, /flex min-h-\[64px\] items-stretch/);
   assert.match(page, /px-2\.5 py-2 text-left/);

@@ -21,7 +21,10 @@ test('chaque etape utilise la couleur personnalisable de son statut', async () =
 });
 
 test('la couleur couvre le tableau et la liste mobile sans masquer la selection', async () => {
-  const page = await read('src/features/leads/leads-page.tsx');
+  const [page, css] = await Promise.all([
+    read('src/features/leads/leads-page.tsx'),
+    read('src/index.css'),
+  ]);
 
   assert.equal(
     (page.match(/couleurLigneLead\(lead\.status,/g) ?? []).length,
@@ -29,6 +32,8 @@ test('la couleur couvre le tableau et la liste mobile sans masquer la selection'
   );
   assert.match(page, /if \(selectionnee\) return 'border-l-4 border-primary/);
   assert.equal((page.match(/leadStatusColorStyle\(lead\.status\)/g) ?? []).length, 4);
+  assert.match(css, /lead-status-row[\s\S]*lead-status-color\) 7%/);
+  assert.match(css, /lead-status-card[\s\S]*lead-status-color\) 8%/);
 });
 
 test('le pipeline reprend toutes les couleurs et distingue les documents recus', async () => {

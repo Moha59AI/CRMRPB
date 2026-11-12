@@ -708,22 +708,22 @@
    les lignes, les cartes, les en-têtes et les pastilles. */
 .lead-status-row {
   border-left: 4px solid var(--lead-status-color);
-  background-color: color-mix(in srgb, var(--lead-status-color) 14%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 7%, hsl(var(--card)));
 }
 .lead-status-row:hover {
-  background-color: color-mix(in srgb, var(--lead-status-color) 21%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 12%, hsl(var(--card)));
 }
 .lead-status-card {
   border-color: color-mix(in srgb, var(--lead-status-color) 62%, transparent);
-  background-color: color-mix(in srgb, var(--lead-status-color) 14%, hsl(var(--card)));
+  background-color: color-mix(in srgb, var(--lead-status-color) 8%, hsl(var(--card)));
 }
 .lead-status-card:hover {
   border-color: var(--lead-status-color);
-  background-color: color-mix(in srgb, var(--lead-status-color) 20%, hsl(var(--card)));
+  background-color: color-mix(in srgb, var(--lead-status-color) 13%, hsl(var(--card)));
 }
 .lead-stage-header {
   border-color: color-mix(in srgb, var(--lead-status-color) 48%, transparent);
-  background-color: color-mix(in srgb, var(--lead-status-color) 18%, transparent);
+  background-color: color-mix(in srgb, var(--lead-status-color) 10%, hsl(var(--card)));
 }
 .lead-status-badge {
   border-color: color-mix(in srgb, var(--lead-status-color) 62%, transparent);

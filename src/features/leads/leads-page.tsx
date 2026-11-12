@@ -13,7 +13,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { peutSupprimer } from '@/config/permissions';
 import { DialogueSuppressionArchives } from './dialogue-suppression-archives';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
-import { useEstMobile } from '@/hooks/use-media-query';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -105,9 +105,10 @@ export function BadgeAttente({ lead, compact }: { lead: Lead; compact?: boolean 
 export function LeadsPage() {
   const queryClient = useQueryClient();
   const { profile: profileCourant } = useAuth();
-  // Sur telephone, le tableau et le pipeline sont illisibles : la liste en
-  // cartes remplace la vue choisie, quelle qu'elle soit.
-  const estMobile = useEstMobile();
+  // La largeur utile est bien plus petite que la fenêtre quand la navigation
+  // latérale reste ouverte. Sous 1 400 px, les treize colonnes du tableau ne
+  // peuvent plus être lues : la liste dense remplace donc la vue choisie.
+  const estVueEtroite = useMediaQuery('(max-width: 1399px)');
 
   // Search with debounce
   const [searchInput, setSearchInput] = useState('');
@@ -339,6 +340,7 @@ export function LeadsPage() {
         title="Leads"
         description="Toutes les affaires, du premier contact jusqu’au suivi Onify et au règlement"
         compactMobile
+        compactWorkArea
         action={
           <div className="flex w-auto items-center gap-1.5 sm:gap-2">
             {/* Outil de developpement : jamais visible en production, et la
@@ -370,16 +372,16 @@ export function LeadsPage() {
       {/* Toolbar: view toggle + filters */}
       <div className="flex flex-wrap items-center gap-2 gutter-x border-b border-border py-2 sm:gap-3 sm:py-3">
         {/* View toggle */}
-        <div className="hidden items-center rounded-lg bg-muted p-1 md:inline-flex">
+        <div className="hidden items-center rounded-lg bg-muted p-1 min-[1400px]:inline-flex">
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
           <ViewToggleButton active={view === 'kanban'} onClick={() => setView('kanban')} icon={Columns3} label="Pipeline" />
           <ViewToggleButton active={view === 'compact'} onClick={() => setView('compact')} icon={List} label="Liste compacte" />
         </div>
 
-        <div className="hidden h-6 w-px bg-border md:block" />
+        <div className="hidden h-6 w-px bg-border min-[1400px]:block" />
 
         {/* Search */}
-        <div className="order-first relative w-full min-w-0 md:order-none md:min-w-[200px] md:flex-1">
+        <div className="order-first relative w-full min-w-0 min-[1400px]:order-none min-[1400px]:min-w-[200px] min-[1400px]:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Nom, téléphone, email, ville..."
@@ -524,7 +526,7 @@ export function LeadsPage() {
                 onOuvrir={(lead) => ouvrirIntervention(lead.id)}
                 onValider={() => mutationArchives.mutate([...selectionArchives])}
               />
-            ) : estMobile ? (
+            ) : estVueEtroite ? (
               <ListeMobile
                 leads={leads}
                 selection={selectionLeads}
