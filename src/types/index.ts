@@ -170,6 +170,8 @@ export interface Lead {
   onify_payment_status?: string | null;
   onify_stage?: string | null;
   onify_synced_at?: string | null;
+  /** Passage explicite de cette fiche vers l'écran de création Onify. */
+  onify_handoff_at?: string | null;
   insurance_claim_number?: string | null;
   insurance_claim_date?: string | null;
   created_at: string;

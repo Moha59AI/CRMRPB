@@ -5,7 +5,10 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { messageErreurBase } from '@/lib/erreurs';
-import { fetchOnifyGlassCaseByLeadId } from '@/services/cases-service';
+import {
+  fetchOnifyGlassCaseByLeadId,
+  prepareOnifyLeadHandoff,
+} from '@/services/cases-service';
 import { fetchClientDocumentRequests } from '@/services/client-documents-service';
 import { syncOnify } from '@/features/integrations/onify/onify-service';
 import type { Lead } from '@/types';
@@ -54,6 +57,26 @@ export function OnifyLeadEnrichment({ lead }: { lead: Lead }) {
     },
     onError: (error: Error) => toast.error(messageErreurBase(error.message)),
   });
+  const handoff = useMutation({
+    mutationFn: () => prepareOnifyLeadHandoff(lead.id),
+    onError: (error: Error) => toast.error(
+      `Passage vers Onify non préparé : ${messageErreurBase(error.message)}`,
+    ),
+  });
+  const ouvrirCreationOnify = () => {
+    // La fenêtre est créée pendant le clic utilisateur pour ne pas être
+    // bloquée par Safari/Chrome. Elle ne quitte la page blanche qu'après la
+    // confirmation en base de la fiche exacte à rattacher.
+    const popup = window.open('', '_blank');
+    if (popup) popup.opener = null;
+    handoff.mutate(undefined, {
+      onSuccess: () => {
+        if (popup) popup.location.replace(ONIFY_GLASS_URL);
+        else toast.error('Autorisez les fenêtres surgissantes puis réessayez.');
+      },
+      onError: () => popup?.close(),
+    });
+  };
 
   const onifyCase = glassCase.data ?? null;
   // Un nouveau lien peut etre cree pour une piece complementaire. Une demande
@@ -189,9 +212,12 @@ export function OnifyLeadEnrichment({ lead }: { lead: Lead }) {
             type="button"
             size="sm"
             className="rounded-full"
-            onClick={() => window.open(ONIFY_GLASS_URL, '_blank', 'noopener,noreferrer')}
+            disabled={handoff.isPending}
+            onClick={ouvrirCreationOnify}
           >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+            {handoff.isPending
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <ExternalLink className="mr-1.5 h-3.5 w-3.5" />}
             Créer dans Onify
           </Button>
           <Button

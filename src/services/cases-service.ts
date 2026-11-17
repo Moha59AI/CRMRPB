@@ -128,6 +128,19 @@ export async function fetchOnifyGlassCaseByLeadId(leadId: string): Promise<Winds
   return data as WindscreenCase | null;
 }
 
+/**
+ * Mémorise la fiche exacte depuis laquelle Onify est ouvert.
+ *
+ * Sans cette balise, un client ayant plusieurs anciennes interventions peut
+ * être confondu avec un nouveau dossier et recevoir un second lead importé.
+ */
+export async function prepareOnifyLeadHandoff(leadId: string): Promise<void> {
+  const { error } = await supabase.rpc('preparer_passage_lead_onify', {
+    p_lead_id: leadId,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function createCase(c: Partial<WindscreenCase>): Promise<{ error: string | null; caseData: WindscreenCase | null }> {
   const wsId = await getWorkspaceId();
   const { data, error } = await supabase
