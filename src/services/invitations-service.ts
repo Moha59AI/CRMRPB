@@ -30,8 +30,10 @@ export async function fetchInvitations(): Promise<Invitation[]> {
 
 export interface InvitationEnvoyee {
   invitation_id: string;
+  user_id: string;
   email: string;
-  message_id: string;
+  message_id: string | null;
+  mode: 'invitation' | 'password';
 }
 
 const erreursInvitation: Record<string, string> = {
@@ -39,6 +41,8 @@ const erreursInvitation: Record<string, string> = {
   FORBIDDEN: 'Seul un administrateur peut inviter un utilisateur.',
   EMAIL_INVALIDE: "L'adresse email est invalide.",
   ROLE_INVALIDE: "Le rôle sélectionné n'est pas reconnu.",
+  MODE_CREATION_INVALIDE: "Le mode de création du compte n'est pas reconnu.",
+  MOT_DE_PASSE_TROP_FAIBLE: 'Utilisez au moins 12 caractères avec une majuscule, une minuscule, un chiffre et un symbole.',
   UTILISATEUR_INTROUVABLE: "Ce compte utilisateur est introuvable.",
   BOITE_IONOS_NON_CONFIGUREE: "Configurez d'abord la boîte mail IONOS dans les réglages.",
   MOT_DE_PASSE_IONOS_ABSENT: 'Le mot de passe IONOS doit être enregistré dans les réglages.',
@@ -57,7 +61,10 @@ function erreurInvitation(message: string): string {
  * La fonction Edge controle elle-meme le role administrateur et annule le
  * compte cree si le serveur SMTP refuse le message.
  */
-type CorpsInvitation = { email: string; role: UserRole } | { user_id: string };
+type CorpsInvitation =
+  | { email: string; role: UserRole; mode: 'invitation' }
+  | { email: string; role: UserRole; mode: 'password'; password: string }
+  | { user_id: string };
 
 async function envoyerInvitation(body: CorpsInvitation): Promise<InvitationEnvoyee> {
   const { data, error } = await supabase.functions.invoke<InvitationEnvoyee & {
@@ -76,14 +83,35 @@ async function envoyerInvitation(body: CorpsInvitation): Promise<InvitationEnvoy
     }
     throw new Error(erreurInvitation(message));
   }
-  if (!data?.invitation_id || !data.email || !data.message_id) {
-    throw new Error(erreurInvitation(data?.error || "Le serveur n'a pas confirmé l'envoi de l'invitation"));
+  if (!data?.invitation_id || !data.user_id || !data.email || !data.mode) {
+    throw new Error(erreurInvitation(data?.error || "Le serveur n'a pas confirmé la création de l'accès"));
+  }
+  if (data.mode === 'invitation' && !data.message_id) {
+    throw new Error("Le serveur n'a pas confirmé l'envoi de l'invitation");
   }
   return data;
 }
 
 export async function creerInvitation(email: string, role: UserRole): Promise<InvitationEnvoyee> {
-  return envoyerInvitation({ email: email.trim().toLowerCase(), role });
+  return envoyerInvitation({ email: email.trim().toLowerCase(), role, mode: 'invitation' });
+}
+
+/**
+ * Cree un compte immediatement actif avec le mot de passe initial choisi par
+ * l'administrateur. Le mot de passe traverse uniquement l'appel HTTPS vers la
+ * fonction Edge et n'est jamais renvoye au navigateur ni stocke dans le CRM.
+ */
+export async function creerAccesAvecMotDePasse(
+  email: string,
+  role: UserRole,
+  password: string,
+): Promise<InvitationEnvoyee> {
+  return envoyerInvitation({
+    email: email.trim().toLowerCase(),
+    role,
+    mode: 'password',
+    password,
+  });
 }
 
 /** Renvoie l'acces d'un membre cree qui n'a pas encore finalise sa connexion. */

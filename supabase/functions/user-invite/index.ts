@@ -30,6 +30,15 @@ function emailValide(value: string): boolean {
   return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function motDePasseValide(value: string): boolean {
+  return value.length >= 12
+    && value.length <= 72
+    && /[a-z]/.test(value)
+    && /[A-Z]/.test(value)
+    && /\d/.test(value)
+    && /[^A-Za-z0-9]/.test(value);
+}
+
 function echapperHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -186,6 +195,9 @@ Deno.serve(async (req) => {
     const caller = await administrateur(req);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const requestedUserId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+    const requestedMode = typeof body.mode === 'string' && body.mode ? body.mode : 'invitation';
+    const creationMode = requestedUserId ? 'invitation' : requestedMode;
+    const password = typeof body.password === 'string' ? body.password : '';
     let email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     let role = typeof body.role === 'string' ? body.role : '';
     let existingUser: User | null = null;
@@ -216,8 +228,13 @@ Deno.serve(async (req) => {
 
     if (!emailValide(email)) throw new Error('EMAIL_INVALIDE');
     if (!roles.has(role)) throw new Error('ROLE_INVALIDE');
+    if (creationMode !== 'invitation' && creationMode !== 'password') {
+      throw new Error('MODE_CREATION_INVALIDE');
+    }
+    if (creationMode === 'password' && !motDePasseValide(password)) {
+      throw new Error('MOT_DE_PASSE_TROP_FAIBLE');
+    }
 
-    const mailbox = await boiteIonos(caller.workspaceId);
     if (existingUser && !existingProfile) {
       const { data, error: profileError } = await admin
         .from('profiles')
@@ -234,6 +251,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Le mode mot de passe n'a pas besoin d'une boite mail. Le controle SMTP
+    // reste fait avant toute ecriture pour le parcours d'invitation classique.
+    const mailbox = creationMode === 'invitation'
+      ? await boiteIonos(caller.workspaceId)
+      : null;
+
     const invitation = await creerOuProlongerInvitation(
       caller.workspaceId,
       email,
@@ -243,7 +266,88 @@ Deno.serve(async (req) => {
     invitationId = invitation.record.id as string;
     invitationCreated = invitation.created;
 
+    if (creationMode === 'password') {
+      let userId = existingUser?.id ?? '';
+
+      if (!existingUser) {
+        const { data, error } = await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        if (error || !data.user) throw new Error(error?.message || 'CREATION_UTILISATEUR_IMPOSSIBLE');
+        userId = data.user.id;
+        userIdToDelete = data.user.id;
+      }
+
+      const { data: generatedProfile, error: generatedProfileError } = await admin
+        .from('profiles')
+        .select('id, workspace_id, role')
+        .eq('id', userId)
+        .maybeSingle();
+      if (generatedProfileError) throw new Error(generatedProfileError.message);
+      if (generatedProfile && generatedProfile.workspace_id !== caller.workspaceId) {
+        throw new Error('UTILISATEUR_DEJA_RATTACHE');
+      }
+
+      if (!generatedProfile) {
+        const { error: profileInsertError } = await admin.from('profiles').insert({
+          id: userId,
+          workspace_id: caller.workspaceId,
+          first_name: '',
+          last_name: '',
+          role,
+        });
+        if (profileInsertError) throw new Error(profileInsertError.message);
+        if (existingUser) profileIdToDelete = userId;
+      } else if (generatedProfile.role !== role) {
+        const { error: profileUpdateError } = await admin
+          .from('profiles')
+          .update({ role })
+          .eq('id', userId)
+          .eq('workspace_id', caller.workspaceId);
+        if (profileUpdateError) throw new Error(profileUpdateError.message);
+      }
+
+      // createUser a deja pose le mot de passe. Pour un compte invite mais
+      // jamais utilise, l'administrateur peut terminer la creation sans creer
+      // un doublon. Un membre actif reste bloque plus haut.
+      if (existingUser) {
+        const { error: passwordError } = await admin.auth.admin.updateUserById(userId, {
+          password,
+          email_confirm: true,
+        });
+        if (passwordError) throw new Error(passwordError.message);
+      }
+
+      const { error: invitationError } = await admin.from('invitations').update({
+        accepted_at: new Date().toISOString(),
+      }).eq('id', invitationId);
+      if (invitationError) throw new Error(invitationError.message);
+
+      await admin.from('audit_logs').insert({
+        workspace_id: caller.workspaceId,
+        user_id: caller.userId,
+        action: 'user_access_created_with_password',
+        entity_type: 'profile',
+        entity_id: userId,
+        metadata: { email, role, activation: 'admin_password' },
+      });
+
+      return json({
+        success: true,
+        invitation_id: invitationId,
+        user_id: userId,
+        email,
+        message_id: null,
+        mode: 'password',
+      });
+    }
+
+    if (!mailbox) throw new Error('BOITE_IONOS_NON_CONFIGUREE');
+
     let actionLink = '';
+    let targetUserId = existingUser?.id ?? '';
     if (existingUser) {
       if (!existingProfile) {
         const { error: profileInsertError } = await admin.from('profiles').insert({
@@ -276,6 +380,7 @@ Deno.serve(async (req) => {
       });
       if (error) throw new Error(error.message);
       userIdToDelete = data.user.id;
+      targetUserId = data.user.id;
       actionLink = data.properties.action_link;
 
       const { data: generatedProfile, error: generatedProfileError } = await admin
@@ -338,8 +443,10 @@ Deno.serve(async (req) => {
     return json({
       success: true,
       invitation_id: invitationId,
+      user_id: targetUserId,
       email,
       message_id: result.messageId,
+      mode: 'invitation',
     });
   } catch (error) {
     if (userIdToDelete) await admin.auth.admin.deleteUser(userIdToDelete).catch(() => undefined);
@@ -353,6 +460,7 @@ Deno.serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     const exposedErrors = new Set([
       'UNAUTHORIZED', 'FORBIDDEN', 'EMAIL_INVALIDE', 'ROLE_INVALIDE',
+      'MODE_CREATION_INVALIDE', 'MOT_DE_PASSE_TROP_FAIBLE',
       'UTILISATEUR_INTROUVABLE',
       'BOITE_IONOS_NON_CONFIGUREE', 'MOT_DE_PASSE_IONOS_ABSENT',
       'UTILISATEUR_DEJA_MEMBRE', 'UTILISATEUR_DEJA_RATTACHE',

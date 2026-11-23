@@ -149,7 +149,7 @@ export function UsersPage() {
           estAdmin ? (
             <Button className="rounded-full" onClick={() => setInviterOuvert(true)}>
               <UserPlus className="mr-2 h-4 w-4" />
-              Inviter
+              Nouvel utilisateur
             </Button>
           ) : undefined
         }
