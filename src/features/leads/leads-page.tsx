@@ -55,7 +55,8 @@ import type {
 } from '@/types';
 
 import {
-  statusLabels, leadJourneyStages, leadStatusFilterOptions, leadStatusesForFilter,
+  commercialActionForStatus, commercialFunnelStages, commercialStageForStatus,
+  commercialStatusLabel, leadStatusFilterOptions, leadStatusesForFilter,
   leadStageForStatus, statusSelectOptions, sourceSelectOptions, profileName,
   formatDate, leadName, vehicleLabel, vitrageLabel, LIBELLE_VITRAGE,
 } from './lead-shared';
@@ -105,10 +106,11 @@ export function BadgeAttente({ lead, compact }: { lead: Lead; compact?: boolean 
 export function LeadsPage() {
   const queryClient = useQueryClient();
   const { profile: profileCourant } = useAuth();
-  // La largeur utile est bien plus petite que la fenêtre quand la navigation
-  // latérale reste ouverte. Sous 1 400 px, les treize colonnes du tableau ne
-  // peuvent plus être lues : la liste dense remplace donc la vue choisie.
+  // La table a treize colonnes et passe en liste dense sous 1 400 px. Le
+  // pipeline reste toutefois disponible sur tablette/portable : seule la vue
+  // telephone est toujours remplacee par la liste compacte.
   const estVueEtroite = useMediaQuery('(max-width: 1399px)');
+  const estTelephone = useMediaQuery('(max-width: 767px)');
 
   // Search with debounce
   const [searchInput, setSearchInput] = useState('');
@@ -123,8 +125,11 @@ export function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
 
-  // View mode
-  const [view, setView] = useState<ViewMode>('table');
+  // Une commerciale arrive directement sur le funnel. Les responsables et
+  // administrateurs conservent la vue tableau, plus utile au pilotage global.
+  const [view, setView] = useState<ViewMode>(() => (
+    profileCourant?.role === 'advisor' ? 'kanban' : 'table'
+  ));
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -179,6 +184,7 @@ export function LeadsPage() {
     mutationFn: (id: string) => supprimerLead(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       setASupprimer(null);
       toast.success('Lead supprimé');
@@ -202,6 +208,18 @@ export function LeadsPage() {
     }),
   });
 
+  // Les compteurs du funnel restent stables quand on clique sur une etape :
+  // la liste est filtree, pas le resume des cinq files commerciales.
+  const { data: funnelLeads } = useQuery({
+    queryKey: ['leads-funnel-summary', search, sourceFilter, advisorFilter],
+    queryFn: () => fetchLeads({
+      search,
+      source: sourceFilter,
+      assignedUserId: advisorFilter,
+      archives: false,
+    }),
+  });
+
   const { data: profiles } = useQuery({
     queryKey: ['profiles'],
     queryFn: fetchProfiles,
@@ -221,9 +239,10 @@ export function LeadsPage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
-      toast.success(`Étape changée : ${statusLabels[variables.status]}`);
+      toast.success(`Étape changée : ${commercialStatusLabel(variables.status)}`);
     },
     onError: (err: Error) => toast.error(messageErreurBase(err.message)),
   });
@@ -233,12 +252,13 @@ export function LeadsPage() {
       changerStatutLeadsSelectionnes(ids, status),
     onSuccess: (nombre, variables) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
       setSelectionLeads(new Set());
       setStatutLot('');
       toast.success(
-        `${nombre} fiche${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers ${statusLabels[variables.status]}`,
+        `${nombre} fiche${nombre > 1 ? 's' : ''} déplacée${nombre > 1 ? 's' : ''} vers ${commercialStatusLabel(variables.status)}`,
       );
     },
     onError: (err: Error) => toast.error(messageErreurBase(err.message)),
@@ -250,6 +270,7 @@ export function LeadsPage() {
       : archiverLeadsSelectionnes(ids),
     onSuccess: (nombre) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       queryClient.invalidateQueries({ queryKey: ['relances-compteurs'] });
       setSelectionArchives(new Set());
@@ -272,6 +293,7 @@ export function LeadsPage() {
       } else {
         toast.success(`${data.count} lead(s) de démonstration ajouté(s)`);
         queryClient.invalidateQueries({ queryKey: ['leads'] });
+        queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
       }
     },
     onError: (err: Error) => toast.error(err.message),
@@ -314,15 +336,18 @@ export function LeadsPage() {
 
   const hasFilters = !!search || sourceFilter !== 'all' || statusFilter !== 'all' || advisorFilter !== 'all';
   const resumeTravail = useMemo(() => {
-    const liste = leads ?? [];
-    const aTraiter = new Set<LeadStatus>(['new', 'to_call', 'calling', 'nrp']);
+    const liste = funnelLeads ?? leads ?? [];
+    const compter = (key: string) => liste.filter(
+      (lead) => commercialStageForStatus(lead.status).key === key,
+    ).length;
     return {
-      total: liste.length,
-      aTraiter: liste.filter((lead) => aTraiter.has(lead.status)).length,
-      documents: liste.filter((lead) => lead.status === 'documents_requested').length,
-      onify: liste.filter((lead) => ['documents_received', 'onify_processing'].includes(lead.status)).length,
+      contacter: compter('nouveau'),
+      qualifies: compter('qualifie'),
+      documents: compter('documents'),
+      planifier: compter('onify_ready'),
+      rdv: compter('rdv'),
     };
-  }, [leads]);
+  }, [funnelLeads, leads]);
 
   const clearFilters = () => {
     setSearchInput('');
@@ -348,7 +373,7 @@ export function LeadsPage() {
     <div className="flex h-full flex-col bg-background">
       <PageHeader
         title="Leads"
-        description="Toutes les affaires, du premier contact jusqu’au suivi Onify et au règlement"
+        description="Un funnel simple : contacter, qualifier, recevoir les documents, planifier et suivre le rendez-vous"
         compactMobile
         compactWorkArea
         action={
@@ -381,27 +406,57 @@ export function LeadsPage() {
 
       <div className="gutter-x pb-2 pt-1">
         <section className="crm-leads-summary" aria-label="Résumé de la file de travail">
-          <div className="crm-leads-summary__primary">
+          <button
+            type="button"
+            className="crm-leads-summary__primary"
+            aria-pressed={statusFilter === 'nouveau'}
+            onClick={() => setStatusFilter((actuel) => actuel === 'nouveau' ? 'all' : 'nouveau')}
+          >
             <Sparkles className="h-4 w-4" />
-            <span>À traiter</span>
-            <strong>{resumeTravail.aTraiter}</strong>
-            <small>prochaines actions</small>
-          </div>
-          <div className="crm-leads-summary__item">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#6e9f7a]" />
-            <span>Affaires visibles</span>
-            <strong>{resumeTravail.total}</strong>
-          </div>
-          <div className="crm-leads-summary__item">
+            <span>À contacter</span>
+            <strong>{resumeTravail.contacter}</strong>
+            <small>appels et rappels</small>
+          </button>
+          <button
+            type="button"
+            className="crm-leads-summary__item"
+            aria-pressed={statusFilter === 'qualifie'}
+            onClick={() => setStatusFilter((actuel) => actuel === 'qualifie' ? 'all' : 'qualifie')}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#d79c45]" />
+            <span>Qualifiés</span>
+            <strong>{resumeTravail.qualifies}</strong>
+          </button>
+          <button
+            type="button"
+            className="crm-leads-summary__item"
+            aria-pressed={statusFilter === 'documents'}
+            onClick={() => setStatusFilter((actuel) => actuel === 'documents' ? 'all' : 'documents')}
+          >
             <span className="h-1.5 w-1.5 rounded-full bg-[#dc8b61]" />
             <span>Documents</span>
             <strong>{resumeTravail.documents}</strong>
-          </div>
-          <div className="crm-leads-summary__item">
-            <DatabaseZap className="h-4 w-4" />
-            <span>Suivi Onify</span>
-            <strong>{resumeTravail.onify}</strong>
-          </div>
+          </button>
+          <button
+            type="button"
+            className="crm-leads-summary__item"
+            aria-pressed={statusFilter === 'onify_ready'}
+            onClick={() => setStatusFilter((actuel) => actuel === 'onify_ready' ? 'all' : 'onify_ready')}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4aa66c]" />
+            <span>À planifier</span>
+            <strong>{resumeTravail.planifier}</strong>
+          </button>
+          <button
+            type="button"
+            className="crm-leads-summary__item"
+            aria-pressed={statusFilter === 'rdv'}
+            onClick={() => setStatusFilter((actuel) => actuel === 'rdv' ? 'all' : 'rdv')}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4f86d9]" />
+            <span>RDV pris</span>
+            <strong>{resumeTravail.rdv}</strong>
+          </button>
           {selectionLeads.size > 0 && (
             <div className="crm-leads-summary__selection">
               {selectionLeads.size} sélectionné{selectionLeads.size > 1 ? 's' : ''}
@@ -567,7 +622,7 @@ export function LeadsPage() {
                 onOuvrir={(lead) => ouvrirIntervention(lead.id)}
                 onValider={() => mutationArchives.mutate([...selectionArchives])}
               />
-            ) : estVueEtroite ? (
+            ) : estTelephone || (estVueEtroite && view === 'table') ? (
               <ListeMobile
                 leads={leads}
                 selection={selectionLeads}
@@ -1167,28 +1222,50 @@ function KanbanBoard({
 
   const leadsByStage = useMemo(() => {
     const m = new Map<string, Lead[]>();
-    leadJourneyStages.forEach((stage) => m.set(stage.key, []));
+    commercialFunnelStages.forEach((stage) => m.set(stage.key, []));
     leads.forEach((l) => {
-      const arr = m.get(leadStageForStatus(l.status).key);
+      const arr = m.get(commercialStageForStatus(l.status).key);
       if (arr) arr.push(l);
     });
     return m;
   }, [leads]);
 
+  const sortiesMasquees = useMemo(
+    () => leads.filter((lead) => !commercialFunnelStages.some(
+      (stage) => stage.statuses.includes(lead.status),
+    )).length,
+    [leads],
+  );
+
   return (
-    <div className="h-full overflow-x-auto overflow-y-hidden">
-      <div className="flex h-full gap-3 p-4">
-        {leadJourneyStages.map((stage) => {
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mx-4 mt-3 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-surface px-3 py-2 text-[11px] text-muted-foreground">
+        <strong className="font-semibold text-foreground">5 étapes commerciales</strong>
+        <span>NRP reste dans « À contacter »</span>
+        {sortiesMasquees > 0 && (
+          <span className="ml-auto font-medium">
+            {sortiesMasquees} sortie{sortiesMasquees > 1 ? 's' : ''} masquée{sortiesMasquees > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+        <div className="flex h-full gap-3 p-4">
+        {commercialFunnelStages.map((stage) => {
           const colLeads = leadsByStage.get(stage.key) ?? [];
           return (
             <div
               key={stage.key}
               className="flex w-72 shrink-0 flex-col"
-              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(stage.key); }}
+              onDragOver={(e) => {
+                if (stage.automated) return;
+                e.preventDefault();
+                setDragOverColumn(stage.key);
+              }}
               onDragLeave={(e) => {
                 if (e.currentTarget === e.target) setDragOverColumn(null);
               }}
               onDrop={(e) => {
+                if (stage.automated) return;
                 e.preventDefault();
                 const leadId = e.dataTransfer.getData('text/plain');
                 setDragOverColumn(null);
@@ -1215,9 +1292,14 @@ function KanbanBoard({
                     {colLeads.length}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] leading-snug text-faint">
-                  {stage.description}
-                </p>
+                <div className="mt-1 flex items-start gap-2 text-[11px] leading-snug text-faint">
+                  <p className="min-w-0 flex-1">{stage.description}</p>
+                  {stage.automated && (
+                    <span className="shrink-0 rounded-full border border-border bg-card px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Auto
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Column body */}
@@ -1230,7 +1312,11 @@ function KanbanBoard({
                 {colLeads.length === 0 && (
                   <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
                     <p className="text-xs text-faint">
-                      {dragOverColumn === stage.key ? 'Déposer ici' : 'Aucun lead'}
+                      {dragOverColumn === stage.key
+                        ? 'Déposer ici'
+                        : stage.automated
+                          ? 'Alimenté automatiquement'
+                          : 'Aucun lead'}
                     </p>
                   </div>
                 )}
@@ -1250,6 +1336,7 @@ function KanbanBoard({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
@@ -1347,6 +1434,14 @@ export function KanbanCard({
             {vehicule}
           </span>
         )}
+      </div>
+
+      <div className="mt-2.5 flex items-center gap-1.5 border-t border-border pt-2 text-[11px]">
+        <span className="font-medium text-muted-foreground">Prochaine action</span>
+        <span className="text-border-strong">·</span>
+        <strong className="truncate font-semibold text-foreground">
+          {commercialActionForStatus(lead.status)}
+        </strong>
       </div>
     </div>
   );
@@ -1473,6 +1568,7 @@ function NewLeadDialog({
       } else {
         toast.success('Lead créé');
         queryClient.invalidateQueries({ queryKey: ['leads'] });
+        queryClient.invalidateQueries({ queryKey: ['leads-funnel-summary'] });
         onOpenChange(false);
         resetForm();
       }

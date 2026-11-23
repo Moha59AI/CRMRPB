@@ -5,7 +5,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { statusLabels } from './lead-shared';
+import { commercialStatusLabel } from './lead-shared';
 import { leadStatusColorStyle } from './lead-color-settings';
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
@@ -18,7 +18,7 @@ export function StatusBadge({ status, className }: { status: string; className?:
       )}
       style={leadStatusColorStyle(status)}
     >
-      {statusLabels[status] ?? status}
+      {commercialStatusLabel(status)}
     </Badge>
   );
 }

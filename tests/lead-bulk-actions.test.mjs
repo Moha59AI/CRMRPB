@@ -17,7 +17,7 @@ test('les fiches actives sont selectionnables dans chaque vue leads', async () =
 test('la barre de lot exclut les etapes automatiques et confirme les sorties du parcours', async () => {
   const component = await read('src/features/leads/bulk-lead-actions.tsx');
 
-  assert.match(component, /leadJourneyStages\.filter\(\(stage\) => !stage\.automated\)\.map/);
+  assert.match(component, /commercialPipelineStages\.filter\(\(stage\) => !stage\.automated\)\.map/);
   assert.match(component, /Déplacer \{selectionCount\} fiche/);
   assert.match(component, /destination\?\.terminal/);
   assert.match(component, /sortiront du parcours actif et des relances/);

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { LeadStatus } from '@/types';
-import { leadJourneyStages } from './lead-shared';
+import { commercialPipelineStages } from './lead-shared';
 
 interface BulkLeadActionsProps {
   selectionCount: number;
@@ -53,7 +53,7 @@ export function BulkLeadActions({
   onAppliquer,
 }: BulkLeadActionsProps) {
   const [confirmationOuverte, setConfirmationOuverte] = useState(false);
-  const destination = leadJourneyStages.find((stage) => stage.targetStatus === statutCible);
+  const destination = commercialPipelineStages.find((stage) => stage.targetStatus === statutCible);
 
   return (
     <>
@@ -88,7 +88,7 @@ export function BulkLeadActions({
               <SelectValue placeholder="Déplacer vers…" />
             </SelectTrigger>
             <SelectContent>
-              {leadJourneyStages.filter((stage) => !stage.automated).map((stage) => (
+              {commercialPipelineStages.filter((stage) => !stage.automated).map((stage) => (
                 <SelectItem key={stage.key} value={stage.targetStatus}>
                   {stage.label}
                 </SelectItem>

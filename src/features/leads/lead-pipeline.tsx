@@ -13,9 +13,10 @@ import {
 import { cn } from '@/lib/utils';
 import type { LeadStatus } from '@/types';
 import {
-  leadJourneyStages,
+  commercialExitStages,
+  commercialFunnelStages,
+  commercialStageForStatus,
   leadStageDescription,
-  leadStageForStatus,
   type LeadJourneyStage,
 } from './lead-shared';
 
@@ -28,16 +29,17 @@ interface LeadPipelineProps {
 /**
  * Parcours commercial visible par l'equipe.
  *
- * L'etape "Pret Onify" est pilotee par la reception reelle des pieces. La
- * synchronisation ajoute ensuite les etapes Onify, intervention et finance
- * sur cette meme fiche. Perdu et Cloture demandent une confirmation.
+ * Cinq etapes seulement sont exposees. NRP reste une nuance de « A contacter »
+ * et Onify enrichit « A planifier » en arriere-plan. Perdu et Cloture restent
+ * des sorties confirmees, pas des colonnes du funnel quotidien.
  */
 export function LeadPipeline({ statut, onChangerStatut, desactive }: LeadPipelineProps) {
   const [confirmation, setConfirmation] = useState<LeadJourneyStage | null>(null);
-  const etapeCourante = leadStageForStatus(statut);
-  const parcours = leadJourneyStages.filter((e) => !e.terminal);
-  const sorties = leadJourneyStages.filter((e) => e.terminal);
-  const indexCourant = parcours.findIndex((e) => e.key === etapeCourante.key);
+  const etapeCourante = commercialStageForStatus(statut);
+  const parcours = commercialFunnelStages;
+  const sorties = commercialExitStages.filter((etape) => !etape.automated || etape.key === etapeCourante.key);
+  const indexTrouve = parcours.findIndex((e) => e.key === etapeCourante.key);
+  const indexCourant = etapeCourante.key === 'cloture' ? parcours.length : indexTrouve;
 
   const demanderChangement = (etape: LeadJourneyStage) => {
     if (etape.key === etapeCourante.key || etape.automated) return;

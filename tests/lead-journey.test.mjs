@@ -6,6 +6,9 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('le parcours commercial distingue le lead, les pieces et le dossier Onify', async () => {
   const shared = await read('src/features/leads/lead-shared.ts');
+  const debutParcoursTechnique = shared.indexOf('export const leadJourneyStages');
+  const finParcoursTechnique = shared.indexOf('] as const;', debutParcoursTechnique);
+  const parcoursTechnique = shared.slice(debutParcoursTechnique, finParcoursTechnique);
 
   const labels = [
     'Nouveau lead',
@@ -21,9 +24,31 @@ test('le parcours commercial distingue le lead, les pieces et le dossier Onify',
     'Perdu',
     'Clôturé',
   ];
-  for (const label of labels) assert.match(shared, new RegExp(`label: '${label}'`));
-  assert.equal((shared.match(/key: '(nouveau|nrp|qualifie|documents|onify_ready|onify|rdv|intervention|finance|sav|perdu|cloture)'/g) ?? []).length, 12);
+  for (const label of labels) assert.match(parcoursTechnique, new RegExp(`label: '${label}'`));
+  assert.equal((parcoursTechnique.match(/key: '(nouveau|nrp|qualifie|documents|onify_ready|onify|rdv|intervention|finance|sav|perdu|cloture)'/g) ?? []).length, 12);
   assert.doesNotMatch(shared, /key: 'onify_created'/);
+});
+
+test('la commerciale voit un funnel simplifie en cinq files de travail', async () => {
+  const shared = await read('src/features/leads/lead-shared.ts');
+  const page = await read('src/features/leads/leads-page.tsx');
+
+  const debutFunnel = shared.indexOf('export const commercialFunnelStages');
+  const finFunnel = shared.indexOf('] as const;', debutFunnel);
+  const funnel = shared.slice(debutFunnel, finFunnel);
+
+  for (const label of ['À contacter', 'Qualifié', 'Documents', 'À planifier', 'RDV pris']) {
+    assert.match(funnel, new RegExp(`label: '${label}'`));
+  }
+  assert.equal((funnel.match(/key: '(nouveau|qualifie|documents|onify_ready|rdv)'/g) ?? []).length, 5);
+  assert.match(funnel, /statuses: \['new', 'to_call', 'calling', 'nrp'\]/);
+  assert.match(funnel, /statuses: \['documents_received', 'onify_processing'\]/);
+  assert.match(shared, /statuses: \['intervention_done', 'payment_pending', 'converted'\]/);
+  assert.match(shared, /commercialPipelineStages\.map/);
+  assert.match(page, /commercialFunnelStages\.map/);
+  assert.match(page, /commercialStageForStatus\(l\.status\)/);
+  assert.match(page, /profileCourant\?\.role === 'advisor' \? 'kanban' : 'table'/);
+  assert.match(page, /Prochaine action/);
 });
 
 test('les statuts techniques sont separes pour suivre la creation Onify', async () => {
