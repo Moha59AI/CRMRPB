@@ -21,6 +21,7 @@ import {
   CircleAlert,
   Gift,
   SlidersHorizontal,
+  Pencil,
 } from 'lucide-react';
 import {
   format,
@@ -878,11 +879,13 @@ function AppointmentDetailSheet({
   onConfirm,
   onComplete,
   onCancel,
+  onEdit,
   onDelete,
   updating,
   deleting,
   onOffreEnregistree,
   peutModifier,
+  peutEditer,
   peutSupprimer,
   peutNaviguerHorsPlanning,
 }: {
@@ -893,10 +896,12 @@ function AppointmentDetailSheet({
   onConfirm: () => void;
   onComplete: () => void;
   onCancel: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   updating: boolean;
   deleting: boolean;
   peutModifier: boolean;
+  peutEditer: boolean;
   peutSupprimer: boolean;
   peutNaviguerHorsPlanning: boolean;
   /** L'offre est ecrite sur le lead : les rendez-vous doivent etre relus. */
@@ -1125,6 +1130,17 @@ function AppointmentDetailSheet({
 
         {peutModifier ? (
         <SheetFooter className="flex-row flex-wrap gap-2 border-t border-border pt-4">
+          {peutEditer && (
+            <Button
+              size="sm"
+              onClick={onEdit}
+              disabled={updating}
+              className="gap-1.5"
+            >
+              <Pencil className="h-4 w-4" />
+              Modifier
+            </Button>
+          )}
           {appointment.status !== 'confirmed' && appointment.status !== 'completed' && (
             <Button
               variant="outline"
@@ -1185,7 +1201,7 @@ function AppointmentDetailSheet({
 }
 
 // ---------------------------------------------------------------------------
-// Create appointment dialog
+// Create / edit appointment dialog
 // ---------------------------------------------------------------------------
 
 const appointmentSchema = z
@@ -1209,25 +1225,9 @@ const appointmentSchema = z
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>;
 
-function CreateAppointmentDialog({
-  open,
-  onOpenChange,
-  profiles,
-  onCreate,
-  creating,
-  initialLeadId,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  profiles: Profile[];
-  onCreate: (data: Partial<Appointment>) => void;
-  creating: boolean;
-  /** Fourni depuis une fiche lead : le client et son adresse sont preselectionnes. */
-  initialLeadId?: string;
-}) {
-  const form = useForm<AppointmentFormValues>({
-    resolver: zodResolver(appointmentSchema),
-    defaultValues: {
+function appointmentFormValues(appointment?: Appointment | null): AppointmentFormValues {
+  if (!appointment) {
+    return {
       title: '',
       description: '',
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -1239,8 +1239,74 @@ function CreateAppointmentDialog({
       linkType: 'none',
       caseId: '',
       leadId: '',
-    },
+    };
+  }
+
+  return {
+    title: appointment.title,
+    description: appointment.description ?? '',
+    date: format(new Date(appointment.start_time), 'yyyy-MM-dd'),
+    startTime: format(new Date(appointment.start_time), 'HH:mm'),
+    endTime: format(new Date(appointment.end_time), 'HH:mm'),
+    address: appointment.address ?? '',
+    type: appointment.type,
+    assigned_user_id: appointment.assigned_user_id ?? '',
+    linkType: appointment.lead_id ? 'lead' : appointment.case_id ? 'case' : 'none',
+    caseId: appointment.case_id ?? '',
+    leadId: appointment.lead_id ?? '',
+  };
+}
+
+function AppointmentDialog({
+  open,
+  onOpenChange,
+  profiles,
+  onSave,
+  saving,
+  initialLeadId,
+  appointment,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  profiles: Profile[];
+  onSave: (data: Partial<Appointment>) => void;
+  saving: boolean;
+  /** Fourni depuis une fiche lead : le client et son adresse sont preselectionnes. */
+  initialLeadId?: string;
+  /** Rendez-vous pre-rempli quand le formulaire est ouvert en modification. */
+  appointment?: Appointment | null;
+}) {
+  const editing = Boolean(appointment);
+  const form = useForm<AppointmentFormValues>({
+    resolver: zodResolver(appointmentSchema),
+    defaultValues: appointmentFormValues(appointment),
   });
+
+  // Signale que l'adresse ne vient pas d'une saisie : elle a ete reprise de la
+  // fiche du lead, et reste modifiable.
+  const [adresseReprise, setAdresseReprise] = useState(false);
+
+  /** Lieu retenu, avec ses coordonnees pour la carte des interventions. */
+  const [lieu, setLieu] = useState<AdresseNormalisee | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset(appointmentFormValues(appointment));
+    setAdresseReprise(false);
+    setLieu(appointment && (
+      appointment.address
+      || appointment.latitude != null
+      || appointment.longitude != null
+    ) ? {
+        address: appointment.address,
+        postal_code: null,
+        city: null,
+        citycode: appointment.citycode,
+        latitude: appointment.latitude,
+        longitude: appointment.longitude,
+        geo_precision: appointment.geo_precision,
+      } : null);
+  }, [appointment, form, open]);
 
   const leadsQuery = useQuery<Lead[], Error>({
     queryKey: ['calendar', 'leads'],
@@ -1257,18 +1323,28 @@ function CreateAppointmentDialog({
   function handleSubmit(values: AppointmentFormValues) {
     const startDateTime = new Date(`${values.date}T${values.startTime}`);
     const endDateTime = new Date(`${values.date}T${values.endTime}`);
+    const associationInchangee = Boolean(appointment && (
+      (values.linkType === 'lead' && values.leadId === appointment.lead_id)
+      || (values.linkType === 'case' && values.caseId === appointment.case_id)
+      || (values.linkType === 'none' && !appointment.lead_id && !appointment.case_id)
+    ));
 
-    onCreate({
+    const donnees: Partial<Appointment> = {
       title: values.title,
       description: values.description || null,
       start_time: startDateTime.toISOString(),
       end_time: endDateTime.toISOString(),
       address: values.address || null,
       type: values.type,
-      status: 'scheduled',
       assigned_user_id: values.assigned_user_id || null,
-      case_id: values.linkType === 'case' && values.caseId ? values.caseId : null,
-      lead_id: values.linkType === 'lead' && values.leadId ? values.leadId : null,
+      // Certains rendez-vous Onify portent a la fois un lead et un dossier.
+      // Modifier uniquement l'heure ne doit pas effacer cette seconde liaison.
+      case_id: associationInchangee
+        ? appointment?.case_id ?? null
+        : values.linkType === 'case' && values.caseId ? values.caseId : null,
+      lead_id: associationInchangee
+        ? appointment?.lead_id ?? null
+        : values.linkType === 'lead' && values.leadId ? values.leadId : null,
 
       // Coordonnées du lieu du rendez-vous. Sans elles, la carte devrait
       // emprunter celles du client — un autre endroit dès que l'intervention
@@ -1277,12 +1353,14 @@ function CreateAppointmentDialog({
       longitude: lieu?.longitude ?? null,
       citycode: lieu?.citycode ?? null,
       geo_precision: lieu?.geo_precision ?? null,
-    } as Partial<Appointment>);
+    };
+    if (!appointment) donnees.status = 'scheduled';
+    onSave(donnees);
   }
 
   function handleOpenChange(v: boolean) {
     if (!v) {
-      form.reset();
+      form.reset(appointmentFormValues());
       setAdresseReprise(false);
       setLieu(null);
     }
@@ -1291,21 +1369,6 @@ function CreateAppointmentDialog({
 
   const linkType = form.watch('linkType');
   const errors = form.formState.errors;
-
-  // Signale que l'adresse ne vient pas d'une saisie : elle a ete reprise de la
-  // fiche du lead, et reste modifiable.
-  const [adresseReprise, setAdresseReprise] = useState(false);
-
-  /**
-   * Lieu retenu, avec ses coordonnees.
-   *
-   * Une adresse tapee a la main ne porte pas de point : seule une suggestion
-   * choisie dans la Base Adresse Nationale, ou reprise d'un lead deja
-   * localise, permet de placer le rendez-vous sur la carte. Retomber sur les
-   * coordonnees du client enverrait le technicien a une autre adresse que
-   * celle affichee.
-   */
-  const [lieu, setLieu] = useState<AdresseNormalisee | null>(null);
 
   // ---- Disponibilite de l'intervenant ----
   const date = form.watch('date');
@@ -1323,11 +1386,12 @@ function CreateAppointmentDialog({
   }, [date, heureDebut, heureFin]);
 
   const conflitsQuery = useQuery<ConflitRendezVous[], Error>({
-    queryKey: ['conflits', creneau?.debut, creneau?.fin, intervenant],
+    queryKey: ['conflits', creneau?.debut, creneau?.fin, intervenant, appointment?.id],
     queryFn: () => chercherConflits({
       debut: creneau!.debut,
       fin: creneau!.fin,
       assignedUserId: intervenant,
+      ignorerId: appointment?.id,
     }),
     enabled: open && Boolean(creneau) && Boolean(intervenant),
   });
@@ -1339,9 +1403,9 @@ function CreateAppointmentDialog({
   });
 
   const conflits = conflitsQuery.data ?? [];
-  const journee = (journeeQuery.data ?? []).filter(
-    (r) => !conflits.some((c) => c.id === r.id),
-  );
+  const journee = (journeeQuery.data ?? []).filter((r) => (
+    r.id !== appointment?.id && !conflits.some((c) => c.id === r.id)
+  ));
 
   /**
    * Choisir un lead remplit l'adresse et le titre.
@@ -1393,8 +1457,12 @@ function CreateAppointmentDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nouveau rendez-vous</DialogTitle>
-          <DialogDescription>Planifier un rendez-vous ou une intervention.</DialogDescription>
+          <DialogTitle>{editing ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</DialogTitle>
+          <DialogDescription>
+            {editing
+              ? 'Modifiez directement la date, les horaires, le lieu ou l’affectation.'
+              : 'Planifier un rendez-vous ou une intervention.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
@@ -1654,16 +1722,22 @@ function CreateAppointmentDialog({
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Annuler
             </Button>
-            <Button type="submit" disabled={creating} className="gap-1.5">
-              {creating ? (
+            <Button type="submit" disabled={saving} className="gap-1.5">
+              {saving ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
-                  Création...
+                  {editing ? 'Enregistrement...' : 'Création...'}
                 </>
               ) : (
                 <>
-                  <Plus className="h-4 w-4" />
-                  {conflits.length > 0 ? 'Créer malgré le conflit' : 'Créer le rendez-vous'}
+                  {editing ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  {editing
+                    ? conflits.length > 0
+                      ? 'Enregistrer malgré le conflit'
+                      : 'Enregistrer les modifications'
+                    : conflits.length > 0
+                      ? 'Créer malgré le conflit'
+                      : 'Créer le rendez-vous'}
                 </>
               )}
             </Button>
@@ -1700,6 +1774,7 @@ export function CalendarPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
+  const [appointmentEnEdition, setAppointmentEnEdition] = useState<Appointment | null>(null);
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [initialLeadId, setInitialLeadId] = useState<string | undefined>(() => {
@@ -1898,6 +1973,8 @@ export function CalendarPage() {
     onSuccess: (appointment) => {
       toast.success('Rendez-vous créé', { description: appointment.title });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions-non-localisees'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       setCreateOpen(false);
@@ -1934,6 +2011,8 @@ export function CalendarPage() {
     onSuccess: (_, vars) => {
       toast.success('Rendez-vous mis à jour');
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions-carte'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions-non-localisees'] });
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['relances'] });
       setSelectedAppt((prev) => (prev ? { ...prev, ...vars.updates } : prev));
@@ -1983,6 +2062,29 @@ export function CalendarPage() {
   function handleApptClick(appt: Appointment) {
     setSelectedAppt(appt);
     setDetailOpen(true);
+  }
+
+  function handleEditAppointment() {
+    if (!selectedAppt || estTechnicien) return;
+    setDetailOpen(false);
+    setCreateOpen(false);
+    setAppointmentEnEdition(selectedAppt);
+  }
+
+  function handleSaveAppointment(data: Partial<Appointment>) {
+    if (!appointmentEnEdition) {
+      createMutation.mutate(data);
+      return;
+    }
+
+    updateMutation.mutate(
+      { id: appointmentEnEdition.id, updates: data },
+      {
+        onSuccess: () => {
+          setAppointmentEnEdition(null);
+        },
+      },
+    );
   }
 
   // ---- Detail sheet actions ----
@@ -2275,10 +2377,12 @@ export function CalendarPage() {
         onConfirm={handleConfirm}
         onComplete={handleComplete}
         onCancel={handleCancelAppt}
+        onEdit={handleEditAppointment}
         onDelete={handleDelete}
         updating={updateMutation.isPending}
         deleting={deleteMutation.isPending}
         peutModifier={!estTechnicien || selectedAppt?.assigned_user_id === user?.id}
+        peutEditer={!estTechnicien}
         peutSupprimer={!estTechnicien}
         peutNaviguerHorsPlanning={!estTechnicien}
         onOffreEnregistree={() => {
@@ -2305,17 +2409,22 @@ export function CalendarPage() {
         }
       />}
 
-      {/* Create dialog */}
-      {!estTechnicien && <CreateAppointmentDialog
-        open={createOpen}
+      {/* Formulaire unique : creation et modification gardent exactement les
+          memes champs et les memes controles de disponibilite. */}
+      {!estTechnicien && <AppointmentDialog
+        open={createOpen || appointmentEnEdition !== null}
         onOpenChange={(ouvert) => {
           setCreateOpen(ouvert);
-          if (!ouvert) setInitialLeadId(undefined);
+          if (!ouvert) {
+            setInitialLeadId(undefined);
+            setAppointmentEnEdition(null);
+          }
         }}
         profiles={profiles}
-        onCreate={(data) => createMutation.mutate(data)}
-        creating={createMutation.isPending}
-        initialLeadId={initialLeadId}
+        onSave={handleSaveAppointment}
+        saving={appointmentEnEdition ? updateMutation.isPending : createMutation.isPending}
+        initialLeadId={appointmentEnEdition ? undefined : initialLeadId}
+        appointment={appointmentEnEdition}
       />}
     </div>
   );
