@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, BadgeEuro, Calendar as CalendarIcon, Car, CheckSquare, ChevronLeft,
+  AlertTriangle, ArrowRight, BadgeEuro, BellRing, Calendar as CalendarIcon, Car, CheckSquare, ChevronLeft,
   ChevronRight, ClipboardList, FileText, Landmark, LayoutDashboard, LineChart, PiggyBank, Plus, Receipt,
-  ShieldCheck, Target, ThumbsDown, ThumbsUp, Timer, Wallet, type LucideIcon,
+  PhoneCall, ShieldCheck, Target, ThumbsDown, ThumbsUp, Timer, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModuleHero } from '@/components/ModuleHero';
@@ -14,7 +14,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/features/auth/auth-context';
 import { fetchAppointments, fetchTasks } from '@/services/planning-service';
+import { fetchLeads } from '@/services/leads-service';
+import { compterRelances } from '@/services/relances-service';
 import { enregistrerObjectifAnnuel, fetchReglagesEntreprise } from '@/services/admin-service';
+import { commercialStageForStatus } from '@/features/leads/lead-shared';
 import {
   calculerIndicateurs, fetchDonneesAccueil,
   type LigneAssureur, type LigneMarque, type MoisEvolution, type Taux,
@@ -664,6 +667,167 @@ function CarteTaches({ taches, chargement }: { taches: Task[]; chargement: boole
   );
 }
 
+/**
+ * Accueil operationnel du conseiller.
+ *
+ * La finance n'est ni utile a son premier geste du matin, ni autorisee par
+ * son role. Cette vue repond uniquement a quatre questions : qui appeler,
+ * quoi relancer, quels documents manquent et quels rendez-vous arrivent.
+ */
+function AccueilConseiller({
+  rendezVous,
+  taches,
+  chargementRendezVous,
+  chargementTaches,
+}: {
+  rendezVous: Appointment[];
+  taches: Task[];
+  chargementRendezVous: boolean;
+  chargementTaches: boolean;
+}) {
+  const leads = useQuery({
+    queryKey: ['accueil-conseiller', 'leads'],
+    queryFn: () => fetchLeads({ archives: false }),
+  });
+  const relances = useQuery({
+    queryKey: ['accueil-conseiller', 'relances'],
+    queryFn: () => compterRelances(),
+  });
+
+  const resume = useMemo(() => {
+    const liste = leads.data ?? [];
+    const compter = (cle: string) => liste.filter(
+      (lead) => commercialStageForStatus(lead.status).key === cle,
+    ).length;
+    return {
+      contacter: compter('nouveau'),
+      qualifies: compter('qualifie'),
+      documents: compter('documents'),
+      planifier: compter('onify_ready'),
+      rdv: compter('rdv'),
+    };
+  }, [leads.data]);
+
+  const etapes = [
+    { label: 'À contacter', valeur: resume.contacter, tone: 'bg-[#e9f5ff] text-[#27658a]' },
+    { label: 'Qualifiés', valeur: resume.qualifies, tone: 'bg-[#fff5df] text-[#8a621e]' },
+    { label: 'Documents', valeur: resume.documents, tone: 'bg-[#fff0e8] text-[#9a572e]' },
+    { label: 'À planifier', valeur: resume.planifier, tone: 'bg-[#e9f7ed] text-[#287044]' },
+    { label: 'RDV pris', valeur: resume.rdv, tone: 'bg-[#eef1ff] text-[#405da8]' },
+  ];
+  const chargement = leads.isLoading || relances.isLoading;
+  const appelsAFaire = (relances.data?.nouveau ?? 0) + (relances.data?.rappel ?? 0);
+
+  return (
+    <div className="space-y-5">
+      {(leads.isError || relances.isError) && (
+        <div className="rounded-2xl border border-urgent/30 bg-urgent-soft px-4 py-3 text-sm text-urgent">
+          Certaines priorités commerciales n'ont pas pu être chargées.
+          <Button
+            variant="link"
+            size="sm"
+            className="ml-2 h-auto p-0 text-urgent underline"
+            onClick={() => { leads.refetch(); relances.refetch(); }}
+          >
+            Réessayer
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5">
+        <StatCle
+          icon={PhoneCall}
+          label="Appels à faire"
+          valeur={appelsAFaire}
+          complement="Nouveaux leads et rappels"
+          chargement={chargement}
+          href="/relances"
+        />
+        <StatCle
+          icon={AlertTriangle}
+          label="Relances en retard"
+          valeur={relances.data?.urgent ?? 0}
+          complement="À traiter en priorité"
+          chargement={chargement}
+          href="/relances"
+        />
+        <StatCle
+          icon={FileText}
+          label="Documents à relancer"
+          valeur={relances.data?.documents ?? 0}
+          complement="Liens envoyés, pièces attendues"
+          chargement={chargement}
+          href="/relances"
+        />
+        <StatCle
+          icon={CheckSquare}
+          label="Tâches à venir"
+          valeur={taches.length}
+          complement="Aujourd'hui et demain"
+          chargement={chargementTaches}
+          href="/tasks"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
+        <Carte className="p-4 sm:p-5">
+          <TitreCarte
+            icon={BellRing}
+            action={(
+              <Button asChild size="sm" className="rounded-full">
+                <Link to="/relances">Démarrer mes relances <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
+              </Button>
+            )}
+          >
+            Mon parcours commercial
+          </TitreCarte>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Chaque dossier doit avoir une étape claire et une prochaine action.
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {etapes.map((etape, index) => (
+              <Link
+                key={etape.label}
+                to="/leads"
+                className="group relative rounded-xl border border-border bg-background px-3 py-4 text-center transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+              >
+                <span className={cn(
+                  'mx-auto flex h-9 min-w-9 items-center justify-center rounded-full px-2 text-sm font-bold tabular-nums',
+                  etape.tone,
+                )}>
+                  {leads.isLoading ? '—' : etape.valeur}
+                </span>
+                <strong className="mt-2 block text-xs text-foreground">{etape.label}</strong>
+                {index < etapes.length - 1 && (
+                  <ArrowRight className="absolute -right-2 top-1/2 z-10 hidden h-4 w-4 -translate-y-1/2 text-muted-foreground/40 sm:block" />
+                )}
+              </Link>
+            ))}
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-3">
+            <Button asChild variant="outline" className="justify-between rounded-xl">
+              <Link to="/leads">Ouvrir les leads <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+            <Button asChild variant="outline" className="justify-between rounded-xl">
+              <Link to="/tasks">Voir mes tâches <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+            <Button asChild variant="outline" className="justify-between rounded-xl">
+              <Link to="/calendar">Ouvrir l'agenda <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+          </div>
+        </Carte>
+
+        <aside className="space-y-5">
+          <CarteEvenements rendezVous={rendezVous} chargement={chargementRendezVous} />
+          <CarteTaches taches={taches} chargement={chargementTaches} />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 function CarteObjectif({ caNet, objectif, chargement }: { caNet: number; objectif: number | null; chargement: boolean }) {
   const queryClient = useQueryClient();
   const [edition, setEdition] = useState(false);
@@ -746,6 +910,7 @@ function CarteObjectif({ caNet, objectif, chargement }: { caNet: number; objecti
 
 export function TodayPage() {
   const { profile } = useAuth();
+  const estConseiller = profile?.role === 'advisor';
   const [maintenant, setMaintenant] = useState(() => new Date());
 
   // L'heure est affichee : on la tient a jour a la minute, pas plus.
@@ -754,7 +919,11 @@ export function TodayPage() {
     return () => clearInterval(t);
   }, []);
 
-  const donnees = useQuery({ queryKey: ['accueil', 'indicateurs'], queryFn: fetchDonneesAccueil });
+  const donnees = useQuery({
+    queryKey: ['accueil', 'indicateurs'],
+    queryFn: fetchDonneesAccueil,
+    enabled: !!profile && !estConseiller,
+  });
   const indicateurs = useMemo(
     () => (donnees.data ? calculerIndicateurs(donnees.data, maintenant) : null),
     [donnees.data, maintenant],
@@ -784,6 +953,7 @@ export function TodayPage() {
     queryKey: ['reglages-entreprise'],
     queryFn: fetchReglagesEntreprise,
     staleTime: 5 * 60_000,
+    enabled: !!profile && !estConseiller,
   });
 
   const rdvAVenir = useMemo(
@@ -807,9 +977,13 @@ export function TodayPage() {
     <div className="gutter-x gutter-y space-y-5">
       <ModuleHero
         icon={LayoutDashboard}
-        eyebrow="Quotidien · Vue d’ensemble"
+        eyebrow={estConseiller ? 'Commercial · Mes priorités' : 'Quotidien · Vue d’ensemble'}
         title={<>Bonjour{prenom ? `, ${prenom}` : ''}.</>}
-        description={<span className="capitalize">{dateLongue}</span>}
+        description={(
+          <span className="capitalize">
+            {dateLongue}{estConseiller ? ' · Appels, relances et rendez-vous' : ''}
+          </span>
+        )}
         action={(
           <div className="flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-secondary-foreground">
             <CalendarIcon className="h-4 w-4 text-primary" aria-hidden />
@@ -820,6 +994,15 @@ export function TodayPage() {
         )}
       />
 
+      {estConseiller ? (
+        <AccueilConseiller
+          rendezVous={rdvAVenir}
+          taches={tachesAVenir}
+          chargementRendezVous={rendezVous.isLoading}
+          chargementTaches={taches.isLoading}
+        />
+      ) : (
+        <>
       {donnees.isError && (
         <div className="rounded-2xl border border-urgent/30 bg-urgent-soft px-4 py-3 text-sm text-urgent">
           Les indicateurs n'ont pas pu être chargés : {(donnees.error as Error).message}
@@ -917,6 +1100,8 @@ export function TodayPage() {
           />
         </aside>
       </div>
+        </>
+      )}
     </div>
   );
 }

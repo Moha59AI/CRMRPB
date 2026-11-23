@@ -10,8 +10,11 @@ import type { UserRole } from '@/types';
 
 /** Roles autorises par chemin. Un chemin absent est ouvert a tous les roles. */
 export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
+  '/today': ['admin', 'manager', 'advisor', 'accountant'],
   '/leads': ['admin', 'manager', 'advisor'],
   '/relances': ['admin', 'manager', 'advisor'],
+  '/tasks': ['admin', 'manager', 'advisor'],
+  '/follow-up': ['admin', 'manager', 'advisor'],
   '/contacts': ['admin', 'manager', 'advisor', 'accountant'],
   '/interventions': ['admin', 'manager', 'advisor', 'technician'],
   '/atelier': ['admin', 'manager', 'advisor', 'technician'],
@@ -27,6 +30,7 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/finance': ['admin', 'manager', 'accountant'],
   '/finance/fournisseurs': ['admin', 'manager', 'accountant'],
   '/finance/rapprochement': ['admin', 'manager', 'accountant'],
+  '/outils/masquer-prix': ['admin', 'manager', 'accountant'],
   '/settings': ['admin', 'manager'],
   '/settings/integrations': ['admin'],
   '/settings/integrations/meta': ['admin'],
@@ -41,6 +45,29 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/settings/documents': ['admin', 'manager'],
   '/settings/users': ['admin'],
 };
+
+/**
+ * Poste de travail du conseiller.
+ *
+ * Une liste blanche explicite evite qu'un nouveau module administratif soit
+ * expose par defaut. Les chemins de fiches sont inclus : Leads, Taches et
+ * Relances ouvrent tous un dossier sous `/interventions/:leadId`.
+ */
+export const CHEMINS_CONSEILLER: readonly string[] = [
+  '/today',
+  '/relances',
+  '/leads',
+  '/tasks',
+  '/follow-up',
+  '/interventions',
+  '/contacts',
+  '/clients',
+  '/calendar',
+  '/communications',
+  '/emails',
+  '/glass',
+  '/cases',
+];
 
 /**
  * Modules qui n'existent que dans l'espace de donnees fictives.
@@ -78,6 +105,13 @@ export function cheminAutorise(
   // Aujourd'hui ou de futurs modules ajoutés plus tard.
   if (role === 'technician') {
     return chemin === '/calendar' || chemin.startsWith('/calendar/');
+  }
+
+  // Le conseiller dispose de tout le parcours commercial, mais ne doit pas
+  // heriter automatiquement de la finance, du marketing, des automatisations
+  // ou des reglages lorsqu'un nouveau chemin est ajoute au CRM.
+  if (role === 'advisor') {
+    return CHEMINS_CONSEILLER.some((c) => chemin === c || chemin.startsWith(c + '/'));
   }
 
   const correspondances = Object.keys(ROLES_PAR_CHEMIN)

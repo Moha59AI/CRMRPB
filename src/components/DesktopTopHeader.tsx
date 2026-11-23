@@ -7,8 +7,11 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { ClocheNotifications } from '@/components/ClocheNotifications';
 import { SelecteurTheme } from '@/components/SelecteurTheme';
 import { cn } from '@/lib/utils';
+import { roleLabels } from '@/config/roles';
+import type { UserRole } from '@/types';
 
 const CHEMINS_PRINCIPAUX = ['/today', '/leads', '/calendar', '/tasks', '/emails'];
+const CHEMINS_PRINCIPAUX_CONSEILLER = ['/today', '/relances', '/leads', '/tasks', '/calendar'];
 
 interface DesktopTopHeaderProps {
   sections: NavSection[];
@@ -18,7 +21,7 @@ interface DesktopTopHeaderProps {
   onSignOut: () => void;
   initials: string;
   name: string;
-  role?: string | null;
+  role?: UserRole | null;
   notificationsEnabled?: boolean;
 }
 
@@ -41,7 +44,8 @@ export function DesktopTopHeader({
 }: DesktopTopHeaderProps) {
   const [modulesOpen, setModulesOpen] = useState(false);
   const items = useMemo(() => sections.flatMap((section) => section.items), [sections]);
-  const mainItems = CHEMINS_PRINCIPAUX
+  const cheminsPrincipaux = role === 'advisor' ? CHEMINS_PRINCIPAUX_CONSEILLER : CHEMINS_PRINCIPAUX;
+  const mainItems = cheminsPrincipaux
     .map((path) => items.find((item) => item.path === path))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const moduleActif = items.some((item) => isActive(item.path))
@@ -141,7 +145,7 @@ export function DesktopTopHeader({
             </Avatar>
             <div className="hidden max-w-28 2xl:block">
               <p className="truncate text-[11px] font-semibold text-foreground">{name || 'Utilisateur'}</p>
-              <p className="truncate text-[9px] capitalize text-muted-foreground">{role || 'CRM'}</p>
+              <p className="truncate text-[9px] text-muted-foreground">{role ? roleLabels[role] : 'CRM'}</p>
             </div>
             <Button
               type="button"
