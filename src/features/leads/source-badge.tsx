@@ -30,7 +30,7 @@ export function SourceBadge({ source, className }: { source: LeadSource; classNa
     <Badge
       variant="outline"
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-none',
         vientDuWeb && 'border-blue-200 bg-white text-blue-800',
         vientDeMeta && 'border-[#0866ff]/20 bg-[#0866ff]/5 text-[#0758d3]',
         !vientDuWeb && !vientDeMeta && 'border-border bg-muted/40 text-muted-foreground',

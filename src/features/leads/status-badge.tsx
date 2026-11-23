@@ -12,7 +12,10 @@ export function StatusBadge({ status, className }: { status: string; className?:
   return (
     <Badge
       variant="outline"
-      className={cn('lead-status-badge rounded-full text-[10px] font-semibold', className)}
+      className={cn(
+        'lead-status-badge whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none',
+        className,
+      )}
       style={leadStatusColorStyle(status)}
     >
       {statusLabels[status] ?? status}

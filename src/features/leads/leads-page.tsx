@@ -997,8 +997,23 @@ function LeadsTable({
   onSupprimer?: (lead: Lead) => void;
 }) {
   return (
-    <div className="h-full overflow-y-auto">
-      <Table>
+    <div className="h-full overflow-y-auto bg-card">
+      <Table className="crm-leads-table table-fixed md:min-w-[1580px]">
+        <colgroup>
+          <col className="w-11" />
+          <col className="w-[88px]" />
+          <col className="w-[250px]" />
+          <col className="w-[128px]" />
+          <col className="w-[138px]" />
+          <col className="w-[165px]" />
+          <col className="w-[128px]" />
+          <col className="w-[170px]" />
+          <col className="w-[145px]" />
+          <col className="w-[132px]" />
+          <col className="w-[142px]" />
+          <col className="w-[78px]" />
+          {onSupprimer && <col className="w-10" />}
+        </colgroup>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-11 px-3">
@@ -1030,7 +1045,7 @@ function LeadsTable({
             key={lead.id}
             style={selection.has(lead.id) ? undefined : leadStatusColorStyle(lead.status)}
             className={cn(
-              'cursor-pointer',
+              'h-14 cursor-pointer',
               couleurLigneLead(lead.status, selection.has(lead.id)),
             )}
             onClick={() => onRowClick(lead)}
@@ -1042,10 +1057,10 @@ function LeadsTable({
                 aria-label={`Sélectionner ${leadName(lead)}`}
               />
             </TableCell>
-            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+            <TableCell className="whitespace-nowrap text-xs font-medium text-foreground/65">
               {formatDate(lead.received_at || lead.created_at)}
             </TableCell>
-            <TableCell className="whitespace-nowrap">
+            <TableCell className="overflow-hidden whitespace-nowrap">
               <span className="flex items-center gap-2.5">
                 <span
                   aria-hidden
@@ -1053,36 +1068,36 @@ function LeadsTable({
                 >
                   {initialesLead(lead)}
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-foreground">{leadName(lead)}</span>
+                <span className="min-w-0 overflow-hidden">
+                  <span className="block truncate text-sm font-bold text-foreground" title={leadName(lead)}>{leadName(lead)}</span>
                   <OnifyBadge lead={lead} compact />
                 </span>
               </span>
             </TableCell>
-            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+            <TableCell className="whitespace-nowrap text-sm font-medium text-foreground/75">
               {lead.phone || '—'}
             </TableCell>
-            <TableCell className="text-sm text-muted-foreground">
+            <TableCell className="truncate whitespace-nowrap text-sm text-foreground/75" title={lead.city ?? undefined}>
               {lead.city || '—'}
             </TableCell>
-            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+            <TableCell className="truncate whitespace-nowrap text-sm text-foreground/75" title={vehicleLabel(lead)}>
               {vehicleLabel(lead)}
             </TableCell>
-            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+            <TableCell className="whitespace-nowrap text-sm text-foreground/75">
               <span className={cn(!lead.glass_type && 'italic text-muted-foreground/70')}>
                 {vitrageLabel(lead)}
               </span>
             </TableCell>
-            <TableCell className="max-w-44 truncate text-sm text-muted-foreground" title={lead.offer ?? undefined}>
+            <TableCell className="truncate whitespace-nowrap text-sm text-foreground/75" title={lead.offer ?? undefined}>
               {lead.offer || '—'}
             </TableCell>
-            <TableCell>
+            <TableCell className="whitespace-nowrap">
               <SourceBadge source={lead.source} />
             </TableCell>
-            <TableCell onClick={(e) => e.stopPropagation()}>
+            <TableCell className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="inline-flex items-center gap-1 outline-none">
+                  <button className="inline-flex items-center gap-1 whitespace-nowrap outline-none">
                     <StatusBadge status={lead.status} />
                   </button>
                 </DropdownMenuTrigger>
@@ -1108,8 +1123,8 @@ function LeadsTable({
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
-            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-              {advisor ? profileName(advisor) : <span className="text-muted-foreground/60">Non assigné</span>}
+            <TableCell className="whitespace-nowrap text-sm text-foreground/75">
+              {advisor ? profileName(advisor) : <span className="text-foreground/50">Non assigné</span>}
             </TableCell>
             <TableCell className="text-right">
               <BadgeAttente lead={lead} />

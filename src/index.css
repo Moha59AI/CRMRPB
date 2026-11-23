@@ -758,6 +758,23 @@
   box-shadow: var(--shadow-2);
 }
 
+/* Le tableau Leads sert à traiter une file, pas à afficher une feuille très
+   espacée. Des colonnes stables et des libellés plus contrastés évitent que
+   Source et Statut se cassent sur trois lignes quand toute la file est visible. */
+.crm-leads-table thead th {
+  height: 2.75rem;
+  color: hsl(var(--foreground) / 0.66);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+.crm-leads-table tbody td {
+  border-bottom-color: hsl(var(--border) / 0.82);
+}
+.crm-leads-table tbody tr:focus-within {
+  box-shadow: inset 4px 0 0 hsl(var(--primary));
+}
+
 @media (max-width: 639px) {
   .crm-leads-summary__primary,
   .crm-leads-summary__item {
