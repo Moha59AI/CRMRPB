@@ -32,7 +32,7 @@ export function PageHeader({
 
   return (
     <div
-      className="gutter-x crm-page-header shrink-0 py-2.5 sm:py-4"
+      className="gutter-x crm-page-header shrink-0"
       data-compact-mobile={compactMobile ? 'true' : undefined}
     >
       <ModuleHero

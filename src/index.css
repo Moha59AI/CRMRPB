@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,31 +8,31 @@
   :root {
     /* Relais Pare-Brise Design System */
     /* Text & surfaces */
-    --background: 0 0% 100%;
-    --foreground: 218 20% 8%; /* #101318 */
-    --card: 0 0% 100%;
-    --card-foreground: 218 20% 8%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 218 20% 8%;
+    --background: 140 10% 94%; /* #eef1ef */
+    --foreground: 150 17% 12%; /* #18221e */
+    --card: 120 8% 99%; /* #fbfcfb */
+    --card-foreground: 150 17% 12%;
+    --popover: 120 8% 99%;
+    --popover-foreground: 150 17% 12%;
 
     /* Surface légèrement en retrait, pour poser une zone sans la border. */
-    --surface: 0 0% 98%; /* #f9f9f9 */
+    --surface: 120 14% 97%; /* #f7f9f7 */
     /* Troisième niveau de texte, sous `muted` : légendes, unités, méta. */
-    --faint: 0 0% 68%; /* #adadad */
+    --faint: 145 7% 61%;
 
-    /* Brand: Relais Pare-Brise green #16A34A */
-    --primary: 142 71% 45%; /* #16A34A */
-    --primary-foreground: 0 0% 100%;
+    /* Vert foret de la nouvelle interface, plus calme dans les longues listes. */
+    --primary: 151 35% 17%; /* #1c3b2e */
+    --primary-foreground: 104 71% 94%; /* #e9fbe3 */
 
     /* Neutral dark for active nav */
-    --secondary: 218 20% 8%; /* #101318 - dark nav */
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 151 39% 15%; /* #18372b */
+    --secondary-foreground: 104 71% 94%;
 
-    --muted: 0 0% 95%; /* #f2f2f2 */
-    --muted-foreground: 0 0% 44%; /* #707070 */
+    --muted: 132 11% 91%; /* #e6ebe7 */
+    --muted-foreground: 145 8% 46%; /* #6c7d73 */
 
-    --accent: 142 71% 96%; /* light green tint */
-    --accent-foreground: 142 71% 35%;
+    --accent: 108 42% 91%; /* #e3f2df */
+    --accent-foreground: 140 39% 30%; /* #2e6a42 */
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -59,11 +59,11 @@
     --done: 142 71% 45%; /* traité */
     --done-soft: 142 60% 96%;
 
-    --border: 0 0% 92%; /* #ebebeb */
+    --border: 135 13% 88%; /* #dce4de */
     /* Bordure assumée : séparateurs de tableau, champs au repos. */
-    --border-strong: 0 0% 85%; /* #d9d9d9 */
-    --input: 0 0% 92%;
-    --ring: 142 71% 45%;
+    --border-strong: 134 18% 82%; /* #c9dacd */
+    --input: 135 13% 88%;
+    --ring: 134 32% 55%; /* #65b477 */
 
     --chart-1: 142 71% 45%;
     --chart-2: 210 80% 50%;
@@ -80,15 +80,12 @@
      * l'arête supérieure, et c'est lui qui fait qu'une carte a l'air posée
      * plutôt que dessinée.
      */
-    --shadow-1: 0 1px 2px -1px hsl(218 30% 12% / 0.06),
-                0 1px 3px -1px hsl(218 30% 12% / 0.05);
-    --shadow-2: inset 0 1px 0 hsl(0 0% 100% / 0.85),
-                0 2px 6px -2px hsl(218 30% 12% / 0.06),
-                0 12px 24px -12px hsl(218 30% 12% / 0.12);
-    --shadow-3: inset 0 1px 0 hsl(0 0% 100% / 0.85),
-                0 2px 6px -2px hsl(218 30% 12% / 0.06),
-                0 12px 24px -12px hsl(218 30% 12% / 0.12),
-                0 30px 55px -26px hsl(218 30% 12% / 0.16);
+    --shadow-1: 0 1px 2px hsl(150 20% 16% / 0.035),
+                0 3px 8px -6px hsl(150 20% 16% / 0.12);
+    --shadow-2: 0 1px 2px hsl(150 20% 16% / 0.04),
+                0 7px 18px -12px hsl(150 20% 16% / 0.16);
+    --shadow-3: 0 2px 5px hsl(150 20% 16% / 0.05),
+                0 14px 30px -18px hsl(150 20% 16% / 0.2);
 
     /*
      * Gouttières fluides.
@@ -102,13 +99,13 @@
     --gutter-y: clamp(1rem, 0.75rem + 0.75vw, 1.5rem);
     --gutter-gap: clamp(0.75rem, 0.5rem + 0.5vw, 1.5rem);
 
-    /* Radii: 14-18px per spec */
-    --radius: 14px;
-    --radius-lg: 16px;
-    --radius-xl: 18px;
+    /* Rayon plus compact : l'interface ressemble a un outil, pas a une vitrine. */
+    --radius: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
 
     /* Sidebar */
-    --sidebar-width: 64px;
+    --sidebar-width: 0px;
     --sidebar-bg: 0 0% 100%;
     --sidebar-border: 0 0% 92%;
 
@@ -191,7 +188,7 @@
     @apply border-border;
   }
   html {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     /* iOS grossit le texte de lui-même quand on tourne le téléphone en
@@ -215,6 +212,7 @@
     letter-spacing: -0.011em;
   }
   h1, h2, h3, h4 {
+    font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
     line-height: 1.2;
     /* Plus le corps grandit, plus le blanc entre les lettres s'exagère :
        un titre se resserre davantage que le texte courant. */
@@ -316,27 +314,16 @@
   [data-crm-module-shell] {
     background-color: hsl(var(--surface));
     background-image:
-      radial-gradient(circle at 94% -4%, hsl(var(--primary) / 0.11), transparent 28rem),
-      radial-gradient(circle at 12% 108%, hsl(210 80% 50% / 0.055), transparent 24rem),
-      linear-gradient(180deg, hsl(var(--background) / 0.78), hsl(var(--surface)) 12rem);
+      radial-gradient(circle at 92% -8%, hsl(108 45% 74% / 0.16), transparent 26rem),
+      linear-gradient(180deg, hsl(var(--background) / 0.72), hsl(var(--surface)) 11rem);
   }
 
   .crm-module-hero {
-    background-image:
-      radial-gradient(circle at 82% -45%, hsl(var(--primary) / 0.42), transparent 24rem),
-      linear-gradient(120deg, hsl(218 28% 9%), hsl(218 22% 13%) 62%, hsl(218 26% 10%));
+    background-image: none;
   }
 
   .crm-module-hero::after {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    content: '';
-    background-image:
-      linear-gradient(110deg, transparent 0 58%, hsl(var(--primary) / 0.08) 58% 58.2%, transparent 58.2%),
-      linear-gradient(hsl(var(--secondary-foreground) / 0.035) 1px, transparent 1px);
-    background-size: auto, 100% 24px;
-    mask-image: linear-gradient(to left, black, transparent 70%);
+    content: none;
   }
 
   .crm-sidebar,
@@ -422,10 +409,6 @@
       --gutter-x: 0.75rem;
       --gutter-y: 0.75rem;
       --gutter-gap: 0.75rem;
-    }
-
-    .crm-module-hero {
-      border-radius: 1.25rem;
     }
 
     /* Les actions d'en-tête restent accessibles au pouce et ne débordent
@@ -701,6 +684,91 @@
   @keyframes check-out {
     from { opacity: 1; transform: translateX(0); }
     to { opacity: 0; transform: translateX(12px); }
+  }
+}
+
+/* Nouvelle experience compacte, inspiree de la maquette de reference. */
+.crm-top-header {
+  box-shadow: 0 1px 0 hsl(var(--border)), 0 8px 24px -22px hsl(150 25% 12% / 0.35);
+}
+
+.crm-leads-summary {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-lg);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
+  scrollbar-width: none;
+}
+.crm-leads-summary::-webkit-scrollbar { display: none; }
+.crm-leads-summary__primary,
+.crm-leads-summary__item {
+  display: flex;
+  min-width: max-content;
+  height: 2rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-right: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.68rem;
+}
+.crm-leads-summary__primary {
+  color: #3b6748;
+}
+.crm-leads-summary__primary svg { color: #68a354; }
+.crm-leads-summary__primary strong,
+.crm-leads-summary__item strong {
+  color: hsl(var(--foreground));
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.crm-leads-summary__primary small {
+  color: #a76f50;
+  font-size: 0.62rem;
+}
+.crm-leads-summary__item svg { color: #789083; }
+.crm-leads-summary__selection {
+  margin-left: auto;
+  min-width: max-content;
+  padding: 0 1rem;
+  color: #376848;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.crm-leads-toolbar {
+  margin: 0 var(--gutter-x) 0.5rem;
+  padding-inline: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-lg);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
+}
+
+.crm-leads-workspace {
+  min-height: 0;
+  margin: 0 var(--gutter-x) var(--gutter-y);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-xl);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-2);
+}
+
+@media (max-width: 639px) {
+  .crm-leads-summary__primary,
+  .crm-leads-summary__item {
+    padding-inline: 0.75rem;
+  }
+  .crm-leads-summary__primary small { display: none; }
+  .crm-leads-toolbar {
+    margin-bottom: 0.5rem;
+  }
+  .crm-leads-workspace {
+    margin-bottom: 0.5rem;
   }
 }
 

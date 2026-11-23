@@ -5,11 +5,15 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('une seule cloche est montee selon le format decran', async () => {
-  const layout = await read('src/layouts/app-layout.tsx');
+  const [layout, header] = await Promise.all([
+    read('src/layouts/app-layout.tsx'),
+    read('src/components/DesktopTopHeader.tsx'),
+  ]);
 
   assert.match(layout, /const estMobile = useEstMobile\(\)/);
-  assert.match(layout, /!estMobile && <ClocheNotifications reduit=\{!expanded\} \/>/);
+  assert.match(layout, /!estMobile && \(\s*<DesktopTopHeader/);
   assert.match(layout, /estMobile && <ClocheNotifications reduit mobile \/>/);
+  assert.match(header, /notificationsEnabled && \(\s*<div[^>]*>\s*<ClocheNotifications reduit mobile \/>/);
 });
 
 test('le centre trie les alertes par usage et par date', async () => {

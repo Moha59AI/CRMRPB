@@ -20,12 +20,11 @@ interface ModuleHeroProps {
 }
 
 /**
- * En-tête cockpit commun à tous les modules.
+ * En-tete compact commun a tous les modules.
  *
- * Il donne la même hiérarchie visuelle à chaque écran sans imposer de donnée
- * artificielle : le titre, le contexte et les vraies actions du module sont
- * les seuls éléments affichés. Les pages très métier peuvent ajouter un rail
- * d'indicateurs dans `footer`.
+ * La reference Bolt privilegie la zone de travail : le titre n'est plus une
+ * grande banniere sombre, mais un repere editorial court. Les actions restent
+ * visibles a droite et le contenu utile remonte nettement dans l'ecran.
  */
 export function ModuleHero({
   title,
@@ -42,66 +41,52 @@ export function ModuleHero({
     <section
       data-module-hero
       className={cn(
-        'crm-module-hero relative isolate overflow-hidden rounded-[1.5rem] border border-white/10 bg-secondary text-secondary-foreground shadow-[0_24px_60px_-32px_rgba(2,8,23,0.85)]',
+        'crm-module-hero relative border-b border-border/80 bg-transparent',
         compactMobile && 'crm-module-hero--compact-mobile',
         className,
       )}
     >
-      <span
-        className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-primary/25 blur-3xl"
-        aria-hidden
-      />
-      <span
-        className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-white/[0.06] blur-3xl"
-        aria-hidden
-      />
-      <Icon
-        className="pointer-events-none absolute -bottom-10 right-5 h-44 w-44 rotate-[-8deg] text-white/[0.035] sm:h-56 sm:w-56"
-        strokeWidth={1.1}
-        aria-hidden
-      />
-
       <div className={cn(
-        'relative grid gap-3.5 px-4 py-4 sm:gap-5 sm:px-7 sm:py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8',
-        compactMobile && 'max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-2 max-md:px-3 max-md:py-2.5',
-        compactWorkArea && 'max-[1399px]:grid-cols-[minmax(0,1fr)_auto] max-[1399px]:items-center max-[1399px]:gap-3 max-[1399px]:px-4 max-[1399px]:py-3',
+        'grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-6 sm:py-4',
+        compactMobile && 'max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-2 max-md:py-2',
+        compactWorkArea && 'max-[1399px]:grid-cols-[minmax(0,1fr)_auto] max-[1399px]:items-center max-[1399px]:gap-3 max-[1399px]:py-2.5',
       )}>
         <div className={cn(
-          'flex min-w-0 items-start gap-3 sm:gap-5',
-          compactMobile && 'max-md:items-center max-md:gap-2',
-          compactWorkArea && 'max-[1399px]:items-center max-[1399px]:gap-3',
+          'flex min-w-0 items-center gap-3',
+          compactMobile && 'max-md:gap-2',
         )}>
           <span className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-primary text-primary-foreground shadow-[0_14px_30px_-14px_rgba(22,163,74,0.95)] sm:h-14 sm:w-14 sm:rounded-2xl',
-            compactMobile && 'max-md:h-9 max-md:w-9',
-            compactWorkArea && 'max-[1399px]:h-10 max-[1399px]:w-10 max-[1399px]:rounded-xl',
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#cfe3d2] bg-[#e8f4e5] text-[#376848] shadow-sm sm:h-10 sm:w-10',
+            compactMobile && 'max-md:h-8 max-md:w-8',
           )}>
-            <Icon className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={2} aria-hidden />
+            <Icon className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
           </span>
 
           <div className="min-w-0">
             <div className={cn(
-              'flex flex-wrap items-center gap-2',
+              'flex items-center gap-2',
               compactMobile && 'max-md:hidden',
               compactWorkArea && 'max-[1399px]:hidden',
             )}>
-              <p className="max-w-full truncate rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-secondary-foreground/60 sm:text-[10px] sm:tracking-[0.18em]">
+              <p className="truncate text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
                 {eyebrow}
               </p>
-              <span className="hidden items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary min-[380px]:flex sm:text-[10px]">
-                <Activity className="h-3 w-3" /> Espace en direct
+              <span className="hidden items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5d8e68] min-[440px]:flex">
+                <Activity className="h-2.5 w-2.5" /> En direct
               </span>
             </div>
-            <h1 className={cn(
-              'mt-2 break-words text-xl font-semibold tracking-tight text-secondary-foreground min-[380px]:text-2xl sm:text-3xl',
-              compactMobile && 'max-md:mt-0 max-md:truncate max-md:text-lg',
-              compactWorkArea && 'max-[1399px]:mt-0 max-[1399px]:truncate max-[1399px]:text-xl',
-            )}>
-              {title}
-            </h1>
+            <div className="mt-0.5 flex min-w-0 items-baseline gap-2.5">
+              <h1 className={cn(
+                'truncate font-display text-2xl font-bold tracking-[-0.055em] text-foreground sm:text-[1.75rem]',
+                compactMobile && 'max-md:text-lg',
+                compactWorkArea && 'max-[1399px]:text-xl',
+              )}>
+                {title}
+              </h1>
+            </div>
             {description && (
               <div className={cn(
-                'mt-1.5 max-w-3xl text-xs leading-relaxed text-secondary-foreground/62 sm:text-sm',
+                'mt-0.5 max-w-3xl truncate text-[11px] leading-relaxed text-muted-foreground sm:text-xs',
                 compactMobile && 'max-md:hidden',
                 compactWorkArea && 'max-[1399px]:hidden',
               )}>
@@ -113,9 +98,9 @@ export function ModuleHero({
 
         {action && (
           <div className={cn(
-            'crm-module-actions flex w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/15 p-2 shadow-inner backdrop-blur-sm sm:rounded-2xl sm:p-2.5 lg:w-auto lg:max-w-[48rem] lg:justify-end',
-            compactMobile && 'max-md:w-auto max-md:flex-nowrap max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none',
-            compactWorkArea && 'max-[1399px]:w-auto max-[1399px]:flex-nowrap max-[1399px]:border-0 max-[1399px]:bg-transparent max-[1399px]:p-0 max-[1399px]:shadow-none',
+            'crm-module-actions flex min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end',
+            compactMobile && 'max-md:flex-nowrap',
+            compactWorkArea && 'max-[1399px]:flex-nowrap',
           )}>
             {action}
           </div>
@@ -123,7 +108,7 @@ export function ModuleHero({
       </div>
 
       {footer && (
-        <div className="relative overflow-x-auto border-t border-white/10 bg-black/10 px-4 py-3 scrollbar-thin sm:px-7">
+        <div className="overflow-x-auto border-t border-border/70 py-2.5 scrollbar-thin">
           {footer}
         </div>
       )}

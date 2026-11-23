@@ -51,36 +51,43 @@ test("l'accueil et l'atelier utilisent le même langage sans perdre leurs action
 });
 
 test('le cockpit reste responsive et enveloppe toutes les routes', async () => {
-  const [hero, layout, css] = await Promise.all([
+  const [hero, layout, header, css] = await Promise.all([
     read('src/components/ModuleHero.tsx'),
     read('src/layouts/app-layout.tsx'),
+    read('src/components/DesktopTopHeader.tsx'),
     read('src/index.css'),
   ]);
 
-  assert.match(hero, /lg:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(hero, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
   assert.match(hero, /crm-module-actions/);
   assert.match(hero, /data-module-hero/);
   assert.match(layout, /data-crm-module-shell/);
-  assert.match(layout, /crm-sidebar/);
+  assert.match(layout, /<DesktopTopHeader/);
+  assert.match(header, /hidden h-16[^']*md:flex/);
+  assert.match(header, /CHEMINS_PRINCIPAUX/);
   assert.match(css, /\[data-crm-module-shell\]/);
   assert.match(css, /\.crm-module-hero::after/);
   assert.match(css, /@media \(max-width: 639px\)/);
 });
 
 test('la nouvelle experience garde les modules accessibles en un geste', async () => {
-  const [layout, palette, barre, hero] = await Promise.all([
+  const [layout, header, palette, barre, hero] = await Promise.all([
     read('src/layouts/app-layout.tsx'),
+    read('src/components/DesktopTopHeader.tsx'),
     read('src/components/CRMCommandPalette.tsx'),
     read('src/components/BarreOnglets.tsx'),
     read('src/components/ModuleHero.tsx'),
   ]);
 
-  assert.match(layout, /CLE_SIDEBAR_DEPLOYEE/);
-  assert.match(layout, /localStorage\.getItem/);
-  assert.match(layout, /return true/);
+  assert.match(layout, /<DesktopTopHeader/);
+  assert.match(layout, /<TiroirNavigation/);
   assert.match(layout, /<CRMCommandPalette/);
-  assert.match(layout, /Centre de pilotage/);
-  assert.match(layout, /bg-\[#0b1117\]/);
+  assert.doesNotMatch(layout, /CLE_SIDEBAR_DEPLOYEE|crm-sidebar/);
+
+  assert.match(header, />Modules</);
+  assert.match(header, /mainItems\.map/);
+  assert.match(header, /Centre de pilotage/);
+  assert.match(header, /SheetContent side="right"/);
 
   assert.match(palette, /event\.key\.toLowerCase\(\) === 'k'/);
   assert.match(palette, /ouvrirNouveauLead: true/);
@@ -88,8 +95,8 @@ test('la nouvelle experience garde les modules accessibles en un geste', async (
 
   assert.match(barre, /rounded-2xl/);
   assert.match(barre, /backdrop-blur-xl/);
-  assert.match(hero, /Espace en direct/);
-  assert.match(hero, /sm:text-3xl/);
+  assert.match(hero, /En direct/);
+  assert.match(hero, /font-display text-2xl/);
 });
 
 test('les briques visuelles Bolt sont partagees par les vrais modules', async () => {

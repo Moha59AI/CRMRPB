@@ -313,6 +313,16 @@ export function LeadsPage() {
   }, [leads, tousLesLeadsSelectionnes]);
 
   const hasFilters = !!search || sourceFilter !== 'all' || statusFilter !== 'all' || advisorFilter !== 'all';
+  const resumeTravail = useMemo(() => {
+    const liste = leads ?? [];
+    const aTraiter = new Set<LeadStatus>(['new', 'to_call', 'calling', 'nrp']);
+    return {
+      total: liste.length,
+      aTraiter: liste.filter((lead) => aTraiter.has(lead.status)).length,
+      documents: liste.filter((lead) => lead.status === 'documents_requested').length,
+      onify: liste.filter((lead) => ['documents_received', 'onify_processing'].includes(lead.status)).length,
+    };
+  }, [leads]);
 
   const clearFilters = () => {
     setSearchInput('');
@@ -369,8 +379,39 @@ export function LeadsPage() {
         }
       />
 
+      <div className="gutter-x pb-2 pt-1">
+        <section className="crm-leads-summary" aria-label="Résumé de la file de travail">
+          <div className="crm-leads-summary__primary">
+            <Sparkles className="h-4 w-4" />
+            <span>À traiter</span>
+            <strong>{resumeTravail.aTraiter}</strong>
+            <small>prochaines actions</small>
+          </div>
+          <div className="crm-leads-summary__item">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#6e9f7a]" />
+            <span>Affaires visibles</span>
+            <strong>{resumeTravail.total}</strong>
+          </div>
+          <div className="crm-leads-summary__item">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#dc8b61]" />
+            <span>Documents</span>
+            <strong>{resumeTravail.documents}</strong>
+          </div>
+          <div className="crm-leads-summary__item">
+            <DatabaseZap className="h-4 w-4" />
+            <span>Suivi Onify</span>
+            <strong>{resumeTravail.onify}</strong>
+          </div>
+          {selectionLeads.size > 0 && (
+            <div className="crm-leads-summary__selection">
+              {selectionLeads.size} sélectionné{selectionLeads.size > 1 ? 's' : ''}
+            </div>
+          )}
+        </section>
+      </div>
+
       {/* Toolbar: view toggle + filters */}
-      <div className="flex flex-wrap items-center gap-2 gutter-x border-b border-border py-2 sm:gap-3 sm:py-3">
+      <div className="crm-leads-toolbar flex flex-wrap items-center gap-2 py-2 sm:gap-3">
         {/* View toggle */}
         <div className="hidden items-center rounded-lg bg-muted p-1 min-[1400px]:inline-flex">
           <ViewToggleButton active={view === 'table'} onClick={() => setView('table')} icon={TableIcon} label="Tableau" />
@@ -497,7 +538,7 @@ export function LeadsPage() {
       )}
 
       {/* Content area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="crm-leads-workspace flex-1 overflow-hidden">
         {isLoading && <LoadingState view={view} />}
 
         {isError && (

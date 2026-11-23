@@ -10,7 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['DM Sans', 'system-ui', 'sans-serif'],
+        display: ['Plus Jakarta Sans', 'DM Sans', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         lg: 'var(--radius-lg)',
