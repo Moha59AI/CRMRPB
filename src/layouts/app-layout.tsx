@@ -20,11 +20,12 @@ import { cn } from '@/lib/utils';
 import { useLeadColorTheme } from '@/features/leads/use-lead-color-theme';
 import { CRMCommandPalette } from '@/components/CRMCommandPalette';
 import { DesktopTopHeader } from '@/components/DesktopTopHeader';
+import { ImpersonationBanner } from '@/features/auth/impersonation-banner';
 
 export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut } = useAuth();
+  const { profile, impersonation, signOut } = useAuth();
   const estMobile = useEstMobile();
   const estTechnicien = profile?.role === 'technician';
   useTitrePage();
@@ -100,6 +101,7 @@ export function AppLayout() {
         {/* Avant l'en-tete et avant tout contenu : on doit savoir ou l'on
             travaille sans avoir a le chercher. */}
         <BandeauZoneTest />
+        <ImpersonationBanner />
         {!estMobile && (
           <DesktopTopHeader
             sections={sectionsVisibles}
@@ -116,7 +118,10 @@ export function AppLayout() {
         {/* En-tete telephone : le menu complet vit dans un tiroir plutot que
             dans une barre du bas. Onze entrees reparties en cinq sections n'y
             tiendraient pas, et les tronquer ferait perdre le classement. */}
-        <header className="safe-haut shrink-0 border-b border-white/10 bg-[#0b1117]/95 text-white shadow-md backdrop-blur-xl md:hidden">
+        <header className={cn(
+          'shrink-0 border-b border-white/10 bg-[#0b1117]/95 text-white shadow-md backdrop-blur-xl md:hidden',
+          !impersonation && 'safe-haut',
+        )}>
           <div className="flex h-14 min-w-0 items-center gap-1.5 overflow-hidden px-2.5 min-[390px]:gap-2 min-[390px]:px-3">
           <Sheet open={tiroirOuvert} onOpenChange={setTiroirOuvert}>
             <SheetTrigger asChild>

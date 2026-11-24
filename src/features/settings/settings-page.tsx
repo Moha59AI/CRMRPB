@@ -253,6 +253,8 @@ function Compteur({
 const LIBELLES_ACTION: Record<string, string> = {
   role_modifie: 'Rôle modifié',
   acces_retire: 'Accès retiré',
+  impersonation_started: 'Vue utilisateur ouverte',
+  impersonation_ended: 'Vue utilisateur fermée',
   seed_demo_leads: 'Données de démonstration générées',
 };
 
@@ -310,6 +312,9 @@ function JournalAudit() {
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     par {nomDe(e.user_id)}
+                    {typeof e.metadata?.target_user_id === 'string' && (
+                      <> · vue de {nomDe(e.metadata.target_user_id)}</>
+                    )}
                     {e.metadata?.avant != null && e.metadata?.apres != null && (
                       <>
                         {' · '}

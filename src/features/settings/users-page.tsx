@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Shield, UserPlus, Mail, Trash2, Clock, RefreshCw, Loader2,
-  Pencil, Check, X,
+  Pencil, Check, X, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
@@ -18,6 +18,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmerSuppression } from '@/components/ConfirmerSuppression';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { fetchProfiles } from '@/services/profiles-service';
 import {
   fetchInvitations, creerInvitation, renvoyerInvitationMembre,
@@ -26,6 +30,7 @@ import {
 import { changerRoleMembre, renommerMembre, retirerMembre } from '@/services/admin-service';
 import { roleLabels, roleDescriptions } from '@/config/roles';
 import { useAuth } from '@/features/auth/auth-context';
+import { accueilDuRole } from '@/config/permissions';
 import { DialogueInvitation } from './components/dialogue-invitation';
 import type { Profile, UserRole } from '@/types';
 
@@ -40,12 +45,13 @@ const roleBadgeClass: Record<UserRole, string> = {
 };
 
 export function UsersPage() {
-  const { profile } = useAuth();
+  const { profile, startImpersonation } = useAuth();
   const queryClient = useQueryClient();
   const estAdmin = profile?.role === 'admin';
 
   const [inviterOuvert, setInviterOuvert] = useState(false);
   const [aRetirer, setARetirer] = useState<Profile | null>(null);
+  const [aImpersonner, setAImpersonner] = useState<Profile | null>(null);
   const [editionNom, setEditionNom] = useState<{
     id: string;
     prenom: string;
@@ -135,6 +141,19 @@ export function UsersPage() {
       });
     },
     onError: (e: Error) => toast.error('Le renvoi a échoué', { description: e.message }),
+  });
+
+  const impersonner = useMutation({
+    mutationFn: (membre: Profile) => startImpersonation(membre.id),
+    onSuccess: (delegation) => {
+      // Les requêtes chargées en tant qu'administrateur ne doivent jamais
+      // rester visibles dans la vue du membre ciblé.
+      queryClient.clear();
+      window.location.assign(accueilDuRole(delegation.profile.role));
+    },
+    onError: (e: Error) => toast.error('La vue utilisateur n’a pas été ouverte', {
+      description: e.message,
+    }),
   });
 
   const enAttente = (invitations ?? []).filter((i) => !i.accepted_at);
@@ -443,6 +462,17 @@ export function UsersPage() {
                                   variant="outline"
                                   size="sm"
                                   className="h-8 rounded-full px-3"
+                                  onClick={() => setAImpersonner(p)}
+                                  disabled={impersonner.isPending}
+                                  aria-label={`Voir le CRM comme ${nom}`}
+                                >
+                                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                                  Voir comme
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-full px-3"
                                   onClick={() => renvoyerMembre.mutate(p)}
                                   disabled={renvoyerMembre.isPending}
                                   aria-label={`Renvoyer l'invitation à ${nom}`}
@@ -488,6 +518,56 @@ export function UsersPage() {
       </div>
 
       <DialogueInvitation ouvert={inviterOuvert} onOuvertChange={setInviterOuvert} />
+
+      <AlertDialog
+        open={aImpersonner !== null}
+        onOpenChange={(ouvert) => !ouvert && !impersonner.isPending && setAImpersonner(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Voir le CRM comme{' '}
+              {aImpersonner
+                ? [aImpersonner.first_name, aImpersonner.last_name]
+                  .filter(Boolean).join(' ') || 'cet utilisateur'
+                : 'cet utilisateur'}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p>
+                  Pendant 60 minutes, les modules, les données visibles et les actions
+                  disponibles suivront exactement son rôle de {aImpersonner
+                    ? roleLabels[aImpersonner.role].toLowerCase()
+                    : 'membre'}.
+                </p>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                  Vous restez connecté avec votre compte administrateur. Toutes les actions
+                  conservent votre identité réelle dans les traces ; aucun mot de passe du
+                  collaborateur n’est lu ou modifié.
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={impersonner.isPending} className="rounded-full">
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-full"
+              disabled={!aImpersonner || impersonner.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (aImpersonner) impersonner.mutate(aImpersonner);
+              }}
+            >
+              {impersonner.isPending
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <Eye className="mr-2 h-4 w-4" />}
+              Ouvrir sa vue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ConfirmerSuppression
         ouvert={aRetirer !== null}
