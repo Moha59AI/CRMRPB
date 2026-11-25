@@ -24,6 +24,7 @@ import {
   Palette,
   Boxes,
   ListTodo,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -106,6 +107,12 @@ export const navSections: NavSection[] = [
         path: '/contacts',
         icon: Users,
         description: 'Les clients et tout leur historique',
+      },
+      {
+        label: 'Formation',
+        path: '/formation',
+        icon: GraduationCap,
+        description: 'Quiz et validation des connaissances',
       },
     ],
   },

@@ -25,6 +25,8 @@ export const ROLES_PAR_CHEMIN: Record<string, UserRole[]> = {
   '/campaigns': ['admin', 'manager', 'advisor'],
   '/communications': ['admin', 'manager', 'advisor'],
   '/emails': ['admin', 'manager', 'advisor'],
+  '/formation': ['admin', 'advisor'],
+  '/formation/resultats': ['admin'],
   '/workflows': ['admin', 'manager', 'advisor'],
   '/billing': ['admin', 'manager', 'accountant'],
   '/finance': ['admin', 'manager', 'accountant'],
@@ -65,6 +67,7 @@ export const CHEMINS_CONSEILLER: readonly string[] = [
   '/calendar',
   '/communications',
   '/emails',
+  '/formation',
   '/glass',
   '/cases',
 ];

@@ -61,6 +61,9 @@ const ApercuMail = lazy(() => import('@/features/diag/apercu-mail').then((m) => 
 const ApercuAgenda = lazy(() => import('@/features/diag/apercu-agenda').then((m) => ({ default: m.ApercuAgenda })));
 const ApercuInterventions = lazy(() => import('@/features/diag/apercu-interventions').then((m) => ({ default: m.ApercuInterventions })));
 const ApercuAtelier = lazy(() => import('@/features/diag/apercu-atelier').then((m) => ({ default: m.ApercuAtelier })));
+const TrainingPage = lazy(() => import('@/features/training/training-page').then((m) => ({ default: m.TrainingPage })));
+const TrainingQuizPage = lazy(() => import('@/features/training/training-quiz-page').then((m) => ({ default: m.TrainingQuizPage })));
+const TrainingResultsPage = lazy(() => import('@/features/training/training-results-page').then((m) => ({ default: m.TrainingResultsPage })));
 
 function ChargementPage({ superposee = false }: { superposee?: boolean }) {
   return (
@@ -147,6 +150,9 @@ export function AppRoutes() {
           <Route path="/campaigns" element={charger(<CampaignsPage />)} />
           <Route path="/communications" element={charger(<CommunicationsPage />)} />
           <Route path="/emails" element={charger(<EmailInboxPage />)} />
+          <Route path="/formation" element={charger(<TrainingPage />)} />
+          <Route path="/formation/resultats" element={charger(<TrainingResultsPage />)} />
+          <Route path="/formation/:quizCode" element={charger(<TrainingQuizPage />)} />
           <Route path="/billing" element={charger(<BillingPage />)} />
           <Route path="/finance" element={charger(<FinancialDashboardPage />)} />
           <Route path="/finance/fournisseurs" element={charger(<SupplierExpensesPage />)} />
