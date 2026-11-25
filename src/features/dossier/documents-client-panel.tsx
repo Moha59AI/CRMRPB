@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ClientDocumentActivityTimeline } from '@/features/client-documents/client-document-activity-timeline';
 import { documentReminderMessage } from '@/features/client-documents/document-reminder-message';
-import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
+import { StaffDocumentPreview } from '@/features/client-documents/staff-document-preview';
 import { cn } from '@/lib/utils';
 import {
   clientDocumentFiles, createClientDocumentRequest, fetchClientDocumentRequests,
@@ -209,13 +209,22 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
                     </div>
                   </div>
                   {files.length > 0 && (
-                    <div className="ml-7 mt-2 space-y-1.5">
+                    <div className="mt-3 space-y-3 sm:ml-7">
                       {files.map((file) => (
-                        <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2">
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
-                          {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
-                        </div>
+                        file.storage_path ? (
+                          <StaffDocumentPreview
+                            key={file.id}
+                            storagePath={file.storage_path}
+                            originalName={file.original_name}
+                            mimeType={file.mime_type}
+                          />
+                        ) : (
+                          <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-3 py-3">
+                            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
+                            <span className="text-[11px] text-muted-foreground">Aperçu indisponible</span>
+                          </div>
+                        )
                       ))}
                     </div>
                   )}
@@ -248,15 +257,29 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
           </div>
           <div className="mt-4 divide-y divide-border">
             {previousReceived.map(({ item, file, requestCreatedAt }) => (
-              <div key={file.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-done" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{item.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {file.original_name} · demande du {new Date(requestCreatedAt).toLocaleDateString('fr-FR')}
-                  </p>
+              <div key={file.id} className="py-4 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-done" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{item.label}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      Reçu avec la demande du {new Date(requestCreatedAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
                 </div>
-                {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
+                <div className="mt-3 sm:ml-7">
+                  {file.storage_path ? (
+                    <StaffDocumentPreview
+                      storagePath={file.storage_path}
+                      originalName={file.original_name}
+                      mimeType={file.mime_type}
+                    />
+                  ) : (
+                    <div className="rounded-lg bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+                      {file.original_name} · aperçu indisponible
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

@@ -157,19 +157,22 @@ test('la fiche client consolide les documents de toutes ses interventions', asyn
   assert.match(service, /fetchClientDocumentHistory/);
 });
 
-test('le document est ouvert par un vrai lien deja signe', async () => {
+test('les documents signes s affichent directement dans les fiches', async () => {
   const service = await read('src/services/client-documents-service.ts');
   const panel = await read('src/features/dossier/documents-client-panel.tsx');
   const history = await read('src/features/client-documents/client-document-history.tsx');
-  const link = await read('src/features/client-documents/staff-document-link.tsx');
+  const preview = await read('src/features/client-documents/staff-document-preview.tsx');
 
   assert.match(service, /createSignedUrl\(path, 3600\)/);
-  assert.match(link, /createStaffDocumentPreviewUrl\(storagePath\)/);
-  assert.match(link, /href=\{preview\.data\}/);
-  assert.match(panel, /<StaffDocumentLink storagePath=\{file\.storage_path\}/);
-  assert.match(history, /<StaffDocumentLink storagePath=\{file\.storage_path\}/);
-  assert.doesNotMatch(link, /window\.open/);
-  assert.doesNotMatch(link, /target="_blank"/);
+  assert.match(preview, /createStaffDocumentPreviewUrl\(storagePath\)/);
+  assert.match(preview, /<iframe[\s\S]*src=\{`\$\{preview\.data\}/);
+  assert.match(preview, /<img[\s\S]*src=\{preview\.data\}/);
+  assert.match(preview, /loading="lazy"/);
+  assert.match(preview, /Télécharger/);
+  assert.match(panel, /<StaffDocumentPreview/);
+  assert.match(history, /<StaffDocumentPreview/);
+  assert.doesNotMatch(panel, /StaffDocumentLink/);
+  assert.doesNotMatch(history, /StaffDocumentLink/);
 });
 
 test('un nouveau lien ne masque pas les documents deja recus', async () => {

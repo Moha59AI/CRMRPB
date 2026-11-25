@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Clock3, FileText, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { ClientDocumentActivityTimeline } from '@/features/client-documents/client-document-activity-timeline';
-import { StaffDocumentLink } from '@/features/client-documents/staff-document-link';
+import { StaffDocumentPreview } from '@/features/client-documents/staff-document-preview';
 import { LIBELLE_VITRAGE, formatDateTime } from '@/features/leads/lead-shared';
 import {
   clientDocumentFiles, fetchClientDocumentHistory,
@@ -91,13 +91,22 @@ export function ClientDocumentHistory({ interventions }: { interventions: Lead[]
                       </div>
                     </div>
                     {files.length > 0 && (
-                      <div className="ml-7 mt-2 space-y-1.5">
+                      <div className="mt-3 space-y-3 sm:ml-7">
                         {files.map((file) => (
-                          <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2">
-                            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
-                            {file.storage_path && <StaffDocumentLink storagePath={file.storage_path} />}
-                          </div>
+                          file.storage_path ? (
+                            <StaffDocumentPreview
+                              key={file.id}
+                              storagePath={file.storage_path}
+                              originalName={file.original_name}
+                              mimeType={file.mime_type}
+                            />
+                          ) : (
+                            <div key={file.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/40 px-3 py-3">
+                              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.original_name}</span>
+                              <span className="text-[11px] text-muted-foreground">Aperçu indisponible</span>
+                            </div>
+                          )
                         ))}
                       </div>
                     )}
