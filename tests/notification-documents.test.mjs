@@ -57,14 +57,17 @@ test('chaque dépôt déclenche l’alerte sans dépendre de l’email', async (
 });
 
 test('la commerciale reçoit aussi les alertes de dépôt, sans doublon', async () => {
-  const [notification, migration, website] = await Promise.all([
+  const [notification, migration, correction, website] = await Promise.all([
     read(NOTIFICATION),
     read('supabase/migrations/20261127170000_alerte_documents_commerciale.sql'),
+    read('supabase/migrations/20261127180000_corriger_adresse_notification_commerciale.sql'),
     read('supabase/functions/inbound-webhook/index.ts'),
   ]);
 
   assert.match(migration, /l\.benamar@relaisparebrise\.fr/);
   assert.match(migration, /where slug = 'relais-pare-brise'/);
+  assert.match(correction, /b\.latefa@relaisparebrise\.fr/);
+  assert.match(correction, /- 'l\.benamar@relaisparebrise\.fr'/);
   assert.match(notification, /settings\.document_notification_emails/);
   assert.match(notification, /new Set\(groups\.flat\(\)\)/);
   assert.match(notification, /to: recipients/);
