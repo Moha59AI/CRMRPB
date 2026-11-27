@@ -43,7 +43,7 @@ export interface ClientDocumentRequestSummary {
 export interface ClientDocumentActivity {
   id: string;
   request_id: string;
-  event_type: 'link_opened' | 'upload_started' | 'document_uploaded' | 'request_completed';
+  event_type: 'link_opened' | 'upload_started' | 'document_uploaded' | 'staff_document_uploaded' | 'request_completed';
   document_type: string | null;
   device_type: 'mobile' | 'tablet' | 'desktop' | 'unknown';
   created_at: string;
@@ -285,6 +285,60 @@ export async function uploadClientDocument(
   return invokePortal<{ success: true; complete: boolean }>({
     action: 'complete_upload', token, item_id: itemId, path: prepared.path,
     file_name: file.name, mime_type: file.type, size_bytes: file.size,
+  });
+}
+
+async function invokeStaffDocuments<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('staff-client-documents', { body });
+  if (error) throw new Error(error.message);
+  const response = data as T & { error?: string };
+  if (response?.error) throw new Error(response.error);
+  return response;
+}
+
+export async function ensureStaffClientDocumentRequest(
+  leadId: string,
+): Promise<ClientDocumentRequestSummary> {
+  const existing = await fetchClientDocumentRequests(leadId);
+  const active = existing.find((request) => request.status === 'open' || request.status === 'complete');
+  if (active) return active;
+
+  await createClientDocumentRequest(leadId);
+  const refreshed = await fetchClientDocumentRequests(leadId);
+  const created = refreshed.find((request) => request.status === 'open' || request.status === 'complete');
+  if (!created) throw new Error('La fiche documentaire n’a pas pu être préparée.');
+  return created;
+}
+
+export async function uploadStaffClientDocument(
+  requestId: string,
+  itemId: string,
+  file: File,
+): Promise<{ complete: boolean }> {
+  const prepared = await invokeStaffDocuments<{ path: string; upload_token: string }>({
+    action: 'prepare_upload',
+    request_id: requestId,
+    item_id: itemId,
+    file_name: file.name,
+    mime_type: file.type,
+    size_bytes: file.size,
+  });
+
+  const { error: uploadError } = await supabase.storage
+    .from('client-documents')
+    .uploadToSignedUrl(prepared.path, prepared.upload_token, file, {
+      contentType: file.type,
+    });
+  if (uploadError) throw new Error(uploadError.message);
+
+  return invokeStaffDocuments<{ success: true; complete: boolean }>({
+    action: 'complete_upload',
+    request_id: requestId,
+    item_id: itemId,
+    path: prepared.path,
+    file_name: file.name,
+    mime_type: file.type,
+    size_bytes: file.size,
   });
 }
 

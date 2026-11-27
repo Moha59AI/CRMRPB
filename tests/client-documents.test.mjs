@@ -288,7 +288,7 @@ test('la fiche client affiche l activite du lien documentaire sans tracer l adre
   assert.match(panel, /ClientDocumentActivityTimeline/);
   assert.match(history, /refetchInterval: 30_000/);
   assert.match(panel, /refetchInterval: 30_000/);
-  assert.match(timeline, /Activité du lien/);
+  assert.match(timeline, /Activité documentaire/);
   assert.match(timeline, /Lien ouvert par le client/);
-  assert.match(timeline, /Le client n’a pas encore ouvert ce lien/);
+  assert.match(timeline, /Aucune activité documentaire pour le moment/);
 });

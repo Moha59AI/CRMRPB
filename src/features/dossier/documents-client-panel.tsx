@@ -17,6 +17,7 @@ import {
 } from '@/services/client-documents-service';
 import { createCommunication } from '@/services/activity-service';
 import type { Lead } from '@/types';
+import { StaffDocumentIndexer } from './staff-document-indexer';
 
 export function DocumentsClientPanel({ lead }: { lead: Lead }) {
   const queryClient = useQueryClient();
@@ -149,6 +150,8 @@ export function DocumentsClientPanel({ lead }: { lead: Lead }) {
           </div>
         )}
       </section>
+
+      <StaffDocumentIndexer lead={lead} requests={requests.data ?? []} />
 
       {current ? (
         <section className="rounded-xl border border-border bg-card p-4 sm:p-5">

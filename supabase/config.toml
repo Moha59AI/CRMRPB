@@ -49,6 +49,9 @@ verify_jwt = true
 [functions.client-documents]
 verify_jwt = false
 
+[functions.staff-client-documents]
+verify_jwt = true
+
 [functions.web-push]
 verify_jwt = false
 

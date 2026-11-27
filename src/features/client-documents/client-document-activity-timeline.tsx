@@ -1,5 +1,5 @@
 import {
-  CheckCircle2, Eye, Monitor, Smartphone, Tablet, UploadCloud,
+  CheckCircle2, Eye, FolderInput, Monitor, Smartphone, Tablet, UploadCloud,
 } from 'lucide-react';
 import { formatDateTime } from '@/features/leads/lead-shared';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ const activityLabels = {
   link_opened: 'Lien ouvert par le client',
   upload_started: 'Envoi commencé',
   document_uploaded: 'Document déposé',
+  staff_document_uploaded: 'Document indexé par l’équipe',
   request_completed: 'Dossier documentaire complété',
 } as const;
 
@@ -56,7 +57,7 @@ export function ClientDocumentActivityTimeline({
     <div className={cn('bg-muted/20', className)}>
       <div className="flex items-center gap-2">
         <Eye className="h-4 w-4 text-primary" />
-        <h4 className="text-sm font-semibold">Activité du lien</h4>
+        <h4 className="text-sm font-semibold">Activité documentaire</h4>
       </div>
       {events.length > 0 ? (
         <div className="mt-3 space-y-3">
@@ -66,6 +67,7 @@ export function ClientDocumentActivityTimeline({
               : null;
             const EventIcon = event.event_type === 'link_opened' ? Eye
               : event.event_type === 'upload_started' ? UploadCloud
+                : event.event_type === 'staff_document_uploaded' ? FolderInput
                 : CheckCircle2;
             return (
               <div key={event.id} className="flex items-start gap-3">
@@ -79,10 +81,12 @@ export function ClientDocumentActivityTimeline({
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <span>{formatDateTime(event.created_at)}</span>
-                    <span className="inline-flex items-center gap-1">
-                      <DeviceIcon device={event.device_type} />
-                      {deviceLabels[event.device_type]}
-                    </span>
+                    {event.event_type !== 'staff_document_uploaded' && (
+                      <span className="inline-flex items-center gap-1">
+                        <DeviceIcon device={event.device_type} />
+                        {deviceLabels[event.device_type]}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -90,7 +94,7 @@ export function ClientDocumentActivityTimeline({
           })}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted-foreground">Le client n’a pas encore ouvert ce lien.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Aucune activité documentaire pour le moment.</p>
       )}
     </div>
   );
