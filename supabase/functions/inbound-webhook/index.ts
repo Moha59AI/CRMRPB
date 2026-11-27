@@ -370,16 +370,24 @@ async function attachWebsiteDocuments(
     .eq('id', requestId);
   if (requestUpdateError) throw requestUpdateError;
 
+  const nextLeadStatus = complete ? 'documents_received' : 'documents_requested';
+  const mutableLeadStatuses = complete
+    ? [
+      'new', 'to_call', 'calling', 'nrp', 'interested',
+      'documents_requested', 'documents_received',
+    ]
+    : [
+      'new', 'to_call', 'calling', 'nrp', 'interested',
+      'documents_requested',
+    ];
+
   await supabase.from('leads').update({
-    status: complete ? 'documents_received' : 'documents_requested',
+    status: nextLeadStatus,
     updated_at: now,
   })
     .eq('id', leadId)
     .eq('workspace_id', workspaceId)
-    .in('status', [
-      'new', 'to_call', 'calling', 'nrp', 'interested',
-      'documents_requested', 'documents_received',
-    ]);
+    .in('status', mutableLeadStatuses);
 
   if (complete) {
     const { error: completionActivityError } = await supabase.from('client_document_activity').insert({

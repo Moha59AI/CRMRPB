@@ -89,6 +89,13 @@ interface CreatedRequest {
   expires_at: string;
 }
 
+export interface PreparedClientDocumentRequest extends CreatedRequest {
+  url: string;
+  /** Une collecte precedente est deja complete : une relance ne doit pas faire reculer le funnel. */
+  hasCompletedRequest: boolean;
+  reusedRequest: boolean;
+}
+
 const configuredPortalUrl = (
   import.meta.env.VITE_CLIENT_PORTAL_URL as string | undefined
 )?.replace(/\/$/, '') || 'https://crm.relaisparebrise.fr';
@@ -107,6 +114,29 @@ export async function createClientDocumentRequest(leadId: string): Promise<Creat
   const created = (data as CreatedRequest[] | null)?.[0];
   if (!created?.access_token) throw new Error('Le lien documentaire n’a pas été créé.');
   return { ...created, url: clientDocumentPortalUrl(created.access_token) };
+}
+
+/**
+ * Prepare le lien a envoyer sans effacer une collecte partiellement remplie.
+ *
+ * Une relance renouvelle la demande en cours. Si toutes les pieces obligatoires
+ * ont deja ete recues, une nouvelle collecte peut etre ouverte pour des pieces
+ * complementaires, mais le lead doit rester dans l'etape « A planifier ».
+ */
+export async function prepareClientDocumentRequest(
+  leadId: string,
+): Promise<PreparedClientDocumentRequest> {
+  const requests = await fetchClientDocumentRequests(leadId);
+  const current = requests[0] ?? null;
+  const hasCompletedRequest = requests.some((request) => request.status === 'complete');
+
+  if (current && current.status !== 'complete') {
+    const renewed = await renewClientDocumentRequestLink(current.id);
+    return { ...renewed, hasCompletedRequest, reusedRequest: true };
+  }
+
+  const created = await createClientDocumentRequest(leadId);
+  return { ...created, hasCompletedRequest, reusedRequest: false };
 }
 
 export async function renewClientDocumentRequestLink(requestId: string): Promise<CreatedRequest & { url: string }> {

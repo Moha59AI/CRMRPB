@@ -44,8 +44,8 @@ test('la fiche et les relances envoient le nouveau lien client', async () => {
   const panel = await read('src/features/dossier/documents-client-panel.tsx');
   const service = await read('src/services/client-documents-service.ts');
   assert.match(routes, /path="\/documents"/);
-  assert.match(fiche, /createClientDocumentRequest/);
-  assert.match(relances, /createClientDocumentRequest/);
+  assert.match(fiche, /prepareClientDocumentRequest/);
+  assert.match(relances, /prepareClientDocumentRequest/);
   assert.match(panel, /Collecte des documents/);
   assert.match(service, /https:\/\/crm\.relaisparebrise\.fr/);
   assert.match(service, /\/d\/\$\{encodeURIComponent\(token\)\}/);
@@ -209,6 +209,32 @@ test('la relance SMS renouvelle le lien sans perdre les documents deja recus', a
   assert.match(panel, /status: 'sent'/);
   assert.match(message, /il nous manque encore/);
   assert.match(message, /Relais Pare-Brise/);
+});
+
+test('une relance ne fait pas reculer un dossier dont les pieces sont deja completes', async () => {
+  const service = await read('src/services/client-documents-service.ts');
+  const fiche = await read('src/features/dossier/dossier-modal.tsx');
+  const portal = await read('supabase/functions/client-documents/index.ts');
+  const website = await read('supabase/functions/inbound-webhook/index.ts');
+  const repair = await read('supabase/migrations/20261127110000_preserver_etape_documents_complets.sql');
+
+  assert.match(service, /hasCompletedRequest = requests\.some/);
+  assert.match(service, /current && current\.status !== 'complete'/);
+  assert.match(fiche, /if \(!request\.hasCompletedRequest\)/);
+
+  for (const source of [portal, website]) {
+    assert.match(source, /const mutableLeadStatuses = complete/);
+    const incompleteStatuses = source.slice(
+      source.indexOf("const mutableLeadStatuses = complete"),
+      source.indexOf(".in('status', mutableLeadStatuses)") + 40,
+    );
+    assert.match(incompleteStatuses, /documents_requested/);
+    assert.equal((incompleteStatuses.match(/documents_received/g) ?? []).length, 1);
+  }
+
+  assert.match(repair, /lead\.status = 'documents_requested'/);
+  assert.match(repair, /request\.status = 'complete'/);
+  assert.match(repair, /status = 'documents_received'/);
 });
 
 test('une categorie accepte plusieurs fichiers sans ecraser les depots precedents', async () => {

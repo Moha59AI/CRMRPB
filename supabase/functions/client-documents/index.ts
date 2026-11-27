@@ -439,15 +439,23 @@ async function completeUpload(body: Record<string, unknown>, token: string, req:
   // Un nouveau depot ne doit jamais faire reculer un dossier deja cree dans
   // Onify, un rendez-vous planifie ou une intervention cloturee. Le portail
   // ne pilote que la partie du parcours qui precede Glass.
+  const nextLeadStatus = complete ? 'documents_received' : 'documents_requested';
+  const mutableLeadStatuses = complete
+    ? [
+      'new', 'to_call', 'calling', 'nrp', 'interested',
+      'documents_requested', 'documents_received',
+    ]
+    : [
+      'new', 'to_call', 'calling', 'nrp', 'interested',
+      'documents_requested',
+    ];
+
   await admin.from('leads').update({
-    status: complete ? 'documents_received' : 'documents_requested',
+    status: nextLeadStatus,
   })
     .eq('id', request.lead_id)
     .eq('workspace_id', request.workspace_id)
-    .in('status', [
-      'new', 'to_call', 'calling', 'nrp', 'interested',
-      'documents_requested', 'documents_received',
-    ]);
+    .in('status', mutableLeadStatuses);
 
   if (complete && !request.submitted_at) {
     await recordActivity(request, req, 'request_completed');

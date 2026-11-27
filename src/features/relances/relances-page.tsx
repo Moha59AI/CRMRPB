@@ -30,7 +30,7 @@ import {
   type CompteursRelances,
 } from '@/services/relances-service';
 import { archiverLeadsSelectionnes } from '@/services/leads-service';
-import { createClientDocumentRequest } from '@/services/client-documents-service';
+import { prepareClientDocumentRequest } from '@/services/client-documents-service';
 import { fetchReglagesEntreprise } from '@/services/admin-service';
 import { preparerSmsNrp } from './preparer-sms-nrp';
 
@@ -222,7 +222,7 @@ export function RelancesPage() {
       return;
     }
     try {
-      const request = await createClientDocumentRequest(r.leadId);
+      const request = await prepareClientDocumentRequest(r.leadId);
       const prenom = r.titre.split(' ')[0];
       const message = `Bonjour ${prenom}, il nous manque encore vos documents pour avancer sur votre dossier pare-brise. Déposez-les ici : ${request.url} — Relais Pare-Brise`;
       window.location.href = `sms:${r.phone}?body=${encodeURIComponent(message)}`;

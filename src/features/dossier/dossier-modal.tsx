@@ -28,7 +28,7 @@ import { fetchReglagesEntreprise } from '@/services/admin-service';
 import { createCommunication } from '@/services/activity-service';
 import { enregistrerResultatAppel } from '@/services/relances-service';
 import { messageNrp } from '@/features/relances/message-nrp';
-import { createClientDocumentRequest } from '@/services/client-documents-service';
+import { prepareClientDocumentRequest } from '@/services/client-documents-service';
 import { DossierContenu } from './dossier-contenu';
 import {
   ONGLETS, type OngletDossier, type EtatOuvertureDossier,
@@ -282,12 +282,16 @@ export function DossierModal({ pleinePage }: DossierModalProps) {
   const demanderDocuments = async () => {
     if (!lead?.phone) return;
     try {
-      const request = await createClientDocumentRequest(lead.id);
+      const request = await prepareClientDocumentRequest(lead.id);
       const prenom = lead.first_name?.trim() ?? '';
       const message = `Bonjour${prenom ? ` ${prenom}` : ''}, pour avancer sur votre dossier pare-brise, déposez votre carte grise et votre attestation d’assurance ici : ${request.url} — Relais Pare-Brise`;
       window.location.href = `sms:${lead.phone}?body=${encodeURIComponent(message)}`;
       journaliser('sms_outbound', message);
-      majLead.mutate({ status: 'documents_requested' });
+      // Une relance peut ouvrir une collecte complementaire. Si une demande
+      // precedente est deja complete, le dossier reste pret a planifier.
+      if (!request.hasCompletedRequest) {
+        majLead.mutate({ status: 'documents_requested' });
+      }
       queryClient.invalidateQueries({ queryKey: ['client-document-request', lead.id] });
     } catch (error) {
       toast.error((error as Error).message);

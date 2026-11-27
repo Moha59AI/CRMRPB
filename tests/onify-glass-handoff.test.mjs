@@ -40,7 +40,8 @@ test('un vrai dossier Onify enrichit le lead sans le sortir du pipeline', async 
 test('un nouveau depot de document ne fait pas reculer un dossier deja passe dans Onify', async () => {
   const portal = await read('supabase/functions/client-documents/index.ts');
 
-  assert.match(portal, /\.in\('status', \[/);
+  assert.match(portal, /const mutableLeadStatuses = complete/);
+  assert.match(portal, /\.in\('status', mutableLeadStatuses\)/);
   assert.match(portal, /'documents_requested', 'documents_received'/);
   assert.doesNotMatch(
     portal.slice(portal.indexOf("await admin.from('leads').update"), portal.indexOf('if (complete &&', portal.indexOf("await admin.from('leads').update"))),
