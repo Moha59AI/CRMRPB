@@ -129,16 +129,20 @@ test('les reglages permettent de personnaliser le portail sans contourner les dr
  */
 test('chaque depot prepare une alerte email interne qui nomme le client sans joindre la piece', async () => {
   const edge = await read('supabase/functions/client-documents/index.ts');
+  const notification = await read('supabase/functions/_shared/document-notification.ts');
   const migration = await read('supabase/migrations/20260907120000_portail_documents_client.sql');
   assert.match(edge, /notifyDocumentDeposit/);
-  assert.match(edge, /https:\/\/api\.resend\.com\/emails/);
-  assert.match(edge, /DOCUMENT_NOTIFICATION_EMAIL/);
-  assert.match(edge, /contact@relaisparebrise\.fr/);
-  assert.ok(edge.includes('subject: `Document reçu — ${nomClient}`'));
+  assert.match(notification, /https:\/\/api\.resend\.com\/emails/);
+  assert.match(notification, /DOCUMENT_NOTIFICATION_EMAIL/);
+  assert.match(notification, /contact@relaisparebrise\.fr/);
+  assert.ok(notification.includes('subject: `Document reçu — ${nomClient}`'));
 
   // Le document lui-meme ne sort pas : pas de piece jointe, pas d'URL
   // signee vers le stockage.
-  const corpsMail = edge.slice(edge.indexOf('api.resend.com/emails'), edge.indexOf('if (!response.ok)'));
+  const corpsMail = notification.slice(
+    notification.indexOf('api.resend.com/emails'),
+    notification.indexOf('if (!response.ok)'),
+  );
   assert.ok(!corpsMail.includes('createSignedUrl'));
   assert.ok(!corpsMail.includes('attachments'));
   assert.ok(!corpsMail.includes('storage_path'));

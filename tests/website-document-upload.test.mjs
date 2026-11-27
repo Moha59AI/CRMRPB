@@ -42,4 +42,5 @@ test('les documents du site sont rattaches au lead cree et font avancer son stat
   assert.match(webhook, /complete \? 'documents_received' : 'documents_requested'/);
   assert.match(webhook, /documents_received: attachedDocuments\.count/);
   assert.match(webhook, /document_request_id: attachedDocuments\.requestId/);
+  assert.match(webhook, /notifyDocumentDeposit\(supabase, itemId, workspaceId, leadId\)/);
 });

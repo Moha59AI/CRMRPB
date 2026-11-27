@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import { notifyDocumentDeposit } from '../_shared/document-notification.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -276,6 +277,7 @@ async function attachWebsiteDocuments(
   if (itemsError) throw itemsError;
 
   const itemsByType = new Map((existingItems ?? []).map((item) => [item.document_type, item]));
+  const uploadedItemIds: string[] = [];
   for (const document of documents) {
     let item = itemsByType.get(document.documentType);
     if (!item) {
@@ -338,6 +340,7 @@ async function attachWebsiteDocuments(
     if (updateError) {
       throw updateError;
     }
+    uploadedItemIds.push(item.id);
 
     const { error: activityError } = await supabase.from('client_document_activity').insert({
       workspace_id: workspaceId,
@@ -388,6 +391,21 @@ async function attachWebsiteDocuments(
     .eq('id', leadId)
     .eq('workspace_id', workspaceId)
     .in('status', mutableLeadStatuses);
+
+  // Le dépôt reste validé même si le fournisseur d'e-mail est momentanément
+  // indisponible. Chaque pièce reçue par le formulaire du site déclenche la
+  // même alerte interne que le portail documentaire.
+  for (const itemId of uploadedItemIds) {
+    try {
+      await notifyDocumentDeposit(supabase, itemId, workspaceId, leadId);
+    } catch (notificationError) {
+      const message = safeErrorMessage(notificationError);
+      console.warn('website document email notification', message);
+      await supabase.from('client_document_items').update({
+        notification_email_error: `Email indisponible : ${message}`.slice(0, 500),
+      }).eq('id', itemId);
+    }
+  }
 
   if (complete) {
     const { error: completionActivityError } = await supabase.from('client_document_activity').insert({

@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import { notifyDocumentDeposit } from '../_shared/document-notification.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -63,103 +64,6 @@ function visibleDocumentTypes(value: unknown): Set<string> {
       : [];
   });
   return new Set(types.length > 0 ? types : defaultDocumentRules.map((rule) => rule.document_type));
-}
-
-/** Echappe ce qui vient du client : un nom peut contenir &, < ou >. */
-function texteHtml(valeur: unknown): string {
-  return String(valeur ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-async function notifyDocumentDeposit(
-  itemId: string,
-  workspaceId: string,
-  leadId: string | null,
-): Promise<void> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  const forcedRecipient = Deno.env.get('DOCUMENT_NOTIFICATION_EMAIL')?.trim();
-  const from = Deno.env.get('DOCUMENT_NOTIFICATION_FROM')?.trim()
-    || 'Relais Pare-Brise <notifications@relaisparebrise.fr>';
-
-  const { data: workspace } = await admin
-    .from('workspaces')
-    .select('settings')
-    .eq('id', workspaceId)
-    .single();
-  const settings = (workspace?.settings ?? {}) as Record<string, unknown>;
-  const settingsRecipient = typeof settings.email === 'string' ? settings.email.trim() : '';
-  const recipient = forcedRecipient || settingsRecipient || 'contact@relaisparebrise.fr';
-
-  if (!apiKey) {
-    await admin.from('client_document_items').update({
-      notification_email_error: 'RESEND_API_KEY absent',
-    }).eq('id', itemId);
-    return;
-  }
-
-  // Le mail disait « une nouvelle pièce vient d'être déposée » sans dire par
-  // qui ni laquelle, et renvoyait vers l'accueil : il fallait chercher le
-  // dossier a la main. Il porte desormais ce qu'il faut pour agir sans
-  // ouvrir le CRM pour rien.
-  const { data: piece } = await admin
-    .from('client_document_items')
-    .select('label, document_type, original_name')
-    .eq('id', itemId)
-    .maybeSingle();
-
-  const { data: lead } = leadId
-    ? await admin
-      .from('leads')
-      .select('first_name, last_name, vehicle_make, vehicle_model, vehicle_registration')
-      .eq('id', leadId)
-      .maybeSingle()
-    : { data: null };
-
-  const partie = (valeur: unknown): string =>
-    (typeof valeur === 'string' ? valeur.trim() : '');
-
-  const nomClient = [partie(lead?.first_name), partie(lead?.last_name)]
-    .filter(Boolean).join(' ') || 'Client sans nom';
-  const vehicule = [
-    [partie(lead?.vehicle_make), partie(lead?.vehicle_model)].filter(Boolean).join(' '),
-    partie(lead?.vehicle_registration),
-  ].filter(Boolean).join(' · ');
-  const nomPiece = partie(piece?.label) || partie(piece?.document_type) || 'Document';
-  const lienDossier = leadId
-    ? `https://crm.relaisparebrise.fr/interventions/${leadId}`
-    : 'https://crm.relaisparebrise.fr/today';
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [recipient],
-      subject: `Document reçu — ${nomClient}`,
-      html: `<div style="font-family:Arial,sans-serif;color:#101318;line-height:1.5">
-        <h2 style="margin:0 0 4px">${texteHtml(nomClient)}</h2>
-        <p style="margin:0 0 16px;color:#646464">a déposé : <strong>${texteHtml(nomPiece)}</strong></p>
-        ${vehicule ? `<p style="margin:0 0 16px;color:#646464">${texteHtml(vehicule)}</p>` : ''}
-        <p style="margin-top:20px"><a href="${lienDossier}" style="color:#16a34a;font-weight:600">Ouvrir le dossier</a></p>
-      </div>`,
-    }),
-  });
-
-  if (!response.ok) {
-    await admin.from('client_document_items').update({
-      notification_email_error: `Resend HTTP ${response.status}`,
-    }).eq('id', itemId);
-    return;
-  }
-
-  await admin.from('client_document_items').update({
-    notification_email_sent_at: new Date().toISOString(),
-    notification_email_error: null,
-  }).eq('id', itemId);
 }
 
 async function findRequest(token: string) {
@@ -465,7 +369,7 @@ async function completeUpload(body: Record<string, unknown>, token: string, req:
   // base. L'email est un confort : une panne Resend ne doit jamais faire
   // croire au client que son fichier a ete perdu ni empecher le CRM de le voir.
   try {
-    await notifyDocumentDeposit(item.id, request.workspace_id, request.lead_id);
+    await notifyDocumentDeposit(admin, item.id, request.workspace_id, request.lead_id);
   } catch (notificationError) {
     const message = notificationError instanceof Error
       ? notificationError.message
